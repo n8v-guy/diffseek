@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <ul role="tree" aria-label="File Tree">
+      <li id="src/removed.ts" role="treeitem">
+        <svg class="octicon octicon-file-removed"></svg>
+        <a href="#diff-removed">removed.ts</a>
+      </li>
+      <li id="src/renamed.ts" role="treeitem">
+        <svg class="octicon octicon-file-moved"></svg>
+        <a href="#diff-renamed">renamed.ts</a>
+      </li>
+      <li id="assets/logo.bin" role="treeitem">
+        <svg class="octicon octicon-file-diff"></svg>
+        <a href="#diff-binary">logo.bin</a>
+      </li>
+    </ul>
+
+    <span id="collapse-removed">Collapse file</span>
+    <span id="viewed-removed">Not Viewed</span>
+    <div id="diff-removed" role="region">
+      <div data-diff-header-wrapper="true">
+        <button aria-labelledby="collapse-removed"></button>
+        <h3><code>src/removed.ts</code></h3>
+        <button aria-labelledby="viewed-removed" aria-pressed="false"></button>
+      </div>
+    </div>
+
+    <div id="diff-renamed" role="region">
+      <div data-diff-header-wrapper="true">
+        <button><svg class="octicon octicon-chevron-down"></svg></button>
+        <h3><code>src/renamed.ts</code></h3>
+      </div>
+    </div>
+
+    <div id="diff-binary" role="region">
+      <div data-diff-header-wrapper="true">
+        <button aria-label="Collapse file"></button>
+        <p>Binary file not shown.</p>
+      </div>
+    </div>
+  </body>
+</html>

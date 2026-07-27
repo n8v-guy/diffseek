@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.shared.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "../.cache/types/tooling",
+    "rootDir": "..",
+    "tsBuildInfoFile": "../.cache/types/tooling.tsbuildinfo",
+    "types": ["node", "wxt/vite-builder-env"]
+  },
+  "include": [
+    "../config/**/*.ts",
+    "../entrypoints/**/*.ts",
+    "../scripts/**/*.ts",
+    "../.wxt/wxt.d.ts"
+  ],
+  "exclude": ["../config/tsconfig*.json"],
+  "references": [
+    { "path": "./tsconfig.modules.json" },
+    { "path": "./tsconfig.adapters.json" },
+    { "path": "./tsconfig.app.json" }
+  ]
+}

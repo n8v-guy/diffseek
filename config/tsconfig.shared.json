@@ -1,0 +1,22 @@
+{
+  "extends": "../.wxt/tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmitOnError": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "paths": {
+      "@diffseek/app/*": ["../src/app/*"],
+      "@diffseek/browser/*": ["../src/adapters/browser/*"],
+      "@diffseek/github/*": ["../src/adapters/github/*"],
+      "@diffseek/repository-metadata": [
+        "../src/modules/repository-metadata/index.ts"
+      ],
+      "@diffseek/review": ["../src/modules/review/index.ts"]
+    },
+    "strict": true,
+    "types": ["wxt/vite-builder-env"]
+  }
+}

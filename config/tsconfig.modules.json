@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.shared.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "../.cache/types/modules",
+    "rootDir": "../src/modules",
+    "tsBuildInfoFile": "../.cache/types/modules.tsbuildinfo"
+  },
+  "include": ["../src/modules/**/*.ts"]
+}

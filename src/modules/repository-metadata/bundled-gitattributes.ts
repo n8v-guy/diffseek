@@ -1,0 +1,22 @@
+export const bundledGitAttributes = `
+**/*.test.* group=Tests
+**/*.spec.* group=Tests
+**/*.e2e.* group=Tests
+**/*-spec.* group=Tests
+**/*-comp.* group=Tests
+**/test/** group=Tests
+**/tests/** group=Tests
+**/componentTest/** group=Tests
+**/componentTests/** group=Tests
+**/__tests__/** group=Tests
+docs/** group=Docs
+**/*.md group=Docs
+**/*.mdx group=Docs
+config/** group=Config
+**/config/** group=Config
+**/*.config.* group=Config
+**/tsconfig*.json group=Config
+**/.eslintrc.* group=Config
+**/eslint.config.* group=Config
+.github/** group=Config
+`.trim();

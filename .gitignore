@@ -1,0 +1,8 @@
+.output/
+.wxt/
+.cache/
+node_modules/
+coverage/
+docs/superpowers/
+playwright-report/
+test-results/

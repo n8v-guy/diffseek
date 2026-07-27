@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.shared.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "../.cache/types/app",
+    "rootDir": "../src/app",
+    "tsBuildInfoFile": "../.cache/types/app.tsbuildinfo",
+    "types": ["node", "wxt/vite-builder-env"]
+  },
+  "include": ["../src/app/**/*.ts"],
+  "references": [
+    { "path": "./tsconfig.modules.json" },
+    { "path": "./tsconfig.adapters.json" }
+  ]
+}

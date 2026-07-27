@@ -1,0 +1,9 @@
+{
+  "entry": ["config/*.config.ts", "entrypoints/**/*.ts"],
+  "project": [
+    "config/**/*.ts",
+    "entrypoints/**/*.ts",
+    "scripts/**/*.ts",
+    "src/**/*.ts"
+  ]
+}

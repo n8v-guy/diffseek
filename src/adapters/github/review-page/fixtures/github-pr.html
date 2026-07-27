@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <button aria-label="Filter options" aria-expanded="false"></button>
+    <ul role="tree" aria-label="File Tree">
+      <li id="src/app.ts" role="treeitem" aria-label="app.ts">
+        <svg class="octicon octicon-file-diff"></svg>
+        <a href="#diff-app">app.ts</a>
+      </li>
+      <li id="src/new.ts" role="treeitem" aria-label="new.ts">
+        <svg class="octicon octicon-file-added"></svg>
+        <a href="#diff-new">new.ts</a>
+      </li>
+      <li id="src/generated.ts" role="treeitem" aria-label="generated.ts">
+        <svg class="octicon octicon-file-diff"></svg>
+        <a href="#diff-generated">generated.ts</a>
+      </li>
+      <li id="docs/readme.md" role="treeitem" aria-label="readme.md">
+        <svg class="octicon octicon-file-diff"></svg>
+        <a href="#diff-viewed">readme.md</a>
+      </li>
+      <li id="config/app.json" role="treeitem" aria-label="app.json">
+        <svg class="octicon octicon-file-diff"></svg>
+        <a href="#diff-config">app.json</a>
+      </li>
+    </ul>
+
+    <div id="diff-app" role="region" aria-labelledby="heading-app">
+      <div data-diff-header-wrapper="true">
+        <button aria-label="Collapse file"></button>
+        <h3 id="heading-app"><a href="#diff-app"><code>src/app.ts</code></a></h3>
+        <button aria-label="Not Viewed" aria-pressed="false">Viewed</button>
+      </div>
+      <div data-diff-anchor="diff-app">modified diff</div>
+    </div>
+
+    <div id="diff-new" role="region" aria-labelledby="heading-new">
+      <div data-diff-header-wrapper="true">
+        <button aria-label="Collapse file"></button>
+        <h3 id="heading-new"><a href="#diff-new"><code>src/new.ts</code></a></h3>
+        <button aria-label="Not Viewed" aria-pressed="false">Viewed</button>
+      </div>
+      <div data-diff-anchor="diff-new">added diff</div>
+    </div>
+
+    <div id="diff-generated" role="region" aria-labelledby="heading-generated">
+      <div data-diff-header-wrapper="true">
+        <button aria-label="Collapse file"></button>
+        <a href="/owner/repo/blob/main/CODEOWNERS#L1" aria-describedby="owner-tip"></a>
+        <span id="owner-tip" role="tooltip">
+          Owned by @owner and @org/team (from CODEOWNERS line 1)
+        </span>
+        <h3 id="heading-generated">
+          <a href="#diff-generated"><code>src/generated.ts</code></a>
+        </h3>
+        <button aria-label="Not Viewed" aria-pressed="false">Viewed</button>
+      </div>
+      <button>Load Diff</button>
+      <p>Some generated files are not rendered by default.</p>
+    </div>
+
+    <div id="diff-viewed" role="region" aria-labelledby="heading-viewed">
+      <div data-diff-header-wrapper="true">
+        <button aria-label="Expand file"></button>
+        <h3 id="heading-viewed">
+          <a href="#diff-viewed"><code>docs/readme.md</code></a>
+        </h3>
+        <button aria-label="Viewed" aria-pressed="true">Viewed</button>
+      </div>
+    </div>
+
+    <div id="diff-config" role="region" aria-labelledby="heading-config">
+      <div data-diff-header-wrapper="true">
+        <button aria-label="Collapse file"></button>
+        <h3 id="heading-config">
+          <a href="#diff-config"><code>config/app.json</code></a>
+        </h3>
+        <button aria-label="Not Viewed" aria-pressed="false">Viewed</button>
+      </div>
+      <div data-diff-anchor="diff-config">config diff</div>
+    </div>
+  </body>
+</html>
