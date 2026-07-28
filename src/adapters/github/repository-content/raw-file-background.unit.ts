@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import { handleRawFileMessage } from './raw-file-background';
@@ -29,11 +29,14 @@ describe('raw file messaging', () => {
   });
 
   it('returns the typed background result to the client', async () => {
-    vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({
-      status: 'found',
-      text: '*.ts @owner',
-      contentType: 'text/plain',
-      url: 'https://raw.githubusercontent.com/owner/repo/HEAD/CODEOWNERS',
+    fakeBrowser.runtime.onMessage.addListener((_message, _sender, sendResponse) => {
+      sendResponse({
+        status: 'found',
+        text: '*.ts @owner',
+        contentType: 'text/plain',
+        url: 'https://raw.githubusercontent.com/owner/repo/HEAD/CODEOWNERS',
+      });
+      return true;
     });
 
     await expect(
@@ -42,9 +45,12 @@ describe('raw file messaging', () => {
   });
 
   it('turns a serialized background failure into a rejected client request', async () => {
-    vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({
-      status: 'error',
-      message: 'offline',
+    fakeBrowser.runtime.onMessage.addListener((_message, _sender, sendResponse) => {
+      sendResponse({
+        status: 'error',
+        message: 'offline',
+      });
+      return true;
     });
 
     await expect(

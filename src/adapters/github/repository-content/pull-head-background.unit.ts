@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import { handlePullHeadMessage } from './pull-head-background';
@@ -23,9 +23,12 @@ describe('pull head messaging', () => {
   });
 
   it('returns the typed background result to the client', async () => {
-    vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({
-      status: 'found',
-      oid: 'b'.repeat(40),
+    fakeBrowser.runtime.onMessage.addListener((_message, _sender, sendResponse) => {
+      sendResponse({
+        status: 'found',
+        oid: 'b'.repeat(40),
+      });
+      return true;
     });
 
     await expect(
