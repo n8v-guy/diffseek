@@ -81,6 +81,14 @@ pnpm check:ci
 pnpm test:e2e
 ```
 
+Prepare the Chrome Web Store upload archive with:
+
+```sh
+pnpm release:zip
+```
+
+WXT writes the versioned Chrome Manifest V3 ZIP to `.output/`.
+
 Load `.output/chrome-mv3` through `chrome://extensions` with **Developer mode**
 and **Load unpacked**. Open a pull request's **Files changed** page; the extension
 uses the existing GitHub session.
