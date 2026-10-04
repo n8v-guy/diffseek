@@ -28,8 +28,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: chrome-${{ github.sha }}
-          name: Chrome extension ${{ github.sha }}
+          tag_name: latest
+          name: Latest Chrome extension
           body: Automated build from commit ${{ github.sha }}
+          target_commitish: ${{ github.sha }}
           files: .output/*.zip
           fail_on_unmatched_files: true
+          make_latest: true
