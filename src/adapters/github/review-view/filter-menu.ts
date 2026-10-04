@@ -1,15 +1,8 @@
-import type {
-  FilterDefaults,
-  FilterDefaultState,
-  RememberedFilterFacet,
-} from '@diffseek/browser/filter-defaults';
 import {
   facetChoices,
   facetDefinitions,
   isFallbackFacetValue,
   type FacetProjection,
-  type FileRecord,
-  type FilterState,
   type LabelFacet,
   projectFacet,
 } from '@diffseek/review';
@@ -23,6 +16,15 @@ import {
   moveFocus,
 } from './filter-menu-keyboard';
 import {
+  displayLabel,
+  emptyProjection,
+  type FilterMenuOptions,
+  type MenuRowModel,
+  selection,
+  sharedOwnerPrefix,
+} from './filter-menu-model';
+import { patchFilterMenu } from './filter-menu-patch';
+import {
   hasTransientExclusions,
   resetTransientExclusions,
 } from './filter-reset';
@@ -35,17 +37,9 @@ import {
   menuViewedOverlay,
 } from './menu-viewed-action';
 
-type FilterMenuOptions = {
-  files: FileRecord[];
-  filters: FilterState;
-  filterDefaults?: FilterDefaults;
-  onChange: () => void;
-  onFilterDefaultChange?: (
-    facet: RememberedFilterFacet,
-    state: FilterDefaultState,
-  ) => void;
-  onViewed?: (viewed: boolean, paths: string[]) => void;
-};
+export type { FilterMenuOptions } from './filter-menu-model';
+
+const filtersRootSelector = '[data-diffseek="filters"]';
 
 type FilterSectionOptions = {
   facet: LabelFacet;
@@ -60,8 +54,14 @@ export function mountFilterMenu(
   menu: HTMLElement,
   options: FilterMenuOptions,
 ): void {
+  if (
+    menu.dataset.diffseekMenuOwned === 'true' &&
+    patchFilterMenu(menu, options)
+  ) {
+    return;
+  }
   const focused = focusedItem(menu);
-  menu.querySelector('[data-diffseek="filters"]')?.remove();
+  menu.querySelector(filtersRootSelector)?.remove();
   if (clearNativeFilters(menu)) return;
   takeOverMenu(menu);
 
@@ -100,6 +100,7 @@ export function mountFilterMenu(
       value: 'true',
       excluded: selection(options.filters, 'generated'),
       filterDefaults: options.filterDefaults,
+      disabled: options.generatedDefaultBusy === true,
       onChange: options.onChange,
       onFilterDefaultChange: options.onFilterDefaultChange,
       onViewed: options.onViewed,
@@ -212,28 +213,7 @@ function appendSection(
   root.append(section);
 }
 
-function appendItem(
-  root: HTMLElement,
-  options: {
-    facet: LabelFacet;
-    label: string;
-    paths: string[];
-    total: number;
-    value: string;
-    viewed: boolean;
-    visible: number;
-    hiddenViewedPaths: string[];
-    excluded: Set<string>;
-    onlyValues?: string[];
-    filterDefaults?: FilterDefaults;
-    onChange: () => void;
-    onFilterDefaultChange?: (
-      facet: RememberedFilterFacet,
-      state: FilterDefaultState,
-    ) => void;
-    onViewed?: (viewed: boolean, paths: string[]) => void;
-  },
-): void {
+function appendItem(root: HTMLElement, options: MenuRowModel): void {
   const row = document.createElement('div');
   row.className = 'diffseek-menu-row';
   const item = document.createElement('button');
@@ -243,10 +223,16 @@ function appendItem(
   item.dataset.filterKind = options.facet;
   item.dataset.filterValue = options.value;
   applyCheckedState(item, options);
+  if (options.disabled) {
+    item.disabled = true;
+    item.setAttribute('aria-disabled', 'true');
+    item.setAttribute('aria-busy', 'true');
+  }
   const text = document.createElement('span');
   text.textContent = options.label;
   item.append(text);
   item.addEventListener('click', () => {
+    if (item.disabled) return;
     if (cycleFilterDefault(options)) {
       applyCheckedState(item, options);
       options.onChange();
@@ -286,6 +272,7 @@ function appendItem(
       onViewed,
       paths: actionPaths,
       viewed: escapeViewed || options.viewed,
+      disabled: options.disabled === true,
     };
     row.append(menuViewedCounter(actionOptions));
     row.append(menuViewedOverlay(actionOptions));
@@ -334,61 +321,19 @@ function appendResetFilters(
   root.append(reset);
 }
 
-function selection(filters: FilterState, facet: LabelFacet): Set<string> {
-  const excluded = filters.get(facet);
-  if (excluded) return excluded;
-  const created = new Set<string>();
-  filters.set(facet, created);
-  return created;
-}
-
 function focusedItem(menu: HTMLElement): string | null {
   const active = menu.ownerDocument.activeElement;
   return active instanceof HTMLButtonElement &&
-    active.closest('[data-diffseek="filters"]')
+    active.closest(filtersRootSelector)
     ? itemKey(active)
     : null;
-}
-
-function emptyProjection(): FacetProjection {
-  return {
-    hiddenViewedPaths: [],
-    paths: [],
-    total: 0,
-    viewed: false,
-    visible: 0,
-  };
-}
-
-function sharedOwnerPrefix(values: string[]): string | null {
-  const mapped = values.filter((value) => value !== 'Unmapped');
-  if (mapped.length < 2) return null;
-  const matches = mapped.map((value) => value.match(/^(@[^/]+\/).+$/));
-  const prefix = matches[0]?.[1];
-  return prefix && matches.every((match) => match?.[1] === prefix)
-    ? prefix
-    : null;
-}
-
-function displayLabel(
-  label: string,
-  value: string,
-  facet: LabelFacet,
-  ownerPrefix: string | null,
-): string {
-  return facet === 'owners' &&
-    value !== 'Unmapped' &&
-    ownerPrefix &&
-    label.startsWith(ownerPrefix)
-    ? label.slice(ownerPrefix.length)
-    : label;
 }
 
 function clearNativeFilters(menu: HTMLElement): boolean {
   const clear = [...menu.querySelectorAll<HTMLElement>('button, [role="menuitem"]')]
     .find(
       (item) =>
-        !item.closest('[data-diffseek="filters"]') &&
+        !item.closest(filtersRootSelector) &&
         item.textContent?.trim() === 'Clear filters',
     );
   if (!clear) {

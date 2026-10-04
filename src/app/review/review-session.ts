@@ -4,9 +4,11 @@ import type {
   RememberedFilterFacet,
 } from '@diffseek/browser/filter-defaults';
 import {
+  bindSnapshot,
+  pageStructureKey,
+  refreshObservedFiles,
   scanPage,
   type PageSnapshot,
-  viewedControlState,
 } from '@diffseek/github/review-page/page-adapter';
 import {
   type markViewed,
@@ -28,8 +30,6 @@ import {
 import type { ReviewRef } from '@diffseek/github/routing/page-route';
 import {
   type MetadataCommitGuard,
-  parseCodeowners,
-  parseGitAttributes,
   type RepositoryMetadata,
   type RepositoryRef,
 } from '@diffseek/repository-metadata';
@@ -37,11 +37,19 @@ import {
   emptyFacetExclusions,
   excludedFacetCount,
   FileCatalog,
-  labelFiles,
   ReviewIndex,
 } from '@diffseek/review';
 
 import { ViewedActionExecutor } from './action-executor';
+import {
+  classifyKeyFor,
+  classifySnapshot,
+  projectionKeyFor,
+  refreshViewedState,
+  retainNativeOwners,
+  syncViewedLabels,
+  watchObservationRoots,
+} from './session-observation';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
@@ -72,9 +80,18 @@ export class ReviewSession {
   private readonly metadataRevision: number;
   private readonly actionExecutor: ViewedActionExecutor;
   private readonly observer: MutationObserver;
+  private readonly discoveryObserver: MutationObserver;
+  private readonly observedRoots = new Set<Element>();
   private readonly onNativeClick: (event: MouseEvent) => void;
   private snapshot: SupportedSnapshot | null = null;
   private scheduled = false;
+  private reconciling = false;
+  private dirty = false;
+  private defaultViewedInFlight = 0;
+  private projectionFingerprint = '';
+  private structureKey: string | null = null;
+  private classifyKey = '';
+  private unavailable = new Map<string, string>();
   private metadata: RepositoryMetadata;
 
   constructor(private readonly options: ReviewSessionOptions) {
@@ -112,12 +129,16 @@ export class ReviewSession {
     this.observer = new MutationObserver((records) => {
       if (records.some(isNativeMutation)) this.schedule();
     });
-    this.observer.observe(options.root.body, {
+    this.discoveryObserver = new MutationObserver((records) => {
+      if (!records.some(isNativeMutation)) return;
+      this.refreshObservationRoots();
+      this.schedule();
+    });
+    this.discoveryObserver.observe(options.root.body, {
       childList: true,
       subtree: true,
-      attributes: true,
-      attributeFilter: ['aria-label', 'aria-labelledby', 'aria-pressed'],
     });
+    this.refreshObservationRoots();
   }
 
   start(): void {
@@ -126,47 +147,20 @@ export class ReviewSession {
   }
 
   reconcile(): void {
-    if (this.lifecycle.signal.aborted) return;
-    const next = scanPage(this.options.root);
-    if (!next.supported) {
-      this.clearInjected();
-      if (excludedFacetCount(this.filters) > 0) {
-        showUnavailable(this.options.root, next.reason);
-      }
-      this.emitReconciled();
+    if (this.lifecycle.signal.aborted || this.reconciling) {
+      this.dirty = true;
       return;
     }
-
-    this.retainNativeOwners(next);
-    this.catalog.merge(next.files);
-    this.refreshViewedState(next);
-    const catalogSnapshot: SupportedSnapshot = {
-      ...next,
-      files: this.catalog.files(),
-    };
-    this.snapshot = catalogSnapshot;
-    removeUnavailable(this.options.root);
-    this.classify(catalogSnapshot);
-    this.applyDefaultViewed(catalogSnapshot);
-    const index = new ReviewIndex(catalogSnapshot.files);
-    this.presenter.apply(catalogSnapshot, this.filters, index);
-    mountViewedActions(
-      catalogSnapshot,
-      (viewed, paths) => this.batch(viewed, paths),
-      index,
-    );
-    for (const menu of filterMenus(this.options.root)) {
-      mountFilterMenu(menu, {
-        files: catalogSnapshot.files,
-        filters: this.filters,
-        filterDefaults: this.options.filterDefaults,
-        onChange: () => this.reconcile(),
-        onFilterDefaultChange: (facet, state) =>
-          this.rememberFilterDefault(facet, state),
-        onViewed: (viewed, paths) => this.batch(viewed, paths),
-      });
+    this.reconciling = true;
+    this.scheduled = false;
+    try {
+      do {
+        this.dirty = false;
+        this.reconcileOnce();
+      } while (this.dirty && !this.lifecycle.signal.aborted);
+    } finally {
+      this.reconciling = false;
     }
-    this.emitReconciled();
   }
 
   stop(): void {
@@ -176,11 +170,102 @@ export class ReviewSession {
     this.actionExecutor.cancel();
     this.options.root.removeEventListener('click', this.onNativeClick, true);
     this.observer.disconnect();
+    this.discoveryObserver.disconnect();
+    this.observedRoots.clear();
     this.clearInjected();
   }
 
+  private reconcileOnce(): void {
+    const structureKey = pageStructureKey(this.options.root);
+    let next: PageSnapshot;
+    if (
+      structureKey != null &&
+      structureKey === this.structureKey &&
+      this.snapshot
+    ) {
+      refreshObservedFiles(this.options.root, this.catalog.files());
+      next = bindSnapshot(
+        this.options.root,
+        this.catalog.files(),
+        this.unavailable,
+      );
+    } else {
+      next = scanPage(this.options.root);
+      this.structureKey = structureKey;
+      this.classifyKey = '';
+    }
+    if (!next.supported) {
+      this.projectionFingerprint = '';
+      this.structureKey = null;
+      this.classifyKey = '';
+      this.clearInjected();
+      if (excludedFacetCount(this.filters) > 0) {
+        showUnavailable(this.options.root, next.reason);
+      }
+      this.emitReconciled();
+      return;
+    }
+
+    retainNativeOwners(next, this.observedOwners);
+    this.catalog.merge(next.files);
+    refreshViewedState(next, this.catalog.files());
+    this.unavailable = next.unavailable;
+    const catalogSnapshot: SupportedSnapshot = {
+      ...next,
+      files: this.catalog.files(),
+    };
+    this.snapshot = catalogSnapshot;
+    removeUnavailable(this.options.root);
+    this.classifyIfNeeded(catalogSnapshot);
+    const defaultViewedPaths = this.defaultViewedPaths(catalogSnapshot);
+    const generatedDefaultBusy =
+      this.defaultViewedInFlight > 0 || defaultViewedPaths.length > 0;
+    const menus = filterMenus(this.options.root);
+    const fingerprint = projectionKeyFor({
+      metadataRevision: this.metadataRevision,
+      metadata: this.metadata,
+      filters: this.filters,
+      filterDefaults: this.options.filterDefaults,
+      generatedDefaultBusy,
+      menuCount: menus.length,
+      files: catalogSnapshot.files,
+    });
+    const index = new ReviewIndex(catalogSnapshot.files);
+    this.presenter.apply(catalogSnapshot, this.filters, index);
+    mountViewedActions(
+      catalogSnapshot,
+      (viewed, paths) => this.batch(viewed, paths),
+      index,
+    );
+    if (fingerprint === this.projectionFingerprint) {
+      for (const menu of menus) {
+        if (menuNeedsRemount(menu)) {
+          this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
+        }
+      }
+      this.emitReconciled();
+      return;
+    }
+    this.projectionFingerprint = fingerprint;
+    if (defaultViewedPaths.length > 0) {
+      this.enqueueDefaultViewed(defaultViewedPaths);
+    }
+    for (const menu of menus) {
+      this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
+    }
+    this.refreshObservationRoots();
+    this.emitReconciled();
+  }
+
   private schedule(): void {
-    if (this.lifecycle.signal.aborted || this.scheduled) return;
+    if (this.lifecycle.signal.aborted || this.defaultViewedInFlight > 0) {
+      return;
+    }
+    if (this.reconciling) {
+      this.dirty = true;
+      return;
+    }
+    if (this.scheduled) return;
     this.scheduled = true;
     queueMicrotask(() => {
       this.scheduled = false;
@@ -216,9 +301,9 @@ export class ReviewSession {
     void this.options.writeFilterDefaults(this.options.filterDefaults);
   }
 
-  private applyDefaultViewed(snapshot: SupportedSnapshot): void {
-    if (!this.options.filterDefaults.viewed.has('generated')) return;
-    const paths = snapshot.files
+  private defaultViewedPaths(snapshot: SupportedSnapshot): string[] {
+    if (!this.options.filterDefaults.viewed.has('generated')) return [];
+    return snapshot.files
       .filter(
         (file) =>
           file.generated &&
@@ -227,9 +312,43 @@ export class ReviewSession {
           !this.defaultViewedAttempts.has(file.path),
       )
       .map((file) => file.path);
-    if (paths.length === 0) return;
+  }
+
+  private enqueueDefaultViewed(paths: string[]): void {
     for (const path of paths) this.defaultViewedAttempts.add(path);
-    this.batch(true, paths);
+    this.defaultViewedInFlight += 1;
+    showBatchStarted(this.options.root, true, paths.length);
+    void this.actionExecutor
+      .enqueue({
+        reviewKey: this.options.review.key,
+        generation: this.metadataRevision,
+        viewed: true,
+        paths,
+      })
+      .catch(() => null)
+      .then((result) => {
+        this.defaultViewedInFlight = Math.max(0, this.defaultViewedInFlight - 1);
+        if (this.lifecycle.signal.aborted) return;
+        if (result) showBatchResult(this.options.root, result, true);
+        this.reconcile();
+      });
+  }
+
+  private mountMenu(
+    menu: HTMLElement,
+    snapshot: SupportedSnapshot,
+    generatedDefaultBusy: boolean,
+  ): void {
+    mountFilterMenu(menu, {
+      files: snapshot.files,
+      filters: this.filters,
+      filterDefaults: this.options.filterDefaults,
+      generatedDefaultBusy,
+      onChange: () => this.reconcile(),
+      onFilterDefaultChange: (facet, state) =>
+        this.rememberFilterDefault(facet, state),
+      onViewed: (viewed, paths) => this.batch(viewed, paths),
+    });
   }
 
   private async refreshMetadata(): Promise<void> {
@@ -239,6 +358,7 @@ export class ReviewSession {
     if (this.lifecycle.signal.aborted) return;
     if (defaultResult.changed) {
       this.metadata = defaultResult.metadata;
+      this.classifyKey = '';
       this.reconcile();
       await this.options.metadataCommits
         .commit(
@@ -257,35 +377,27 @@ export class ReviewSession {
       JSON.stringify(this.metadata) !== JSON.stringify(pullMetadata)
     ) {
       this.metadata = pullMetadata;
+      this.classifyKey = '';
       this.reconcile();
     }
   }
 
-  private classify(snapshot: SupportedSnapshot): void {
-    labelFiles(snapshot.files, {
-      attributes: parseGitAttributes(this.metadata.attributes),
-      codeowners: this.metadata.codeowners
-        ? parseCodeowners(this.metadata.codeowners)
-        : [],
+  private classifyIfNeeded(snapshot: SupportedSnapshot): void {
+    const nextKey = classifyKeyFor(this.metadata, snapshot.files);
+    if (nextKey === this.classifyKey) {
+      syncViewedLabels(snapshot.files);
+      return;
+    }
+    classifySnapshot(snapshot, this.metadata);
+    this.classifyKey = nextKey;
+  }
+
+  private refreshObservationRoots(): void {
+    watchObservationRoots({
+      root: this.options.root,
+      observer: this.observer,
+      observedRoots: this.observedRoots,
     });
-  }
-
-  private retainNativeOwners(snapshot: SupportedSnapshot): void {
-    for (const file of snapshot.files) {
-      if (file.owners.length > 0) {
-        this.observedOwners.set(file.path, file.owners);
-      } else {
-        file.owners = this.observedOwners.get(file.path) ?? [];
-      }
-    }
-  }
-
-  private refreshViewedState(snapshot: SupportedSnapshot): void {
-    for (const file of this.catalog.files()) {
-      const control = snapshot.viewedControl(file.path);
-      const viewed = control ? viewedControlState(control) : null;
-      if (viewed != null) file.viewed = viewed;
-    }
   }
 
   private clearInjected(): void {
@@ -297,4 +409,15 @@ export class ReviewSession {
   private emitReconciled(): void {
     this.options.root.dispatchEvent(new CustomEvent('diffseek-reconciled'));
   }
+}
+
+function menuNeedsRemount(menu: HTMLElement): boolean {
+  if (menu.dataset.diffseekMenuOwned !== 'true') return true;
+  if (!menu.querySelector(':scope > [data-diffseek="filters"]')) return true;
+  return [...menu.children].some(
+    (child) =>
+      child instanceof HTMLElement &&
+      child.dataset.diffseek !== 'filters' &&
+      !child.hidden,
+  );
 }

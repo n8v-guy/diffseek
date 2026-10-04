@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import edgeCases from './fixtures/github-pr-edge-cases.html?raw';
 import fixture from './fixtures/github-pr.html?raw';
-import { scanPage } from './page-adapter';
+import {
+  pageStructureKey,
+  refreshObservedFiles,
+  scanPage,
+} from './page-adapter';
 
 describe('scanPage', () => {
   beforeEach(() => {
@@ -199,6 +203,43 @@ describe('scanPage', () => {
     ]);
     expect(snapshot.unavailable.get('assets/logo.bin')).toBe(
       'Incomplete diff structure',
+    );
+  });
+
+  it('keeps a stable structure key until tree or region membership changes', () => {
+    const first = pageStructureKey(document);
+    expect(first).toEqual(pageStructureKey(document));
+
+    document
+      .querySelector('#diff-app button[aria-label="Not Viewed"]')
+      ?.setAttribute('aria-label', 'Viewed');
+    document
+      .querySelector('#diff-app button[aria-pressed="false"]')
+      ?.setAttribute('aria-pressed', 'true');
+    expect(pageStructureKey(document)).toBe(first);
+
+    document.getElementById('diff-config')?.remove();
+    expect(pageStructureKey(document)).not.toBe(first);
+  });
+
+  it('refreshes viewed facts without rebuilding file identity', () => {
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+    const file = snapshot.files.find((entry) => entry.path === 'src/app.ts');
+    if (!file) throw new Error('missing file');
+    expect(file.viewed).toBe(false);
+
+    document
+      .querySelector('#diff-app button[aria-label="Not Viewed"]')
+      ?.setAttribute('aria-label', 'Viewed');
+    document
+      .querySelector('#diff-app button[aria-pressed="false"]')
+      ?.setAttribute('aria-pressed', 'true');
+    refreshObservedFiles(document, snapshot.files);
+
+    expect(file.viewed).toBe(true);
+    expect(file).toBe(
+      snapshot.files.find((entry) => entry.path === 'src/app.ts'),
     );
   });
 });

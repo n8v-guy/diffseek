@@ -49,6 +49,7 @@ export async function markViewed(
 
     const confirmed = waitForViewedState(
       resolveButton,
+      button,
       viewed,
       options.timeoutMs ?? 1_500,
       options.signal,
@@ -86,6 +87,9 @@ export function mountViewedActions(
   const staleAnchors = new Set(
     tree.querySelectorAll<HTMLElement>('.diffseek-viewed-icon-anchor'),
   );
+  const filesByPath = new Map(
+    snapshot.files.map((file) => [file.path, file]),
+  );
 
   for (const item of tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')) {
     const paths = index
@@ -94,9 +98,7 @@ export function mountViewedActions(
       .map((file) => file.path);
     if (paths.length === 0) continue;
 
-    const viewed = paths.every(
-      (path) => snapshot.files.find((file) => file.path === path)?.viewed,
-    );
+    const viewed = paths.every((path) => filesByPath.get(path)?.viewed);
     const icon = [...item.querySelectorAll<SVGElement>('svg.octicon')].find(
       (candidate) =>
         candidate.closest('[role="treeitem"]') === item &&
@@ -131,7 +133,9 @@ export function mountViewedActions(
       staleAnchors.delete(icon.parentElement);
       icon.parentElement.classList.add('diffseek-viewed-icon-anchor');
     }
-    icon.before(action);
+    if (icon.previousElementSibling !== action) {
+      icon.before(action);
+    }
   }
 
   for (const action of staleActions) action.remove();
@@ -151,8 +155,17 @@ function viewedButtonFor(
   return snapshot.viewedControl(path);
 }
 
+function observationRoot(button: HTMLButtonElement): Element {
+  return (
+    button.closest('[role="region"]') ??
+    button.closest('[data-diff-header-wrapper="true"]') ??
+    button
+  );
+}
+
 function waitForViewedState(
   resolveButton: () => HTMLButtonElement | null,
+  button: HTMLButtonElement,
   viewed: boolean,
   timeoutMs: number,
   signal?: AbortSignal,
@@ -167,16 +180,12 @@ function waitForViewedState(
       signal?.removeEventListener('abort', abort);
       resolve(confirmed);
     };
-    const observer = new MutationObserver(() => {
-      const button = resolveButton();
-      if (button && isViewed(button) === viewed) finish(true);
-    });
-    const button = resolveButton();
-    if (!button) {
-      resolve(false);
-      return;
-    }
-    observer.observe(button.ownerDocument.body, {
+    const check = () => {
+      const current = resolveButton();
+      if (current && isViewed(current) === viewed) finish(true);
+    };
+    const observer = new MutationObserver(check);
+    observer.observe(observationRoot(button), {
       attributes: true,
       childList: true,
       subtree: true,
@@ -185,5 +194,6 @@ function waitForViewedState(
     const timeout = setTimeout(() => finish(false), timeoutMs);
     const abort = () => finish(false);
     signal?.addEventListener('abort', abort, { once: true });
+    queueMicrotask(check);
   });
 }

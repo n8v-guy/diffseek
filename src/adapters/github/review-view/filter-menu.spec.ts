@@ -560,6 +560,180 @@ describe('mountFilterMenu', () => {
   });
 });
 
+describe('filter menu in-place patch', () => {
+  it('updates counts and viewed actions without replacing the menu root', () => {
+    const element = menu();
+    const state = filters();
+    const onViewed = vi.fn();
+    mountFilterMenu(element, {
+      files,
+      filters: state,
+      onChange: vi.fn(),
+      onViewed,
+    });
+    const root = element.querySelector('[data-diffseek="filters"]');
+    const statusCount = element.querySelector(
+      '[data-diffseek-menu-count-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
+    );
+    expect(statusCount?.textContent).toContain('2/2');
+
+    const nextFiles = files.map((file): FileRecord =>
+      file.path === 'src/app.test.ts'
+        ? {
+            ...file,
+            viewed: true,
+            labels: [
+              { facet: 'viewed', value: 'true' },
+              ...file.labels.filter((label) => label.facet !== 'viewed'),
+            ],
+          }
+        : file,
+    );
+    mountFilterMenu(element, {
+      files: nextFiles,
+      filters: state,
+      onChange: vi.fn(),
+      onViewed,
+    });
+
+    expect(element.querySelector('[data-diffseek="filters"]')).toBe(root);
+    expect(
+      element.querySelector(
+        '[data-diffseek-menu-count-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
+      )?.textContent,
+    ).toContain('2/2');
+    element
+      .querySelector<HTMLButtonElement>(
+        '[data-diffseek-menu-count-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
+      )
+      ?.click();
+    expect(onViewed).toHaveBeenCalled();
+  });
+
+  it('rebuilds when a plain count row gains viewed actions', () => {
+    const element = menu();
+    const state = filters();
+    state.get('generated')?.add('true');
+    const onViewed = vi.fn();
+    mountFilterMenu(element, {
+      files,
+      filters: state,
+      onChange: vi.fn(),
+      onViewed,
+    });
+    expect(
+      element.querySelector(
+        '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"]',
+      ),
+    ).toBeNull();
+
+    state.get('generated')?.delete('true');
+    mountFilterMenu(element, {
+      files,
+      filters: state,
+      onChange: vi.fn(),
+      onViewed,
+    });
+
+    expect(
+      element
+        .querySelector(
+          '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]',
+        )
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('rebuilds when section all shortcuts appear or disappear', () => {
+    const element = menu();
+    const state = filters();
+    mountFilterMenu(element, {
+      files,
+      filters: state,
+      onChange: vi.fn(),
+      onViewed: vi.fn(),
+    });
+    expect(
+      element.querySelector(
+        '.diffseek-menu-section:has([data-filter-kind="owners"]) [data-filter-all]',
+      ),
+    ).toBeNull();
+
+    state.get('owners')?.add('@owner');
+    mountFilterMenu(element, {
+      files,
+      filters: state,
+      onChange: vi.fn(),
+      onViewed: vi.fn(),
+    });
+    expect(
+      element.querySelector(
+        '.diffseek-menu-section:has([data-filter-kind="owners"]) [data-filter-all]',
+      ),
+    ).not.toBeNull();
+
+    state.get('owners')?.delete('@owner');
+    mountFilterMenu(element, {
+      files,
+      filters: state,
+      onChange: vi.fn(),
+      onViewed: vi.fn(),
+    });
+    expect(
+      element.querySelector(
+        '.diffseek-menu-section:has([data-filter-kind="owners"]) [data-filter-all]',
+      ),
+    ).toBeNull();
+  });
+});
+
+describe('generated default busy row', () => {
+  it('disables the generated row while default mark-viewed is busy', () => {
+    const element = menu();
+    const state = filters();
+    const onChange = vi.fn();
+    const onFilterDefaultChange = vi.fn();
+    const onViewed = vi.fn();
+    const filterDefaults = {
+      hidden: new Set<'viewed' | 'generated'>(['generated']),
+      viewed: new Set<'generated'>(['generated']),
+    };
+    const busyFiles: FileRecord[] = [
+      {
+        ...files[1]!,
+        viewed: false,
+        capabilities: { collapse: true, viewed: true },
+        labels: files[1]!.labels.filter((label) => label.facet !== 'viewed'),
+      },
+    ];
+
+    mountFilterMenu(element, {
+      files: busyFiles,
+      filters: state,
+      filterDefaults,
+      generatedDefaultBusy: true,
+      onChange,
+      onFilterDefaultChange,
+      onViewed,
+    });
+
+    const generated = element.querySelector<HTMLButtonElement>(
+      '[data-filter-kind="generated"][data-filter-value="true"]',
+    );
+    const viewedAction = element.querySelector<HTMLButtonElement>(
+      '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"]',
+    );
+    expect(generated?.disabled).toBe(true);
+    expect(generated?.getAttribute('aria-busy')).toBe('true');
+    expect(viewedAction?.disabled).toBe(true);
+    generated?.click();
+    viewedAction?.click();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onFilterDefaultChange).not.toHaveBeenCalled();
+    expect(onViewed).not.toHaveBeenCalled();
+  });
+});
+
 describe('filter menu fallback sections', () => {
   it('hides sections whose only choice is their fallback', () => {
     const element = menu();

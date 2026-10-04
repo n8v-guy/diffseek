@@ -110,6 +110,15 @@
   content: '×';
 }
 
+.diffseek-menu-item[aria-disabled='true'],
+.diffseek-menu-row:has([data-filter-kind='generated'][aria-busy='true'])
+  .diffseek-menu-count,
+.diffseek-menu-row:has([data-filter-kind='generated'][aria-busy='true'])
+  .diffseek-menu-viewed-action {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .diffseek-menu-only,
 .diffseek-menu-all {
   background: var(--diffseek-badge);

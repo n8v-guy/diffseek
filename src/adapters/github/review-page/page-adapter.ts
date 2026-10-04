@@ -2,6 +2,7 @@ import type { ChangeStatus, FileRecord } from '@diffseek/review';
 import { extensionOf } from '@diffseek/review';
 
 const headerButtonSelector = '[data-diff-header-wrapper="true"] button';
+const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
 
 export type PageSnapshot =
   | {
@@ -20,10 +21,28 @@ export type PageSnapshot =
       reason: string;
     };
 
+export function pageStructureKey(root: Document): string | null {
+  const tree = root.querySelector<HTMLElement>(fileTreeSelector);
+  if (!tree) return null;
+  const items = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')]
+    .map((item) => {
+      const href =
+        item.querySelector<HTMLAnchorElement>('a[href^="#diff-"]')?.getAttribute(
+          'href',
+        ) ?? '';
+      return `${item.id}\0${href}\0${changeStatusOf(item) ?? ''}`;
+    })
+    .join('\n');
+  const regions = [
+    ...root.querySelectorAll<HTMLElement>('[role="region"][id^="diff-"]'),
+  ]
+    .map((region) => `${region.id}\0${displayedPathOf(region) ?? ''}`)
+    .join('\n');
+  return `${items}\n--\n${regions}`;
+}
+
 export function scanPage(root: Document): PageSnapshot {
-  const tree = root.querySelector<HTMLElement>(
-    '[role="tree"][aria-label="File Tree"]',
-  );
+  const tree = root.querySelector<HTMLElement>(fileTreeSelector);
   if (!tree) return { supported: false, reason: 'File tree is unavailable' };
 
   const files: FileRecord[] = [];
@@ -88,10 +107,47 @@ export function scanPage(root: Document): PageSnapshot {
     files.push(file);
   }
 
+  return bindSnapshot(root, files, unavailable, regionsByPath);
+}
+
+export function refreshObservedFiles(
+  root: Document,
+  files: readonly FileRecord[],
+): void {
+  const { byPath } = indexRegions(root);
+  for (const file of files) {
+    const matches = byPath.get(file.path) ?? [];
+    if (matches.length !== 1) continue;
+    const region = matches[0];
+    if (!region || region.getAttribute('role') !== 'region') continue;
+    const viewedButton = [
+      ...region.querySelectorAll<HTMLButtonElement>(headerButtonSelector),
+    ].find((button) => viewedControlState(button) != null);
+    const collapseButton = [
+      ...region.querySelectorAll<HTMLButtonElement>(headerButtonSelector),
+    ].find((button) => fileToggleAction(button) != null);
+    const owners = ownersOf(region);
+    if (owners.length > 0) file.owners = owners;
+    file.viewed = viewedButton
+      ? viewedControlState(viewedButton) === true
+      : file.viewed;
+    file.capabilities = {
+      collapse: collapseButton != null,
+      viewed: viewedButton != null,
+    };
+  }
+}
+
+export function bindSnapshot(
+  root: Document,
+  files: FileRecord[],
+  unavailable: Map<string, string>,
+  regionsByPath = indexRegions(root).byPath,
+): Extract<PageSnapshot, { supported: true }> {
   const treeItem = (path: string) => {
     const item = root.getElementById(path);
     return item?.getAttribute('role') === 'treeitem' &&
-      item.closest('[role="tree"][aria-label="File Tree"]')
+      item.closest(fileTreeSelector)
       ? item
       : null;
   };
@@ -122,13 +178,10 @@ export function scanPage(root: Document): PageSnapshot {
     supported: true,
     files,
     unavailable,
-    tree: () =>
-      root.querySelector<HTMLElement>(
-        '[role="tree"][aria-label="File Tree"]',
-      ),
+    tree: () => root.querySelector<HTMLElement>(fileTreeSelector),
     treeItems: () => [
       ...root.querySelectorAll<HTMLElement>(
-        '[role="tree"][aria-label="File Tree"] [role="treeitem"][id]',
+        `${fileTreeSelector} [role="treeitem"][id]`,
       ),
     ],
     treeItem,

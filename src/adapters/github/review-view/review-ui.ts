@@ -134,7 +134,9 @@ export function isNativeMutation(record: MutationRecord): boolean {
   if (
     ElementType &&
     record.target instanceof ElementType &&
-    record.target.closest('[data-diffseek]')
+    record.target.closest(
+      '[data-diffseek], [data-diffseek-viewed-action], .diffseek-viewed-icon-anchor',
+    )
   ) {
     return false;
   }
@@ -144,7 +146,9 @@ export function isNativeMutation(record: MutationRecord): boolean {
     (node) =>
       !ElementType ||
       !(node instanceof ElementType) ||
-      !node.matches('[data-diffseek], [data-diffseek-viewed-action]'),
+      !node.matches(
+        '[data-diffseek], [data-diffseek-viewed-action], .diffseek-viewed-icon-anchor',
+      ),
   );
 }
 

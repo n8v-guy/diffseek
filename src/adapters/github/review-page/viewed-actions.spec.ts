@@ -108,6 +108,31 @@ describe('viewed actions', () => {
     expect(result.failed).toEqual([]);
   });
 
+  it('confirms state when GitHub replaces the header wrapper after the click', async () => {
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+    const button = snapshot.viewedControl('src/app.ts');
+    button?.addEventListener('click', () => {
+      const wrapper = button.closest('[data-diff-header-wrapper="true"]');
+      const region = button.closest('[role="region"]');
+      if (!wrapper || !region) throw new Error('Missing wrapper');
+      const next = wrapper.cloneNode(true) as HTMLElement;
+      const nextButton = next.querySelector<HTMLButtonElement>(
+        'button[aria-label="Not Viewed"], button[aria-label="Viewed"]',
+      );
+      nextButton?.setAttribute('aria-pressed', 'true');
+      nextButton?.setAttribute('aria-label', 'Viewed');
+      wrapper.replaceWith(next);
+    });
+
+    const result = await markViewed(snapshot, ['src/app.ts'], true, {
+      timeoutMs: 20,
+    });
+
+    expect(result.completed).toEqual(['src/app.ts']);
+    expect(result.failed).toEqual([]);
+  });
+
   it('overlays every file and folder icon with deterministic viewed actions', () => {
     const snapshot = scanPage(document);
     if (!snapshot.supported) throw new Error(snapshot.reason);

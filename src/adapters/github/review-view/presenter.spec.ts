@@ -95,6 +95,8 @@ describe('ReviewPresenter', () => {
     snapshot.files
       .find((file) => file.path === 'config/app.json')
       ?.labels.push({ facet: 'groups', value: 'Config' });
+    const collapse = snapshot.collapseControl('config/app.json');
+    collapse?.setAttribute('aria-label', 'Expand file');
     const presenter = new ReviewPresenter();
     const state = filters();
     state.get('groups')?.add('Config');
@@ -104,7 +106,7 @@ describe('ReviewPresenter', () => {
 
     expect(
       document
-        .getElementById('diff-viewed')
+        .getElementById('diff-config')
         ?.querySelector('button')
         ?.getAttribute('aria-label'),
     ).toBe('Expand file');
@@ -243,6 +245,36 @@ describe('ReviewPresenter', () => {
     await vi.waitFor(() => {
       expect(button?.getAttribute('aria-label')).toBe('Expand file');
     });
+  });
+
+  it('does not re-click when a filtered file is already collapsed', async () => {
+    const button = document.querySelector<HTMLButtonElement>(
+      '#diff-config button[aria-label="Collapse file"]',
+    );
+    let clicks = 0;
+    button?.addEventListener('click', () => {
+      clicks += 1;
+    });
+
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+    snapshot.files
+      .find((file) => file.path === 'config/app.json')
+      ?.labels.push({ facet: 'groups', value: 'Config' });
+    const presenter = new ReviewPresenter();
+    const state = filters();
+    state.get('groups')?.add('Config');
+
+    presenter.apply(snapshot, state);
+    await vi.waitFor(() => {
+      expect(button?.getAttribute('aria-label')).toBe('Expand file');
+    });
+    expect(clicks).toBe(1);
+
+    presenter.apply(snapshot, state);
+    await Promise.resolve();
+    expect(clicks).toBe(1);
+    expect(button?.getAttribute('aria-label')).toBe('Expand file');
   });
 
   it('leaves an uncollapsible file visible when filters are active', () => {

@@ -6,6 +6,7 @@ export type MenuViewedActionOptions = {
   paths: string[];
   value: string;
   viewed: boolean;
+  disabled?: boolean;
 };
 
 export function menuViewedOverlay(
@@ -34,7 +35,7 @@ export function menuViewedCounter(
   return counter;
 }
 
-function configureViewedAction(
+export function configureViewedAction(
   action: HTMLButtonElement,
   options: MenuViewedActionOptions,
 ): void {
@@ -44,9 +45,16 @@ function configureViewedAction(
   action.setAttribute('aria-label', label);
   action.setAttribute('aria-pressed', String(options.viewed));
   action.title = label;
-  action.addEventListener('click', (event) => {
+  action.disabled = options.disabled === true;
+  if (options.disabled) {
+    action.setAttribute('aria-disabled', 'true');
+  } else {
+    action.removeAttribute('aria-disabled');
+  }
+  action.onclick = (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (options.disabled) return;
     options.onViewed(!options.viewed, options.paths);
-  });
+  };
 }
