@@ -19,11 +19,17 @@ adapter is a high-value integration seam and therefore needs broader fixtures.
 
 ## D003 — Metadata levels replace instead of merge
 
-**Decision:** Use bundled, cached default, refreshed default, then pull-head
-content as whole-source replacements. Failures retain the preceding level.
+**Decision:** Use a known-PR LRU (last 10) for immediate review metadata, else
+cached default-branch, else bundled assumptions. Uncached pull-head content
+replaces the open review and is stored in that LRU. A default-branch `HEAD`
+refresh is an isolated cache prefetch only when the repo has no default-branch
+cache yet; it does not replace the open review. Failures retain the preceding
+level.
 
-**Why:** Results are predictable and immediately available. **Cost:** stale
-fallback content can remain active without visible provenance.
+**Why:** Warm revisits skip `CODEOWNERS` / `.gitattributes` reloads while unknown
+PRs still start from HEAD. **Cost:** a PR-head file at a GitHub-higher path than
+the last default-branch hit is not seen until that cached path 404s or the PR
+head SHA changes.
 
 ## D004 — Label sources compose through one interface
 

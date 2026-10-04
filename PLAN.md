@@ -30,9 +30,9 @@ background worker
   validated repository/ref/path text fetch
 
 metadata
-  bundled CODEOWNERS + .gitattributes
-  cached default-branch replacement
-  uncached refs/pull/<number>/head replacement
+  known-PR LRU (last 10) or cached default-branch (immediate)
+  uncached PR-head replacement (current review; stored in LRU)
+  isolated default-branch HEAD prefetch when the repo cache is empty
 ```
 
 Root `.gitattributes` supplies:

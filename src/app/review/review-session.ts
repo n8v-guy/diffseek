@@ -352,34 +352,26 @@ export class ReviewSession {
   }
 
   private async refreshMetadata(): Promise<void> {
-    const defaultResult = await this.options
-      .refreshDefault(this.options.review)
-      .catch(() => ({ metadata: this.metadata, changed: false }));
-    if (this.lifecycle.signal.aborted) return;
-    if (defaultResult.changed) {
-      this.metadata = defaultResult.metadata;
-      this.classifyKey = '';
-      this.reconcile();
-      await this.options.metadataCommits
-        .commit(
-          this.options.review,
-          this.metadataRevision,
-          defaultResult.metadata,
-        )
-        .catch(() => false);
-      if (this.lifecycle.signal.aborted) return;
-    }
     const pullMetadata = await this.options
       .readPull(this.options.review, this.metadata)
       .catch(() => this.metadata);
-    if (
-      !this.lifecycle.signal.aborted &&
-      JSON.stringify(this.metadata) !== JSON.stringify(pullMetadata)
-    ) {
+    if (this.lifecycle.signal.aborted) return;
+    if (JSON.stringify(this.metadata) !== JSON.stringify(pullMetadata)) {
       this.metadata = pullMetadata;
       this.classifyKey = '';
       this.reconcile();
     }
+    const defaultResult = await this.options
+      .refreshDefault(this.options.review)
+      .catch(() => ({ metadata: this.metadata, changed: false }));
+    if (this.lifecycle.signal.aborted || !defaultResult.changed) return;
+    await this.options.metadataCommits
+      .commit(
+        this.options.review,
+        this.metadataRevision,
+        defaultResult.metadata,
+      )
+      .catch(() => false);
   }
 
   private classifyIfNeeded(snapshot: SupportedSnapshot): void {

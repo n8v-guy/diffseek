@@ -24,8 +24,9 @@ request reviews. GitHub remains the review system and visual authority.
   without changing any other facet.
 - **Review index** — immutable descendant and ancestor lookup built from one page
   observation.
-- **Metadata level** — bundled assumptions, cached default branch, refreshed
-  default branch, or uncached pull-request head.
+- **Metadata level** — known pull-request LRU, cached default branch, bundled
+  assumptions, or uncached pull-request head. Default-branch refresh is cache
+  prefetch only when that repo cache is empty.
 - **Native action** — a click on a current GitHub control followed by observable
   DOM confirmation.
 

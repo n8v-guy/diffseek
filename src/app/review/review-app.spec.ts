@@ -79,7 +79,7 @@ describe('review app lifecycle', () => {
     app.stop();
   });
 
-  it('replaces cached metadata with default and then PR-head content', async () => {
+  it('replaces cached metadata with PR-head content while default refresh stays isolated', async () => {
     openMenu();
     let resolveDefault:
       | ((value: {
@@ -90,6 +90,21 @@ describe('review app lifecycle', () => {
     let resolvePull:
       | ((value: { codeowners: string; attributes: string }) => void)
       | undefined;
+    const refreshDefault = vi.fn(
+      () =>
+        new Promise<{
+          metadata: { codeowners: string; attributes: string };
+          changed: boolean;
+        }>((resolve) => {
+          resolveDefault = resolve;
+        }),
+    );
+    const readPull = vi.fn(
+      () =>
+        new Promise<{ codeowners: string; attributes: string }>((resolve) => {
+          resolvePull = resolve;
+        }),
+    );
     const app = await startReviewApp({
       root: document,
       pathname: () => '/octo/repo/pull/1/changes',
@@ -97,29 +112,13 @@ describe('review app lifecycle', () => {
         codeowners: '',
         attributes: 'src/** group=cached',
       }),
-      refreshDefault: () =>
-        new Promise((resolve) => {
-          resolveDefault = resolve;
-        }),
-      readPull: () =>
-        new Promise((resolve) => {
-          resolvePull = resolve;
-        }),
+      refreshDefault,
+      readPull,
     });
 
     expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull();
-    resolveDefault?.({
-      metadata: {
-        codeowners: '',
-        attributes: 'src/** group=default',
-      },
-      changed: true,
-    });
-    await vi.waitFor(() =>
-      expect(
-        document.querySelector('[data-filter-value="default"]'),
-      ).not.toBeNull(),
-    );
+    expect(readPull).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ pull: 1 }), { codeowners: '', attributes: 'src/** group=cached' });
+    expect(refreshDefault).not.toHaveBeenCalled();
     resolvePull?.({
       codeowners: '',
       attributes: 'src/** group=pull',
@@ -127,8 +126,25 @@ describe('review app lifecycle', () => {
     await vi.waitFor(() =>
       expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(),
     );
-    expect(document.querySelector('[data-filter-value="cached"]')).toBeNull();
+    await vi.waitFor(() => expect(refreshDefault).toHaveBeenCalledOnce());
+    resolveDefault?.({
+      metadata: {
+        codeowners: '',
+        attributes: 'src/** group=default',
+      },
+      changed: true,
+    });
+    await vi.waitFor(async () => {
+      const stored = await fakeBrowser.storage.local.get(
+        'diffseek:metadata:octo/repo',
+      );
+      expect(stored['diffseek:metadata:octo/repo']).toMatchObject({
+        attributes: 'src/** group=default',
+      });
+    });
+    expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull();
     expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
+    expect(document.querySelector('[data-filter-value="cached"]')).toBeNull();
     app.stop();
   });
 
@@ -161,11 +177,11 @@ describe('review app lifecycle', () => {
     app.stop();
   });
 
-  it('applies default and PR-head metadata when the cache write fails', async () => {
+  it('keeps PR-head metadata when the default-branch cache write fails', async () => {
     openMenu();
-    vi.spyOn(fakeBrowser.storage.local, 'set').mockRejectedValueOnce(
-      new Error('storage unavailable'),
-    );
+    const setSpy = vi
+      .spyOn(fakeBrowser.storage.local, 'set')
+      .mockRejectedValueOnce(new Error('storage unavailable'));
     const readPull = vi.fn().mockResolvedValue({
       codeowners: '',
       attributes: 'src/** group=pull',
@@ -190,10 +206,13 @@ describe('review app lifecycle', () => {
     await vi.waitFor(() =>
       expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(),
     );
+    await vi.waitFor(() => expect(setSpy).toHaveBeenCalled());
     expect(readPull).toHaveBeenCalledWith(
       expect.objectContaining({ pull: 1 }),
-      { codeowners: '', attributes: 'src/** group=default' },
+      { codeowners: '', attributes: 'src/** group=cached' },
     );
+    expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
+    setSpy.mockRestore();
     app.stop();
   });
 

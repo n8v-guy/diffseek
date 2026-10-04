@@ -38,15 +38,24 @@ matching hidden viewed files instead offers to mark only those files not
 viewed, making them visible again. Started and completed actions appear in a
 short-lived top-right notification stack.
 
-Repository metadata replaces its fallback in three stages:
+Repository metadata for the open review starts from cache, then PR head:
 
 ```text
-bundled assumptions
-  -> cached default branch
-  -> uncached PR head
+known PR cache (last 10 pull requests)
+  -> cached default branch (unknown PRs)
+  -> bundled assumptions
+  -> uncached PR head, stored in the PR LRU
 ```
 
-`CODEOWNERS` supplies owners. Root `.gitattributes` is the only repository
+A default-branch `HEAD` refresh runs afterward only when that repo has no
+default-branch cache yet; it is an isolated prefetch for later unknown PRs
+and does not replace the current review. A known PR with the same head SHA
+does not reload `CODEOWNERS` or `.gitattributes`.
+
+`CODEOWNERS` supplies owners. DiffSeek follows GitHub's order
+(`.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`). On a pull-request
+head it first tries the path last seen on that repo's default branch, then
+the remaining GitHub locations. Root `.gitattributes` is the only repository
 source for groups, explicit language overrides, and generated status:
 
 ```gitattributes
@@ -67,8 +76,9 @@ and specific choices such as `TypeScript`, `TypeScript (ts)`, and
 is respectively `No owner`, `No type`, or `No extension`.
 
 Missing default-branch files retain bundled assumptions. Missing PR-head files
-retain the corresponding default-branch fallback. PR-head metadata is never
-cached.
+retain the corresponding default-branch fallback. Default-branch metadata is
+cached per repository. PR-head metadata is cached in an LRU of the last 10
+pull requests and reused when the head SHA is unchanged.
 
 ## Develop
 

@@ -6,4 +6,5 @@ export type RepositoryRef = {
 export type RepositoryMetadata = {
   codeowners: string;
   attributes: string;
+  codeownersPath?: string;
 };

@@ -1,4 +1,8 @@
-import { readCache } from '@diffseek/browser/cache';
+import {
+  readCache,
+  readPullCache,
+  writePullCache,
+} from '@diffseek/browser/cache';
 import type { PullHeadRequest } from '@diffseek/github/repository-content/pull-head';
 import { resolvePullHead } from '@diffseek/github/repository-content/pull-head-client';
 import type { RawFileRequest, RawFileResult } from '@diffseek/github/repository-content/raw-file';
@@ -19,9 +23,19 @@ type ReadRawFile = (request: RawFileRequest) => Promise<RawFileResult>;
 type ResolvePullHead = (request: PullHeadRequest) => Promise<string>;
 
 export async function readImmediateMetadata(
-  repository: RepositoryRef,
+  repository: RepositoryRef & { pull?: number },
 ): Promise<RepositoryMetadata> {
   try {
+    if (repository.pull != null) {
+      const cachedPull = await readPullCache({
+        ...repository,
+        pull: repository.pull,
+      });
+      if (cachedPull != null) {
+        const { sha: _sha, ...metadata } = cachedPull;
+        return metadata;
+      }
+    }
     return (await readCache(repository)) ?? bundledMetadata;
   } catch {
     return bundledMetadata;
@@ -32,10 +46,15 @@ export async function refreshDefaultMetadata(
   repository: RepositoryRef,
   request: ReadRawFile = readRawFile,
 ): Promise<{ metadata: RepositoryMetadata; changed: boolean }> {
-  const fallback = await readImmediateMetadata(repository);
-  const metadata = await readMetadata(repository, 'HEAD', fallback, request);
-  const changed = JSON.stringify(fallback) !== JSON.stringify(metadata);
-  return { metadata, changed };
+  const cached = await readCache(repository).catch(() => null);
+  if (cached != null) return { metadata: cached, changed: false };
+  const metadata = await readMetadata(
+    repository,
+    'HEAD',
+    bundledMetadata,
+    request,
+  );
+  return { metadata, changed: true };
 }
 
 export async function readPullMetadata(
@@ -48,7 +67,21 @@ export async function readPullMetadata(
     repo: `${review.owner}/${review.repo}`,
     pull: review.pull,
   });
-  return readMetadata(review, ref, fallback, request);
+  const cached = await readPullCache(review).catch(() => null);
+  if (cached?.sha === ref) {
+    const { sha, ...metadata } = cached;
+    await writePullCache(review, sha, metadata).catch(() => undefined);
+    return metadata;
+  }
+  const metadata = await readMetadata(
+    review,
+    ref,
+    fallback,
+    request,
+    (await readCache(review).catch(() => null))?.codeownersPath,
+  );
+  await writePullCache(review, ref, metadata).catch(() => undefined);
+  return metadata;
 }
 
 async function readMetadata(
@@ -56,20 +89,32 @@ async function readMetadata(
   ref: string,
   fallback: RepositoryMetadata,
   request: ReadRawFile,
+  preferredPath?: string,
 ): Promise<RepositoryMetadata> {
+  const paths =
+    preferredPath != null && codeownersPaths.includes(preferredPath)
+      ? [
+          preferredPath,
+          ...codeownersPaths.filter((path) => path !== preferredPath),
+        ]
+      : codeownersPaths;
   const [codeowners, attributes] = await Promise.allSettled([
-    readFirst(repository, ref, codeownersPaths, request),
+    readFirst(repository, ref, paths, request),
     readText(repository, ref, '.gitattributes', request),
   ]);
   return {
     codeowners:
       codeowners.status === 'fulfilled' && codeowners.value != null
-        ? codeowners.value
+        ? codeowners.value.text
         : fallback.codeowners,
     attributes:
       attributes.status === 'fulfilled' && attributes.value != null
         ? attributes.value
         : fallback.attributes,
+    codeownersPath:
+      codeowners.status === 'fulfilled' && codeowners.value != null
+        ? codeowners.value.path
+        : fallback.codeownersPath,
   };
 }
 
@@ -78,10 +123,10 @@ async function readFirst(
   ref: string,
   paths: string[],
   request: ReadRawFile,
-): Promise<string | null> {
+): Promise<{ path: string; text: string } | null> {
   for (const path of paths) {
     const value = await readText(repository, ref, path, request);
-    if (value != null) return value;
+    if (value != null) return { path, text: value };
   }
   return null;
 }
