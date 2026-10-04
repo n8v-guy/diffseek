@@ -1,0 +1,38 @@
+name: Live E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: live-e2e
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps --no-shell chromium
+      - name: Prepare GitHub storageState
+        env:
+          DIFFSEEK_GITHUB_STORAGE_STATE: ${{ secrets.DIFFSEEK_GITHUB_STORAGE_STATE }}
+        run: |
+          if [ -z "$DIFFSEEK_GITHUB_STORAGE_STATE" ]; then
+            echo 'Repository secret DIFFSEEK_GITHUB_STORAGE_STATE is required for live e2e.' >&2
+            exit 1
+          fi
+          printf '%s' "$DIFFSEEK_GITHUB_STORAGE_STATE" > "$RUNNER_TEMP/github-storage.json"
+      - name: Run live performance e2e
+        env:
+          DIFFSEEK_GITHUB_STORAGE_STATE: ${{ runner.temp }}/github-storage.json
+        run: pnpm test:e2e:live

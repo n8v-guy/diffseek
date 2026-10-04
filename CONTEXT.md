@@ -50,4 +50,5 @@ request reviews. GitHub remains the review system and visual authority.
   file and lets normal page observation reconcile the resulting state.
 - Shared tool configuration lives under `config/`; root files remain only when
   discovery requires them.
-- Tests live beside their namesake modules, including Playwright coverage.
+- Unit/spec tests live beside their namesake modules. Playwright e2e may be
+  orchestration-only without a product namesake.

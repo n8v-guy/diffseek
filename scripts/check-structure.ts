@@ -73,7 +73,8 @@ function findNamesakeViolation(
   const suffix = TEST_SUFFIXES.find((candidate) =>
     filePath.endsWith(candidate),
   );
-  if (!suffix) return null;
+  // Playwright e2e may be orchestration-only without a product namesake.
+  if (!suffix || suffix === '.e2e.playwright.ts') return null;
   const source = `${filePath.slice(0, -suffix.length)}.ts`;
   return knownPaths.has(source)
     ? null

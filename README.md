@@ -89,7 +89,27 @@ corepack enable
 pnpm install
 pnpm check:ci
 pnpm test:e2e
+pnpm test:e2e:live
 ```
+
+`test:e2e:live` is opt-in. Set `DIFFSEEK_GITHUB_STORAGE_STATE` to either a
+Playwright storageState **file path** or the **inline JSON** (Cursor / GitHub
+Actions secrets inject the JSON string). Logged-out GitHub stays on classic
+`/files` and loops with DiffSeek's `/changes` redirect:
+
+```sh
+pnpm exec playwright open https://github.com/login --save-storage=.cache/github-storage.json
+DIFFSEEK_GITHUB_STORAGE_STATE=.cache/github-storage.json pnpm test:e2e:live
+```
+
+It runs three serial scenarios against `sha-tm/diffseek-test-data#1` by default:
+cold clean-store index, warm cached reopen, and mark-all-generated-viewed. Each
+reports menu-open seconds, primary-action seconds, DiffSeek redraws, and
+extension metadata network requests, checked against optional
+`DIFFSEEK_LIVE_BUDGET_*` env budgets. Override the target with
+`DIFFSEEK_LIVE_PR_URL`. The Live E2E workflow runs on `main` pushes and manual
+dispatch; it requires repository secret `DIFFSEEK_GITHUB_STORAGE_STATE` and
+fails when that secret is missing.
 
 Prepare the Chrome Web Store upload archive with:
 

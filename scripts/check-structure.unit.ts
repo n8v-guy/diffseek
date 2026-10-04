@@ -18,6 +18,14 @@ describe('repository structure', () => {
     ).toEqual([]);
   });
 
+  it('allows Playwright e2e without a product namesake module', () => {
+    expect(
+      findStructureViolations([
+        'src/app/review/live-perf.e2e.playwright.ts',
+      ]),
+    ).toEqual([]);
+  });
+
   it('rejects a colocated test without its namesake module', () => {
     expect(
       findStructureViolations(['src/app/orphan.spec.ts']),
