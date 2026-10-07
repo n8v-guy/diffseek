@@ -5,9 +5,10 @@ import type {
 } from '@diffseek/browser/filter-defaults';
 import {
   bindSnapshot,
-  pageStructureKey,
   refreshObservedFiles,
+  regionStructureKey,
   scanPage,
+  treeStructureKey,
   type PageSnapshot,
 } from '@diffseek/github/review-page/page-adapter';
 import {
@@ -89,7 +90,8 @@ export class ReviewSession {
   private dirty = false;
   private defaultViewedInFlight = 0;
   private projectionFingerprint = '';
-  private structureKey: string | null = null;
+  private treeKey: string | null = null;
+  private regionKey = '';
   private classifyKey = '';
   private unavailable = new Map<string, string>();
   private metadata: RepositoryMetadata;
@@ -176,27 +178,33 @@ export class ReviewSession {
   }
 
   private reconcileOnce(): void {
-    const structureKey = pageStructureKey(this.options.root);
+    const treeKey = treeStructureKey(this.options.root);
+    const regionKey = regionStructureKey(this.options.root);
     let next: PageSnapshot;
-    if (
-      structureKey != null &&
-      structureKey === this.structureKey &&
-      this.snapshot
-    ) {
-      refreshObservedFiles(this.options.root, this.catalog.files());
-      next = bindSnapshot(
-        this.options.root,
-        this.catalog.files(),
-        this.unavailable,
-      );
+    if (treeKey != null && treeKey === this.treeKey && this.snapshot) {
+      if (regionKey === this.regionKey) {
+        // Attribute-only churn: refresh viewed/capabilities on the catalog.
+        refreshObservedFiles(this.options.root, this.catalog.files());
+        next = bindSnapshot(
+          this.options.root,
+          this.catalog.files(),
+          this.unavailable,
+        );
+      } else {
+        // Region mount/dup churn: rescan membership without dropping labels.
+        next = scanPage(this.options.root);
+        this.regionKey = regionKey;
+      }
     } else {
       next = scanPage(this.options.root);
-      this.structureKey = structureKey;
+      this.treeKey = treeKey;
+      this.regionKey = regionKey;
       this.classifyKey = '';
     }
     if (!next.supported) {
       this.projectionFingerprint = '';
-      this.structureKey = null;
+      this.treeKey = null;
+      this.regionKey = '';
       this.classifyKey = '';
       this.clearInjected();
       if (excludedFacetCount(this.filters) > 0) {

@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   assertWithinBudgets,
   defaultLivePerfBudgets,
+  generatedCategorizedPattern,
   generatedIndexedText,
   isExtensionMetadataRequest,
+  isGeneratedCategorized,
   isInlineStorageState,
   parseInlineStorageState,
   parseStorageCookies,
@@ -33,6 +35,15 @@ describe('live-perf helpers', () => {
         'https://github.com/sha-tm/diffseek-test-data/pull/1/files',
       ),
     ).toBe(false);
+  });
+
+  it('treats generated denominator as categorized-ready', () => {
+    expect(generatedIndexedText(86)).toBe('86/86');
+    expect(generatedCategorizedPattern(86).test('86/86')).toBe(true);
+    expect(generatedCategorizedPattern(86).test('12/86')).toBe(true);
+    expect(generatedCategorizedPattern(86).test('86/85')).toBe(false);
+    expect(isGeneratedCategorized(' 40/86 ', 86)).toBe(true);
+    expect(isGeneratedCategorized('86/87', 86)).toBe(false);
   });
 
   it('builds indexed counter text and budget failures', () => {

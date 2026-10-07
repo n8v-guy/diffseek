@@ -298,7 +298,10 @@ describe('ReviewPresenter', () => {
   });
 
   it('keeps a folder visible when it contains an unavailable descendant', () => {
-    document.getElementById('diff-viewed')?.remove();
+    document
+      .getElementById('docs/readme.md')
+      ?.querySelector('a[href^="#diff-"]')
+      ?.setAttribute('href', '#diff-');
     const snapshot = scanPage(document);
     if (!snapshot.supported) throw new Error(snapshot.reason);
     snapshot.files
@@ -309,7 +312,7 @@ describe('ReviewPresenter', () => {
 
     new ReviewPresenter().apply(snapshot, state);
 
-    expect(snapshot.unavailable.has('docs/readme.md')).toBe(true);
+    expect(snapshot.unavailable.get('docs/readme.md')).toBe('Invalid diff anchor');
     expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);
     expect(document.getElementById('docs')?.hidden).toBe(false);
   });

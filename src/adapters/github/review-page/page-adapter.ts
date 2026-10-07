@@ -21,10 +21,11 @@ export type PageSnapshot =
       reason: string;
     };
 
-export function pageStructureKey(root: Document): string | null {
+/** Tree membership + per-row href/status. Region hydration must not invalidate this. */
+export function treeStructureKey(root: Document): string | null {
   const tree = root.querySelector<HTMLElement>(fileTreeSelector);
   if (!tree) return null;
-  const items = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')]
+  return [...tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')]
     .map((item) => {
       const href =
         item.querySelector<HTMLAnchorElement>('a[href^="#diff-"]')?.getAttribute(
@@ -33,12 +34,20 @@ export function pageStructureKey(root: Document): string | null {
       return `${item.id}\0${href}\0${changeStatusOf(item) ?? ''}`;
     })
     .join('\n');
-  const regions = [
+}
+
+export function regionStructureKey(root: Document): string {
+  return [
     ...root.querySelectorAll<HTMLElement>('[role="region"][id^="diff-"]'),
   ]
     .map((region) => `${region.id}\0${displayedPathOf(region) ?? ''}`)
     .join('\n');
-  return `${items}\n--\n${regions}`;
+}
+
+export function pageStructureKey(root: Document): string | null {
+  const treeKey = treeStructureKey(root);
+  if (treeKey == null) return null;
+  return `${treeKey}\n--\n${regionStructureKey(root)}`;
 }
 
 export function scanPage(root: Document): PageSnapshot {
@@ -50,7 +59,9 @@ export function scanPage(root: Document): PageSnapshot {
   const { byId: regionsById, byPath: regionsByPath } = indexRegions(root);
 
   for (const treeItem of tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')) {
-    const link = treeItem.querySelector<HTMLAnchorElement>('a[href^="#diff-"]');
+    const link = [...treeItem.querySelectorAll<HTMLAnchorElement>('a[href^="#diff-"]')].find(
+      (candidate) => candidate.closest('[role="treeitem"]') === treeItem,
+    );
     if (!link) continue;
 
     const anchor = link.getAttribute('href')?.slice(1) ?? '';
@@ -60,37 +71,42 @@ export function scanPage(root: Document): PageSnapshot {
     }
 
     const regions = regionsById.get(anchor) ?? [];
-    if (regions.length > 1) {
-      unavailable.set(treeItem.id, 'Duplicate diff region');
-      continue;
-    }
-    const region = regions[0];
+    const region = regions.length === 1 ? regions[0] : undefined;
     const displayedPath = region ? displayedPathOf(region) : undefined;
     if (displayedPath?.startsWith(`${treeItem.id}/`)) continue;
 
     const status = changeStatusOf(treeItem);
-    const viewedButton = region
-      ? [...region.querySelectorAll<HTMLButtonElement>(
-          headerButtonSelector,
-        )].find((button) => viewedControlState(button) != null)
-      : undefined;
-    const collapseButton = region
-      ? [...region.querySelectorAll<HTMLButtonElement>(
-          headerButtonSelector,
-        )].find((button) => fileToggleAction(button) != null)
-      : undefined;
-
-    if (
-      !region ||
-      region.getAttribute('role') !== 'region' ||
-      !status ||
-      displayedPath !== treeItem.id
-    ) {
+    if (!status) {
       unavailable.set(treeItem.id, 'Incomplete diff structure');
       continue;
     }
 
-    const file: FileRecord = {
+    if (
+      region == null ||
+      region.getAttribute('role') !== 'region' ||
+      displayedPath !== treeItem.id
+    ) {
+      files.push({
+        path: treeItem.id,
+        anchor,
+        extension: extensionOf(treeItem.id),
+        owners: [],
+        generated: false,
+        status,
+        viewed: false,
+        capabilities: { collapse: false, viewed: false },
+        labels: [],
+      });
+      continue;
+    }
+
+    const viewedButton = [
+      ...region.querySelectorAll<HTMLButtonElement>(headerButtonSelector),
+    ].find((button) => viewedControlState(button) != null);
+    const collapseButton = [
+      ...region.querySelectorAll<HTMLButtonElement>(headerButtonSelector),
+    ].find((button) => fileToggleAction(button) != null);
+    files.push({
       path: treeItem.id,
       anchor,
       extension: extensionOf(treeItem.id),
@@ -103,8 +119,7 @@ export function scanPage(root: Document): PageSnapshot {
         viewed: viewedButton != null,
       },
       labels: [],
-    };
-    files.push(file);
+    });
   }
 
   return bindSnapshot(root, files, unavailable, regionsByPath);

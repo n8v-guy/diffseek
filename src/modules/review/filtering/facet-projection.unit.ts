@@ -73,6 +73,25 @@ describe('projectFacet', () => {
     });
   });
 
+  it('omits capability-less stubs from viewed action paths', () => {
+    const stub: FileRecord = {
+      ...file('src/stub.ts', [{ facet: 'generated', value: 'true' }]),
+      capabilities: { collapse: false, viewed: false },
+    };
+    const ready = file('src/ready.ts', [{ facet: 'generated', value: 'true' }]);
+
+    expect(
+      projectFacet('generated', [stub, ready], emptyFacetExclusions()).get(
+        'true',
+      ),
+    ).toMatchObject({
+      paths: ['src/ready.ts'],
+      total: 2,
+      visible: 2,
+      viewed: false,
+    });
+  });
+
   it('reports viewed paths hidden only by the viewed facet', () => {
     const files = [
       file('src/visible.ts', [

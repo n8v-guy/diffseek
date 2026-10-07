@@ -5,7 +5,9 @@ import fixture from './fixtures/github-pr.html?raw';
 import {
   pageStructureKey,
   refreshObservedFiles,
+  regionStructureKey,
   scanPage,
+  treeStructureKey,
 } from './page-adapter';
 
 describe('scanPage', () => {
@@ -65,9 +67,7 @@ describe('scanPage', () => {
     expect(snapshot.supported).toBe(true);
   });
 
-  it('discovers a diff inserted after the first scan', () => {
-    expect(scanPage(document).supported).toBe(true);
-
+  it('indexes tree rows before their diff regions hydrate', () => {
     document.querySelector('[role="tree"]')?.insertAdjacentHTML(
       'beforeend',
       `
@@ -77,6 +77,18 @@ describe('scanPage', () => {
         </li>
       `,
     );
+
+    const stub = scanPage(document);
+    expect(stub.supported).toBe(true);
+    if (!stub.supported) return;
+    expect(stub.files.find((file) => file.path === 'src/lazy.ts')).toMatchObject({
+      anchor: 'diff-lazy',
+      status: 'modified',
+      viewed: false,
+      capabilities: { collapse: false, viewed: false },
+    });
+    expect(stub.unavailable.has('src/lazy.ts')).toBe(false);
+
     document.body.insertAdjacentHTML(
       'beforeend',
       `
@@ -91,10 +103,12 @@ describe('scanPage', () => {
       `,
     );
 
-    const snapshot = scanPage(document);
-    expect(snapshot.supported).toBe(true);
-    if (!snapshot.supported) return;
-    expect(snapshot.files.some((file) => file.path === 'src/lazy.ts')).toBe(true);
+    const ready = scanPage(document);
+    expect(ready.supported).toBe(true);
+    if (!ready.supported) return;
+    expect(ready.files.find((file) => file.path === 'src/lazy.ts')).toMatchObject({
+      capabilities: { collapse: true, viewed: true },
+    });
   });
 
   it('ignores nested folder treeitems that inherit a descendant file link', () => {
@@ -129,18 +143,58 @@ describe('scanPage', () => {
     expect(snapshot.viewedControl('src/app.ts')).not.toBeNull();
   });
 
-  it('isolates a transient duplicate diff instead of disabling the review', () => {
+  it('keeps tree membership when a transient duplicate diff region appears', () => {
     const region = document.getElementById('diff-app');
     region?.after(region.cloneNode(true));
 
     const snapshot = scanPage(document);
     expect(snapshot.supported).toBe(true);
     if (!snapshot.supported) return;
-    expect(snapshot.files.some((file) => file.path === 'src/app.ts')).toBe(false);
-    expect(snapshot.unavailable.get('src/app.ts')).toBe(
-      'Duplicate diff region',
+    expect(snapshot.files.find((file) => file.path === 'src/app.ts')).toMatchObject({
+      status: 'modified',
+      viewed: false,
+      capabilities: { collapse: false, viewed: false },
+    });
+    expect(snapshot.unavailable.has('src/app.ts')).toBe(false);
+    expect(snapshot.viewedControl('src/app.ts')).toBeNull();
+    expect(snapshot.files).toHaveLength(5);
+
+    document.querySelectorAll('#diff-app')[1]?.remove();
+    const ready = scanPage(document);
+    expect(ready.supported).toBe(true);
+    if (!ready.supported) return;
+    expect(ready.files.find((file) => file.path === 'src/app.ts')).toMatchObject({
+      capabilities: { collapse: true, viewed: true },
+    });
+    expect(ready.viewedControl('src/app.ts')).not.toBeNull();
+  });
+
+  it('does not catalog folder rows when a descendant file has duplicate regions', () => {
+    const tree = document.querySelector('[role="tree"]');
+    const file = document.getElementById('src/app.ts');
+    const folder = document.createElement('li');
+    const group = document.createElement('ul');
+    folder.id = 'src';
+    folder.setAttribute('role', 'treeitem');
+    group.setAttribute('role', 'group');
+    folder.append(group);
+    group.append(file!);
+    tree?.prepend(folder);
+    document.getElementById('diff-app')?.after(
+      document.getElementById('diff-app')!.cloneNode(true),
     );
-    expect(snapshot.files).toHaveLength(4);
+
+    const snapshot = scanPage(document);
+    expect(snapshot.supported).toBe(true);
+    if (!snapshot.supported) return;
+    expect(snapshot.files.some((candidate) => candidate.path === 'src')).toBe(
+      false,
+    );
+    expect(snapshot.files.find((candidate) => candidate.path === 'src/app.ts')).toMatchObject(
+      {
+        capabilities: { collapse: false, viewed: false },
+      },
+    );
   });
 
   it('keeps filtering available when only a viewed control is missing', () => {
@@ -200,15 +254,19 @@ describe('scanPage', () => {
         status: 'renamed',
         capabilities: { collapse: true, viewed: false },
       }),
+      expect.objectContaining({
+        path: 'assets/logo.bin',
+        status: 'modified',
+        capabilities: { collapse: false, viewed: false },
+      }),
     ]);
-    expect(snapshot.unavailable.get('assets/logo.bin')).toBe(
-      'Incomplete diff structure',
-    );
   });
 
-  it('keeps a stable structure key until tree or region membership changes', () => {
-    const first = pageStructureKey(document);
-    expect(first).toEqual(pageStructureKey(document));
+  it('keeps tree structure stable when only regions change', () => {
+    const treeKey = treeStructureKey(document);
+    const pageKey = pageStructureKey(document);
+    expect(treeKey).toEqual(treeStructureKey(document));
+    expect(pageKey).toEqual(pageStructureKey(document));
 
     document
       .querySelector('#diff-app button[aria-label="Not Viewed"]')
@@ -216,10 +274,14 @@ describe('scanPage', () => {
     document
       .querySelector('#diff-app button[aria-pressed="false"]')
       ?.setAttribute('aria-pressed', 'true');
-    expect(pageStructureKey(document)).toBe(first);
+    expect(treeStructureKey(document)).toBe(treeKey);
+    expect(pageStructureKey(document)).toBe(pageKey);
 
+    const regionKey = regionStructureKey(document);
     document.getElementById('diff-config')?.remove();
-    expect(pageStructureKey(document)).not.toBe(first);
+    expect(treeStructureKey(document)).toBe(treeKey);
+    expect(regionStructureKey(document)).not.toBe(regionKey);
+    expect(pageStructureKey(document)).not.toBe(pageKey);
   });
 
   it('refreshes viewed facts without rebuilding file identity', () => {

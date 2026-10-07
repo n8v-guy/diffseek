@@ -32,7 +32,7 @@ const files: FileRecord[] = [
     generated: true,
     status: 'added',
     viewed: true,
-    capabilities: { collapse: true, viewed: false },
+    capabilities: { collapse: true, viewed: true },
     labels: [
       { facet: 'viewed', value: 'true' },
       { facet: 'groups', value: 'Docs' },

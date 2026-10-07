@@ -41,23 +41,32 @@ classifiers. **Cost:** the simplest sources are intentionally small modules.
 
 ## D005 — Index first; invalidate projections when observation changes
 
-**Decision:** Build one linear review index per accepted observation. Reuse the
-previous file list when the page structure key is unchanged (refreshing viewed /
-capability facts only); otherwise full-scan. Skip attribute classification when
-path/owner/metadata identity is unchanged (sync viewed labels only). Always
-re-apply presentation plus tree viewed actions; skip owned filter-menu remounts
-when the projection fingerprint is unchanged. Defer mutation-driven reconcile
-while automatic generated mark-viewed is in flight. Observe tree/diff/menu roots
-for attributes; use body only for childList discovery. Ignore MutationRecords
-whose target is inside DiffSeek chrome (including `.diffseek-viewed-icon-anchor`)
-so owned mounts do not re-enter reconcile.
+**Decision:** Build one linear review index per accepted observation. Key the
+file list on the **tree** structure key. Only a tree row's own `#diff-*` link
+(not a descendant row's) counts for membership; with status it enters the
+catalog immediately (capability-less stub when regions are missing or
+duplicated). When the tree is unchanged: attribute churn refreshes
+viewed/capabilities only; **region** structure changes rescan to enrich or stub
+capabilities without dropping tree membership. The file catalog keeps prior
+labels/generated/viewed across empty-label scans so region churn does not wipe
+classification; full reclassify runs when the classify key (path/status/owners
++ metadata) changes. Always re-apply presentation plus tree viewed actions;
+skip owned filter-menu remounts when the projection fingerprint is unchanged.
+Defer mutation-driven reconcile while automatic generated mark-viewed is in
+flight. Observe tree/diff/menu roots for attributes; use body only for
+childList discovery. Ignore MutationRecords whose target is inside DiffSeek
+chrome (including `.diffseek-viewed-icon-anchor`) so owned mounts do not
+re-enter reconcile.
 
-**Why:** Full observation stays authoritative without tearing down the filter
-menu or reclassifying on unrelated DOM churn, while presentation and tree
-actions still correct native collapse/expand churn and cloned tree nodes.
-**Cost:** structure-key misses still full-scan and reclassify; fingerprint misses
-still attempt an in-place menu patch and fall back to a full menu rebuild when
-row identity or section chrome changes.
+**Why:** Diff region mount churn is frequent and must not wipe classification
+or shrink the file list once the tree is known; regions only enrich
+viewed/collapse/owners. Presentation and tree actions still correct native
+collapse/expand churn and cloned tree nodes.
+**Cost:** region-key misses still rescan (without classify-key reset);
+capabilities stay false while duplicates exist; tree-key misses still
+full-scan and reclassify; fingerprint misses still attempt an in-place menu
+patch and fall back to a full menu rebuild when row identity or section chrome
+changes.
 
 ## D006 — Own one filter menu model
 

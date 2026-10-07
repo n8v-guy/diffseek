@@ -5,6 +5,10 @@ export const defaultLivePrUrl =
 /** Seed `185108` fixture tree marks exactly this many files generated. */
 export const expectedGeneratedTotal = 86;
 
+/**
+ * Cold/warm `indexingSeconds` ends when the catalog has the full file list and
+ * every non-viewed facet is classified. Viewed-state settle is out of scope.
+ */
 export type LivePerfScenario = 'cold' | 'warm' | 'mark-generated-viewed';
 
 export type LivePerfMetrics = {
@@ -70,6 +74,22 @@ export function isExtensionMetadataRequest(url: string): boolean {
 /** Generated facet shows visible/total; fully indexed + unfiltered is N/N. */
 export function generatedIndexedText(total: number): string {
   return `${total}/${total}`;
+}
+
+/**
+ * Denominator-ready generated counter: total is known even if viewed hiding
+ * shrinks the visible numerator.
+ */
+export function generatedCategorizedPattern(total: number): RegExp {
+  return new RegExp(`^\\d+/${total}$`);
+}
+
+/** True when a `visible/total` counter's denominator matches `total`. */
+export function isGeneratedCategorized(
+  text: string | null | undefined,
+  total: number,
+): boolean {
+  return generatedCategorizedPattern(total).test(text?.trim() ?? '');
 }
 
 export function assertWithinBudgets(

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -15,7 +15,7 @@ import {
   defaultLivePerfBudgets,
   defaultLivePrUrl,
   expectedGeneratedTotal,
-  generatedIndexedText,
+  generatedCategorizedPattern,
   isExtensionMetadataRequest,
   isInlineStorageState,
   parseInlineStorageState,
@@ -42,6 +42,7 @@ describeLive('live DiffSeek performance', () => {
   let context: BrowserContext;
   let networkUrls: string[];
   let sharedPage: Page;
+  const reported: LivePerfMetrics[] = [];
 
   test.beforeAll(async () => {
     if (!storageStateSource) {
@@ -88,6 +89,13 @@ describeLive('live DiffSeek performance', () => {
 
   test.afterAll(async () => {
     await context?.close();
+    if (reported.length === 0) return;
+    const outDir = resolve('.cache');
+    await mkdir(outDir, { recursive: true });
+    await writeFile(
+      join(outDir, 'live-perf-latest.json'),
+      `${JSON.stringify({ prUrl: livePrUrl, metrics: reported }, null, 2)}\n`,
+    );
   });
 
   test('cold path: clean store indexes generated files', async () => {
@@ -109,11 +117,11 @@ describeLive('live DiffSeek performance', () => {
     });
 
     const menuOpenSeconds = await openFilterMenu(sharedPage);
+    // Stop at full non-viewed categorization (denominator), not viewed settle.
     await expect(sharedPage.locator(generatedCounter)).toHaveText(
-      generatedIndexedText(expectedGeneratedTotal),
+      generatedCategorizedPattern(expectedGeneratedTotal),
       { timeout: 120_000 },
     );
-    await settleRedraws(sharedPage);
     const metrics = collectMetrics(
       'cold',
       menuOpenSeconds,
@@ -121,7 +129,7 @@ describeLive('live DiffSeek performance', () => {
       networkUrls,
       await readRedraws(sharedPage),
     );
-    reportMetrics(metrics);
+    reportMetrics(metrics, reported);
     expect(assertWithinBudgets(metrics, budgets)).toEqual([]);
     expect(metrics.networkRequests).toBeGreaterThan(0);
   });
@@ -137,10 +145,9 @@ describeLive('live DiffSeek performance', () => {
 
     const menuOpenSeconds = await openFilterMenu(sharedPage);
     await expect(sharedPage.locator(generatedCounter)).toHaveText(
-      generatedIndexedText(expectedGeneratedTotal),
+      generatedCategorizedPattern(expectedGeneratedTotal),
       { timeout: 120_000 },
     );
-    await settleRedraws(sharedPage);
     const metrics = collectMetrics(
       'warm',
       menuOpenSeconds,
@@ -148,7 +155,7 @@ describeLive('live DiffSeek performance', () => {
       networkUrls,
       await readRedraws(sharedPage),
     );
-    reportMetrics(metrics);
+    reportMetrics(metrics, reported);
     expect(assertWithinBudgets(metrics, budgets)).toEqual([]);
   });
 
@@ -158,9 +165,13 @@ describeLive('live DiffSeek performance', () => {
     await resetRedraws(sharedPage);
     const menuOpenSeconds = await openFilterMenu(sharedPage);
     await expect(sharedPage.locator(generatedCounter)).toHaveText(
-      generatedIndexedText(expectedGeneratedTotal),
+      generatedCategorizedPattern(expectedGeneratedTotal),
       { timeout: 120_000 },
     );
+    // Mark needs region-enriched viewed controls; indexing no longer waits on that.
+    await expect
+      .poll(() => pageHasUniqueDiffRegions(sharedPage), { timeout: 180_000 })
+      .toBe(true);
 
     const action = sharedPage.locator(generatedViewedAction);
     await expect(action).toHaveAttribute('aria-label', 'Mark as viewed');
@@ -182,7 +193,7 @@ describeLive('live DiffSeek performance', () => {
       networkUrls,
       await readRedraws(sharedPage),
     );
-    reportMetrics(metrics);
+    reportMetrics(metrics, reported);
     expect(assertWithinBudgets(metrics, budgets)).toEqual([]);
   });
 });
@@ -214,7 +225,11 @@ function collectMetrics(
   };
 }
 
-function reportMetrics(metrics: LivePerfMetrics): void {
+function reportMetrics(
+  metrics: LivePerfMetrics,
+  sink: LivePerfMetrics[],
+): void {
+  sink.push(metrics);
   test.info().annotations.push({
     type: `live-perf:${metrics.scenario}`,
     description: JSON.stringify(metrics),
@@ -320,6 +335,30 @@ async function settleRedraws(page: Page, quietMs = 750): Promise<void> {
       { timeout: 30_000 },
     )
     .toBe(true);
+}
+
+async function pageHasUniqueDiffRegions(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const tree = document.querySelector(
+      '[role="tree"][aria-label="File Tree"]',
+    );
+    if (!tree) return false;
+    const fileRows = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')]
+      .filter((item) =>
+        [...item.querySelectorAll('a[href^="#diff-"]')].some(
+          (link) => link.closest('[role="treeitem"]') === item,
+        ),
+      );
+    const regions = [
+      ...document.querySelectorAll('[role="region"][id^="diff-"]'),
+    ];
+    if (fileRows.length === 0 || regions.length !== fileRows.length) return false;
+    const counts = new Map<string, number>();
+    for (const region of regions) {
+      counts.set(region.id, (counts.get(region.id) ?? 0) + 1);
+    }
+    return [...counts.values()].every((count) => count === 1);
+  });
 }
 
 async function clearExtensionStore(browserContext: BrowserContext): Promise<void> {

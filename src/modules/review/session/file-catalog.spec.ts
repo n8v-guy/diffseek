@@ -31,4 +31,42 @@ describe('FileCatalog', () => {
     ]);
     expect(catalog.files()[0]?.viewed).toBe(true);
   });
+
+  it('keeps classification when a later scan emits a capability-less stub', () => {
+    const catalog = new FileCatalog();
+    catalog.merge([
+      {
+        ...file('src/generated.ts', true),
+        generated: true,
+        owners: ['@octo'],
+        labels: [
+          { facet: 'generated', value: 'true' },
+          { facet: 'viewed', value: 'true' },
+          { facet: 'owners', value: '@octo' },
+        ],
+      },
+    ]);
+
+    catalog.merge([
+      {
+        ...file('src/generated.ts'),
+        viewed: false,
+        capabilities: { collapse: false, viewed: false },
+        owners: [],
+        labels: [],
+      },
+    ]);
+
+    expect(catalog.files()[0]).toMatchObject({
+      generated: true,
+      viewed: true,
+      owners: ['@octo'],
+      capabilities: { collapse: false, viewed: false },
+      labels: [
+        { facet: 'generated', value: 'true' },
+        { facet: 'viewed', value: 'true' },
+        { facet: 'owners', value: '@octo' },
+      ],
+    });
+  });
 });

@@ -41,13 +41,14 @@ export function projectFacet(
       };
       projection.total += 1;
       if (visible) {
-        projection.paths.push(file.path);
         projection.visible += 1;
+        if (file.capabilities.viewed) projection.paths.push(file.path);
       }
       if (
         viewedHidden &&
         !visible &&
         file.viewed &&
+        file.capabilities.viewed &&
         matchesFilters(file, filtersWithoutViewed)
       ) {
         projection.hiddenViewedPaths.push(file.path);
