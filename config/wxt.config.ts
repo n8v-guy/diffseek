@@ -27,8 +27,9 @@ export default defineConfig({
   },
   manifestVersion: 3,
   manifest: {
-    name: 'DiffSeek',
-    description: 'A subtle GitHub code-review ergonomics facelift.',
+    name: 'DiffSeek: filter & hide files in GitHub PRs',
+    description:
+      'Filter GitHub PR diffs by viewed, generated, owner, type, and language. Hide or collapse noise and remember your defaults.',
     version: manifestVersion(packageVersion, branchCommitCount),
     permissions: ['storage'],
     host_permissions: [
