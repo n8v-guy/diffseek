@@ -22,7 +22,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps --no-shell chromium
+      - uses: ./.github/actions/install-playwright-chromium
       - name: Prepare GitHub storageState
         env:
           DIFFSEEK_GITHUB_STORAGE_STATE: ${{ secrets.DIFFSEEK_GITHUB_STORAGE_STATE }}
