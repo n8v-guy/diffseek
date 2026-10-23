@@ -39,6 +39,8 @@ jobs:
           name: chrome-extension-zip
           path: .output/*.zip
           if-no-files-found: error
+          # .output is a dot-directory; v4 skips hidden paths by default.
+          include-hidden-files: true
 
   release:
     needs: [live, zip]
