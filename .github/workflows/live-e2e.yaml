@@ -1,9 +1,8 @@
 name: Live E2E
 
 on:
+  workflow_call:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 concurrency:
   group: live-e2e

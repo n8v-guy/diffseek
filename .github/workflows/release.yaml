@@ -4,13 +4,20 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: chrome-extension-release
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  live:
+    uses: ./.github/workflows/live-e2e.yaml
+    secrets: inherit
 
+  zip:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
@@ -27,12 +34,28 @@ jobs:
 
       - run: pnpm release:zip
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension-zip
+          path: .output/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: [live, zip]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: chrome-extension-zip
+          path: .output
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: Latest Chrome extension
-          body: Automated build from commit ${{ github.sha }}
+          body: |
+            commit: ${{ github.sha }}
           target_commitish: ${{ github.sha }}
           files: .output/*.zip
           fail_on_unmatched_files: true
