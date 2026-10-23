@@ -1,0 +1,107 @@
+name: Publish Chrome Web Store
+
+# Mobile: GitHub app → Actions → this workflow → Run workflow (branch: main).
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: chrome-web-store-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main branch tip
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "Run this workflow from the main branch (got ${{ github.ref }})." >&2
+            exit 1
+          fi
+
+      - name: Require CI, live e2e, and zip green for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          require_workflow_success() {
+            local name="$1"
+            local conclusion
+            conclusion="$(
+              gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&per_page=100" \
+                | jq -r --arg name "$name" '
+                  [.workflow_runs[]
+                    | select(.name == $name and .status == "completed")]
+                  | sort_by(.created_at)
+                  | reverse
+                  | .[0].conclusion // empty
+                '
+            )"
+            if [ "$conclusion" != "success" ]; then
+              echo "Workflow \"${name}\" for ${SHA} is not success (got: ${conclusion:-none})." >&2
+              exit 1
+            fi
+            echo "OK: ${name} → success"
+          }
+
+          # Release Chrome Extension includes live e2e + zip + GitHub Release.
+          require_workflow_success "CI"
+          require_workflow_success "Release Chrome Extension"
+
+      - name: Download ZIP from latest GitHub Release for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          mkdir -p .output
+          body="$(gh api "repos/${REPO}/releases/tags/latest" --jq .body)"
+          if ! grep -qx "commit: ${SHA}" <<<"$body"; then
+            echo "latest release does not match tip ${SHA}." >&2
+            echo "Release body:" >&2
+            printf '%s\n' "$body" >&2
+            exit 1
+          fi
+          gh release download latest --repo "$REPO" --dir .output --pattern '*.zip'
+          shopt -s nullglob
+          zips=(.output/*.zip)
+          if [ "${#zips[@]}" -ne 1 ]; then
+            echo "Expected exactly one ZIP on the latest release, found ${#zips[@]}." >&2
+            printf '%s\n' "${zips[@]}" >&2
+            exit 1
+          fi
+          echo "Using ${zips[0]}"
+
+      - name: Require Chrome Web Store secrets
+        env:
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+        run: |
+          missing=0
+          for name in EXTENSION_ID CLIENT_ID CLIENT_SECRET REFRESH_TOKEN PUBLISHER_ID; do
+            if [ -z "${!name}" ]; then
+              echo "Missing repository secret CHROME_${name}." >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Publish to Chrome Web Store
+        env:
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+        run: |
+          shopt -s nullglob
+          zips=(.output/*.zip)
+          npx --yes chrome-webstore-upload-cli@3 --source "${zips[0]}"

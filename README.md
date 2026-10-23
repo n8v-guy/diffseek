@@ -113,9 +113,10 @@ except viewed); viewed-state settle is not part of that measurement. Each
 scenario reports menu-open seconds, primary-action seconds, DiffSeek redraws,
 and extension metadata network requests, checked against optional
 `DIFFSEEK_LIVE_BUDGET_*` env budgets, and writes `.cache/live-perf-latest.json`.
-Override the target with `DIFFSEEK_LIVE_PR_URL`. The Live E2E workflow runs on
-`main` pushes and manual dispatch; it requires repository secret
-`DIFFSEEK_GITHUB_STORAGE_STATE` and fails when that secret is missing.
+Override the target with `DIFFSEEK_LIVE_PR_URL`. The Live E2E workflow is
+reusable and manual (`workflow_dispatch`); release on `main` calls it. It
+requires repository secret `DIFFSEEK_GITHUB_STORAGE_STATE` and fails when that
+secret is missing.
 
 Prepare the Chrome Web Store upload archive with:
 
@@ -124,6 +125,18 @@ pnpm release:zip
 ```
 
 WXT writes the versioned Chrome Manifest V3 ZIP to `.output/`.
+
+**CI** runs on every push. On each `main` push, **Release Chrome Extension**
+runs live e2e and `pnpm release:zip` in parallel; when both succeed it attaches
+the ZIP to the mutable `latest` GitHub Release (`commit: <sha>` in the body).
+
+**Publish Chrome Web Store** is manual (`workflow_dispatch` from branch
+`main` — GitHub Mobile → Actions → Run workflow). It publishes publicly only
+when CI and Release are green for that tip commit and the `latest` release body
+matches it, reusing the release ZIP. Required secrets:
+`CHROME_EXTENSION_ID`, `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`,
+`CHROME_REFRESH_TOKEN`, `CHROME_PUBLISHER_ID`. The store item must already
+exist; the first listing is created in the developer dashboard.
 
 Load `.output/chrome-mv3` through `chrome://extensions` with **Developer mode**
 and **Load unpacked**. Open a pull request's **Files changed** page; the extension
