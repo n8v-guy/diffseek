@@ -1,7 +1,11 @@
 name: Publish Chrome Web Store
 
-# Mobile: GitHub app → Actions → this workflow → Run workflow (branch: main).
+# Auto-runs after a successful Release on main; also manual from branch main.
 on:
+  workflow_run:
+    workflows: [Release Chrome Extension]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -13,21 +17,42 @@ permissions:
   actions: read
 
 jobs:
-  publish:
+  # workflow_run fires on failure too; a fully-skipped workflow is "success".
+  gate:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion != 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Require main branch tip
+      - run: |
+          echo "Release conclusion: ${{ github.event.workflow_run.conclusion }}" >&2
+          exit 1
+
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve commit SHA
+        id: meta
         run: |
-          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            echo "Run this workflow from the main branch (got ${{ github.ref }})." >&2
-            exit 1
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+              echo "Run this workflow from the main branch (got ${{ github.ref }})." >&2
+              exit 1
+            fi
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Require CI, live e2e, and zip green for this commit
+      - name: Require prior stages green for this commit
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ steps.meta.outputs.sha }}
         run: |
           require_workflow_success() {
             local name="$1"
@@ -49,15 +74,25 @@ jobs:
             echo "OK: ${name} → success"
           }
 
-          # Release Chrome Extension includes live e2e + zip + GitHub Release.
           require_workflow_success "CI"
+          require_workflow_success "Live E2E"
           require_workflow_success "Release Chrome Extension"
 
+      - name: Download ZIP from release workflow artifact
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: chrome-extension-zip
+          path: .output
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Download ZIP from latest GitHub Release for this commit
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ steps.meta.outputs.sha }}
         run: |
           mkdir -p .output
           body="$(gh api "repos/${REPO}/releases/tags/latest" --jq .body)"
@@ -72,6 +107,18 @@ jobs:
           zips=(.output/*.zip)
           if [ "${#zips[@]}" -ne 1 ]; then
             echo "Expected exactly one ZIP on the latest release, found ${#zips[@]}." >&2
+            printf '%s\n' "${zips[@]}" >&2
+            exit 1
+          fi
+          echo "Using ${zips[0]}"
+
+      - name: Require exactly one ZIP
+        if: github.event_name == 'workflow_run'
+        run: |
+          shopt -s nullglob
+          zips=(.output/*.zip)
+          if [ "${#zips[@]}" -ne 1 ]; then
+            echo "Expected exactly one ZIP artifact, found ${#zips[@]}." >&2
             printf '%s\n' "${zips[@]}" >&2
             exit 1
           fi
