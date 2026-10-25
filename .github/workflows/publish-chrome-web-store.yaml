@@ -1,11 +1,7 @@
 name: Publish Chrome Web Store
 
-# Auto-runs after a successful Release on main; also manual from branch main.
+# Manual only (GitHub app → Actions → this workflow → Run workflow, branch: main).
 on:
-  workflow_run:
-    workflows: [Release Chrome Extension]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -17,38 +13,20 @@ permissions:
   actions: read
 
 jobs:
-  # workflow_run fires on failure too; a fully-skipped workflow is "success".
-  gate:
-    if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion != 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "Release conclusion: ${{ github.event.workflow_run.conclusion }}" >&2
-          exit 1
-
   publish:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve commit SHA
+      - name: Require main branch tip
         id: meta
         run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          else
-            if [ "${{ github.ref }}" != "refs/heads/main" ]; then
-              echo "Run this workflow from the main branch (got ${{ github.ref }})." >&2
-              exit 1
-            fi
-            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "Run this workflow from the main branch (got ${{ github.ref }})." >&2
+            exit 1
           fi
+          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
-      - name: Require prior stages green for this commit
-        if: github.event_name == 'workflow_dispatch'
+      - name: Require prior stages green and resolve Release run
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -56,69 +34,51 @@ jobs:
         run: |
           require_workflow_success() {
             local name="$1"
-            local conclusion
-            conclusion="$(
+            local run_json conclusion run_id
+            run_json="$(
               gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&per_page=100" \
-                | jq -r --arg name "$name" '
+                | jq -c --arg name "$name" '
                   [.workflow_runs[]
                     | select(.name == $name and .status == "completed")]
                   | sort_by(.created_at)
                   | reverse
-                  | .[0].conclusion // empty
+                  | .[0] // empty
                 '
             )"
+            if [ -z "$run_json" ]; then
+              echo "Workflow \"${name}\" for ${SHA} has no completed run." >&2
+              exit 1
+            fi
+            conclusion="$(jq -r '.conclusion // empty' <<<"$run_json")"
+            run_id="$(jq -r '.id // empty' <<<"$run_json")"
             if [ "$conclusion" != "success" ]; then
               echo "Workflow \"${name}\" for ${SHA} is not success (got: ${conclusion:-none})." >&2
               exit 1
             fi
-            echo "OK: ${name} → success"
+            echo "OK: ${name} → success (run ${run_id})"
+            if [ "$name" = "Release Chrome Extension" ]; then
+              echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+            fi
           }
 
           require_workflow_success "CI"
           require_workflow_success "Live E2E"
           require_workflow_success "Release Chrome Extension"
 
-      - name: Download ZIP from release workflow artifact
-        if: github.event_name == 'workflow_run'
+      - name: Download ZIP from Release workflow artifact
         uses: actions/download-artifact@v4
         with:
           name: chrome-extension-zip
           path: .output
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.release.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download ZIP from latest GitHub Release for this commit
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ steps.meta.outputs.sha }}
-        run: |
-          mkdir -p .output
-          body="$(gh api "repos/${REPO}/releases/tags/latest" --jq .body)"
-          if ! grep -qx "commit: ${SHA}" <<<"$body"; then
-            echo "latest release does not match tip ${SHA}." >&2
-            echo "Release body:" >&2
-            printf '%s\n' "$body" >&2
-            exit 1
-          fi
-          gh release download latest --repo "$REPO" --dir .output --pattern '*.zip'
-          shopt -s nullglob
-          zips=(.output/*.zip)
-          if [ "${#zips[@]}" -ne 1 ]; then
-            echo "Expected exactly one ZIP on the latest release, found ${#zips[@]}." >&2
-            printf '%s\n' "${zips[@]}" >&2
-            exit 1
-          fi
-          echo "Using ${zips[0]}"
-
       - name: Require exactly one ZIP
-        if: github.event_name == 'workflow_run'
         run: |
           shopt -s nullglob
           zips=(.output/*.zip)
           if [ "${#zips[@]}" -ne 1 ]; then
-            echo "Expected exactly one ZIP artifact, found ${#zips[@]}." >&2
+            echo "Expected exactly one ZIP artifact from the Release run, found ${#zips[@]}." >&2
             printf '%s\n' "${zips[@]}" >&2
             exit 1
           fi

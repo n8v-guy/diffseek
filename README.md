@@ -127,20 +127,19 @@ pnpm release:zip
 WXT writes the versioned Chrome Manifest V3 ZIP to `.output/`.
 
 **CI** runs on every push (pull requests get CI only). On each successful CI run
-for `main`, the remaining stages run strictly in order for that commit:
+for `main`, the next stages run strictly in order for that commit:
 
 1. **Live E2E**
 2. **Release Chrome Extension** — `pnpm release:zip`, then attach the ZIP to
    the mutable `latest` GitHub Release (`commit: <sha>` in the body)
-3. **Publish Chrome Web Store** — reuses the release workflow ZIP artifact (no
-   rebuild). Also available manually (`workflow_dispatch` from branch `main` —
-   GitHub Mobile → Actions → Run workflow), which requires CI, Live E2E, and
-   Release green for that tip and a matching `latest` release body.
 
-Required publish secrets: `CHROME_EXTENSION_ID`, `CHROME_CLIENT_ID`,
-`CHROME_CLIENT_SECRET`, `CHROME_REFRESH_TOKEN`, `CHROME_PUBLISHER_ID`. The
-store item must already exist; the first listing is created in the developer
-dashboard.
+**Publish Chrome Web Store** is manual only (`workflow_dispatch` from branch
+`main` — GitHub Mobile → Actions → Run workflow). It requires CI, Live E2E, and
+Release green for that main tip and publishes the ZIP artifact from that
+Release run (no rebuild). Required secrets: `CHROME_EXTENSION_ID`,
+`CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, `CHROME_REFRESH_TOKEN`,
+`CHROME_PUBLISHER_ID`. The store item must already exist; the first listing is
+created in the developer dashboard.
 
 Load `.output/chrome-mv3` through `chrome://extensions` with **Developer mode**
 and **Load unpacked**. Open a pull request's **Files changed** page; the extension
