@@ -669,7 +669,8 @@ describe('review app interactions', () => {
     );
     expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);
     expect(
-      document.querySelector('[data-diffseek="snackbar"]')?.textContent,
+      [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
+        ?.textContent,
     ).toBe('Show viewed files by default');
 
     document
@@ -698,7 +699,8 @@ describe('review app interactions', () => {
       )?.getAttribute('aria-checked'),
     ).toBe('mixed');
     expect(
-      document.querySelector('[data-diffseek="snackbar"]')?.textContent,
+      [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
+        ?.textContent,
     ).toBe('Hide viewed files by default');
     app.stop();
   });
@@ -738,7 +740,8 @@ describe('review app interactions', () => {
 
     await vi.waitFor(() => {
       expect(
-        document.querySelector('[data-diffseek="snackbar"]')?.textContent,
+        [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
+          ?.textContent,
       ).toBe('Marked 0 files as viewed; 1 failed');
     });
     expect(markFiles).toHaveBeenCalledOnce();

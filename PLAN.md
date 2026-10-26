@@ -111,7 +111,7 @@ after native or extension actions.
   - GitHub diff controls remain the source of truth.
 - [x] Replace inline batch status with a fixed top-right snackbar stack.
   - Emit starting and completion/failure notifications.
-  - Newest appears first; each expires independently after seven seconds.
+  - Oldest stays on top; newest appears below; each expires independently after seven seconds.
 - [x] Extend unit, DOM, and Playwright coverage.
   - Interleave native GitHub and DiffSeek actions in the automated E2E suite.
   - Chaos-test the built extension on authenticated PR `#185108`.

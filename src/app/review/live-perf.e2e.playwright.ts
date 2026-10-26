@@ -178,7 +178,7 @@ describeLive('live DiffSeek performance', () => {
     await markNavStart(sharedPage);
     await action.click();
     await expect(
-      sharedPage.locator('[data-diffseek="snackbar"]').first(),
+      sharedPage.locator('[data-diffseek="snackbar"]').last(),
     ).toContainText(`Marked ${expectedGeneratedTotal} files as viewed`, {
       timeout: 180_000,
     });
