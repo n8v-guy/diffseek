@@ -121,7 +121,7 @@ function showSnackbar(root: Document, message: string): HTMLElement {
   snackbar.dataset.diffseek = 'snackbar';
   snackbar.setAttribute('role', 'status');
   snackbar.textContent = message;
-  stack.prepend(snackbar);
+  stack.append(snackbar);
   setTimeout(() => {
     snackbar.remove();
     if (stack?.childElementCount === 0) stack.remove();
