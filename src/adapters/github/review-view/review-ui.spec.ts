@@ -10,7 +10,7 @@ import {
 describe('review status UI', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('stacks fresh batch snackbars first and expires each after seven seconds', () => {
+  it('stacks older snackbars above newer ones and expires each after seven seconds', () => {
     vi.useFakeTimers();
     document.body.innerHTML = '<main></main>';
 
@@ -34,10 +34,10 @@ describe('review status UI', () => {
       ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
     ];
     expect(snackbars().map((item) => item.textContent)).toEqual([
-      'Marked 1 file as viewed; 2 failed',
       'Marking 3 files as viewed…',
+      'Marked 1 file as viewed; 2 failed',
     ]);
-    expect(snackbars()[0]?.title).toContain(
+    expect(snackbars()[1]?.title).toContain(
       'src/app.ts: control unavailable',
     );
 
@@ -96,9 +96,9 @@ describe('review status UI', () => {
         ),
       ].map((item) => item.textContent),
     ).toEqual([
-      'Hide and mark viewed generated files by default',
-      'Show generated files by default',
       'Hide viewed files by default',
+      'Show generated files by default',
+      'Hide and mark viewed generated files by default',
     ]);
   });
 });

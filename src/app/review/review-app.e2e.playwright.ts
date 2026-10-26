@@ -323,7 +323,7 @@ test('interleaves native and DiffSeek viewed actions in action order', async () 
     page.locator('#diff-app button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(
-    page.locator('[data-diffseek="snackbar"]').first(),
+    page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Marked 3 files as viewed');
 });
 
@@ -360,7 +360,7 @@ test('does not overwrite a later native action with a pending batch path', async
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
   ).toBeVisible();
   await expect(
-    page.locator('[data-diffseek="snackbar"]').first(),
+    page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Marked 2 files as viewed');
   await expect(
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
@@ -539,7 +539,7 @@ test('clears native filters before taking over the menu', async () => {
     ),
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(
-    page.locator('[data-diffseek="snackbar"]').first(),
+    page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Show generated files by default');
 
   await viewed.click();
@@ -548,7 +548,7 @@ test('clears native filters before taking over the menu', async () => {
   await viewed.click();
   await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
   await expect(
-    page.locator('[data-diffseek="snackbar"]').first(),
+    page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Hide viewed files by default');
   const reset = page.locator('[data-reset-filters]');
   await expect(reset).toHaveCount(0);
@@ -731,7 +731,7 @@ test('retains collapsed folders and marks only visible facet files', async () =>
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'false');
   await expect(
-    page.locator('[data-diffseek="snackbar"]').first(),
+    page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Marked 2 files as viewed');
 
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
