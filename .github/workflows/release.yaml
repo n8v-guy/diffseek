@@ -71,3 +71,37 @@ jobs:
           files: .output/*.zip
           fail_on_unmatched_files: true
           make_latest: true
+
+      - name: Keep only the newest ZIP on latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          zips=(.output/*.zip)
+          if [ "${#zips[@]}" -ne 1 ]; then
+            echo "expected exactly one ZIP in .output, found ${#zips[@]}" >&2
+            printf '%s\n' "${zips[@]}" >&2
+            exit 1
+          fi
+          new_zip=$(basename "${zips[0]}")
+          while IFS= read -r name; do
+            [ -z "$name" ] && continue
+            if [ "$name" != "$new_zip" ]; then
+              gh release delete-asset latest "$name" --yes
+            fi
+          done < <(gh release view latest --json assets --jq '.assets[].name')
+
+      - name: Point latest tag at released commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${{ github.event.workflow_run.head_sha }}"
+          if gh api "repos/${{ github.repository }}/git/ref/tags/latest" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/${{ github.repository }}/git/refs/tags/latest" \
+              -f sha="$sha" -F force=true
+          else
+            gh api --method POST "repos/${{ github.repository }}/git/refs" \
+              -f ref="refs/tags/latest" -f sha="$sha"
+          fi
