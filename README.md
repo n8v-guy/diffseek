@@ -130,8 +130,9 @@ WXT writes the versioned Chrome Manifest V3 ZIP to `.output/`.
 for `main`, the next stages run strictly in order for that commit:
 
 1. **Live E2E**
-2. **Release Chrome Extension** — `pnpm release:zip`, then attach the ZIP to
-   the mutable `latest` GitHub Release (`commit: <sha>` in the body)
+2. **Release Chrome Extension** — `pnpm release:zip`, then create a versioned
+   GitHub Release (`v<version>` with changelog); download the newest build from
+   https://github.com/n8v-guy/diffseek/releases/latest
 
 **Publish Chrome Web Store** is manual only (`workflow_dispatch` from branch
 `main` — GitHub Mobile → Actions → Run workflow). It requires CI, Live E2E, and
