@@ -74,6 +74,17 @@ export async function markViewed(
   return result;
 }
 
+/**
+ * Viewed toggles are drawn with CSS on GitHub's existing file/folder icon
+ * wrapper; no nodes are inserted into the React-owned tree (inserting nodes
+ * before hydration finishes makes React discard and remount the whole tree).
+ */
+const viewedActionSelector = '[data-diffseek-viewed-action]';
+const viewedActionClass = 'diffseek-viewed-icon-anchor';
+const actionHandlers = new WeakMap<Element, () => void>();
+const listeningDocuments = new WeakSet<Document>();
+const hitSlopPx = 4;
+
 export function mountViewedActions(
   snapshot: SupportedSnapshot,
   onAction: (viewed: boolean, paths: string[]) => void,
@@ -81,12 +92,8 @@ export function mountViewedActions(
 ): void {
   const tree = snapshot.tree();
   if (!tree) return;
-  const staleActions = new Set(
-    tree.querySelectorAll<HTMLButtonElement>('[data-diffseek-viewed-action]'),
-  );
-  const staleAnchors = new Set(
-    tree.querySelectorAll<HTMLElement>('.diffseek-viewed-icon-anchor'),
-  );
+  listenForViewedActions(tree.ownerDocument);
+  const stale = new Set(tree.querySelectorAll<HTMLElement>(viewedActionSelector));
   const filesByPath = new Map(
     snapshot.files.map((file) => [file.path, file]),
   );
@@ -106,42 +113,74 @@ export function mountViewedActions(
           name.startsWith('octicon-file'),
         ),
     );
-    if (!icon) continue;
-    const action =
-      [...item.querySelectorAll<HTMLButtonElement>(
-        '[data-diffseek-viewed-action]',
-      )].find((candidate) => candidate.closest('[role="treeitem"]') === item) ??
-      document.createElement('button');
-    action.type = 'button';
-    action.dataset.diffseekViewedAction = 'true';
-    action.className = 'diffseek-viewed-action';
+    // Draw on GitHub's icon wrapper; never on the treeitem itself.
+    const anchor = icon?.parentElement;
+    if (!anchor || anchor === item) continue;
+    stale.delete(anchor);
+    if (!anchor.classList.contains(viewedActionClass)) {
+      anchor.classList.add(viewedActionClass);
+    }
+    setAttribute(anchor, 'data-diffseek-viewed-action', 'true');
     const label = viewed ? 'Mark as not viewed' : 'Mark as viewed';
-    if (action.getAttribute('aria-label') !== label) {
-      action.setAttribute('aria-label', label);
-    }
-    if (action.getAttribute('aria-pressed') !== String(viewed)) {
-      action.setAttribute('aria-pressed', String(viewed));
-    }
-    action.title = label;
-    action.onclick = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      onAction(!viewed, paths);
-    };
-    staleActions.delete(action);
-    if (icon.parentElement) {
-      staleAnchors.delete(icon.parentElement);
-      icon.parentElement.classList.add('diffseek-viewed-icon-anchor');
-    }
-    if (icon.previousElementSibling !== action) {
-      icon.before(action);
-    }
+    setAttribute(anchor, 'aria-label', label);
+    setAttribute(anchor, 'aria-pressed', String(viewed));
+    setAttribute(anchor, 'title', label);
+    actionHandlers.set(anchor, () => onAction(!viewed, paths));
   }
 
-  for (const action of staleActions) action.remove();
-  for (const anchor of staleAnchors) {
-    anchor.classList.remove('diffseek-viewed-icon-anchor');
+  for (const anchor of stale) clearViewedAction(anchor);
+}
+
+export function clearViewedAction(anchor: Element): void {
+  actionHandlers.delete(anchor);
+  anchor.classList.remove(viewedActionClass);
+  if (anchor.getAttribute('class') === '') anchor.removeAttribute('class');
+  for (const name of [
+    'data-diffseek-viewed-action',
+    'aria-label',
+    'aria-pressed',
+    'title',
+  ]) {
+    anchor.removeAttribute(name);
   }
+}
+
+function setAttribute(element: Element, name: string, value: string): void {
+  if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+}
+
+function listenForViewedActions(document: Document): void {
+  if (listeningDocuments.has(document)) return;
+  listeningDocuments.add(document);
+  document.addEventListener('click', onViewedActionClick, true);
+}
+
+function onViewedActionClick(event: MouseEvent): void {
+  const target = event.target;
+  const ElementType = (target as Node | null)?.ownerDocument?.defaultView?.Element;
+  if (!ElementType || !(target instanceof ElementType)) return;
+  const anchor = target.closest(viewedActionSelector);
+  if (!anchor) return;
+  const handler = actionHandlers.get(anchor);
+  if (!handler || !withinHitArea(anchor, event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  handler();
+}
+
+function withinHitArea(anchor: Element, event: MouseEvent): boolean {
+  // Synthetic/keyboard clicks carry no pointer position.
+  if (event.detail === 0 && event.clientX === 0 && event.clientY === 0) {
+    return true;
+  }
+  const rect = anchor.getBoundingClientRect();
+  return (
+    event.clientX >= rect.left - hitSlopPx &&
+    event.clientX <= rect.right + hitSlopPx &&
+    event.clientY >= rect.top - hitSlopPx &&
+    event.clientY <= rect.bottom + hitSlopPx
+  );
 }
 
 function isViewed(button: HTMLButtonElement): boolean {

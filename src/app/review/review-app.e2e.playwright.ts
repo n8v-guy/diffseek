@@ -209,7 +209,7 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
   const overlayStyle = await page
     .locator('#src [data-diffseek-viewed-action]')
     .evaluate((action) => ({
-      anchor: getComputedStyle(action.parentElement!).position,
+      anchor: getComputedStyle(action).position,
       badgeBottom: getComputedStyle(action, '::before').bottom,
       badgeHeight: getComputedStyle(action, '::before').height,
       badgeRight: getComputedStyle(action, '::before').right,
@@ -773,8 +773,8 @@ function instrument(source: string, startsWithNativeFilter = false): string {
     .replace(
       '<ul role="tree" aria-label="File Tree">',
       `<ul role="tree" aria-label="File Tree">
-      <li id="src" role="treeitem" aria-label="src"><svg class="octicon octicon-file-directory-fill"></svg><div>src</div></li>
-      <li id="docs" role="treeitem" aria-label="docs"><svg class="octicon octicon-file-directory-fill"></svg><div>docs</div></li>`,
+      <li id="src" role="treeitem" aria-label="src"><div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-directory-fill"></svg></div><div>src</div></li>
+      <li id="docs" role="treeitem" aria-label="docs"><div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-directory-fill"></svg></div><div>docs</div></li>`,
     )
     .replace(
       '</body>',

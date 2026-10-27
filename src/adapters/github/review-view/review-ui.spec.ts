@@ -57,8 +57,7 @@ describe('review status UI', () => {
         <li data-diffseek-native-hidden="true" hidden>Native</li>
         <li data-diffseek="filters"></li>
       </ul>
-      <span class="diffseek-viewed-icon-anchor">
-        <button data-diffseek-viewed-action></button>
+      <span class="diffseek-viewed-icon-anchor" data-diffseek-viewed-action="true" aria-pressed="false" aria-label="Mark as viewed" title="Mark as viewed">
         <svg class="octicon"></svg>
       </span>
     `;
@@ -67,6 +66,7 @@ describe('review status UI', () => {
 
     expect(document.querySelector('[data-diffseek-viewed-action]')).toBeNull();
     expect(document.querySelector('svg.octicon')).not.toBeNull();
+    expect(document.querySelector('span')?.attributes).toHaveLength(0);
     expect(
       document.querySelector('.diffseek-viewed-icon-anchor'),
     ).toBeNull();
