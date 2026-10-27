@@ -244,22 +244,11 @@ span.diffseek-menu-count {
 }
 
 .diffseek-viewed-icon-anchor {
+  cursor: pointer;
   position: relative;
 }
 
-.diffseek-viewed-action {
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  height: 1rem;
-  inset: 0;
-  padding: 0;
-  position: absolute;
-  width: 1rem;
-  z-index: 1;
-}
-
-.diffseek-viewed-action::before,
+.diffseek-viewed-icon-anchor::before,
 .diffseek-menu-viewed-action::before {
   background: var(--diffseek-background);
   border: 1px solid var(--diffseek-accent);
@@ -273,12 +262,12 @@ span.diffseek-menu-count {
   width: 12px;
 }
 
-.diffseek-viewed-action[aria-pressed='true']::before,
+.diffseek-viewed-icon-anchor[aria-pressed='true']::before,
 .diffseek-menu-viewed-action[aria-pressed='true']::before {
   background: var(--diffseek-accent);
 }
 
-.diffseek-viewed-action[aria-pressed='true']::after,
+.diffseek-viewed-icon-anchor[aria-pressed='true']::after,
 .diffseek-menu-viewed-action[aria-pressed='true']::after {
   border-bottom: 2px solid var(--diffseek-background);
   border-right: 2px solid var(--diffseek-background);

@@ -3,7 +3,10 @@ import type {
   RememberedFilterFacet,
 } from '@diffseek/browser/filter-defaults';
 
-import type { ActionResult } from '../review-page/viewed-actions';
+import {
+  type ActionResult,
+  clearViewedAction,
+} from '../review-page/viewed-actions';
 
 const snackbarDurationMs = 7_000;
 
@@ -22,12 +25,14 @@ export function filterMenus(root: Document): HTMLElement[] {
 
 export function removeInjected(root: Document): void {
   for (const element of root.querySelectorAll(
-    '[data-diffseek="filters"], [data-diffseek-viewed-action], [data-diffseek="unavailable"], [data-diffseek="snackbars"]',
+    '[data-diffseek="filters"], [data-diffseek="unavailable"], [data-diffseek="snackbars"]',
   )) {
     element.remove();
   }
-  for (const anchor of root.querySelectorAll('.diffseek-viewed-icon-anchor')) {
-    anchor.classList.remove('diffseek-viewed-icon-anchor');
+  for (const anchor of root.querySelectorAll(
+    '[data-diffseek-viewed-action], .diffseek-viewed-icon-anchor',
+  )) {
+    clearViewedAction(anchor);
   }
   for (const element of root.querySelectorAll<HTMLElement>(
     '[data-diffseek-native-hidden="true"]',

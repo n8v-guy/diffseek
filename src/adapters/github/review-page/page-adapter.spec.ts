@@ -72,7 +72,7 @@ describe('scanPage', () => {
       'beforeend',
       `
         <li id="src/lazy.ts" role="treeitem" aria-label="lazy.ts">
-          <svg class="octicon octicon-file-diff"></svg>
+          <div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-diff"></svg></div>
           <a href="#diff-lazy">lazy.ts</a>
         </li>
       `,

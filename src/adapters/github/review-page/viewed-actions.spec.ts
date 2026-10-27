@@ -139,7 +139,7 @@ describe('viewed actions', () => {
     document.querySelector('[role="tree"]')?.insertAdjacentHTML(
       'afterbegin',
       '<li id="src" role="treeitem" aria-label="src">' +
-        '<svg class="octicon octicon-file-directory-fill"></svg></li>',
+        '<div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-directory-fill"></svg></div></li>',
     );
     const onAction = vi.fn();
 
@@ -160,17 +160,11 @@ describe('viewed actions', () => {
     expect(fileAction?.title).toBe('Mark as viewed');
     expect(fileAction?.getAttribute('aria-label')).toBe('Mark as viewed');
     expect(fileAction?.getAttribute('aria-pressed')).toBe('false');
-    expect(fileAction?.textContent).toBe('');
-    expect(fileAction?.previousElementSibling).toBeNull();
-    expect(fileAction?.nextElementSibling).toMatchObject({
-      tagName: 'svg',
-    });
-    expect(fileAction?.nextElementSibling?.classList).not.toContain(
-      'diffseek-viewed-icon-source',
-    );
-    expect(fileAction?.parentElement?.classList).toContain(
-      'diffseek-viewed-icon-anchor',
-    );
+    // CSS-only: the toggle is GitHub's own icon wrapper; nothing is inserted.
+    expect(document.querySelectorAll('[role="tree"] button')).toHaveLength(0);
+    expect(fileAction?.firstElementChild).toMatchObject({ tagName: 'svg' });
+    expect(fileAction?.childElementCount).toBe(1);
+    expect(fileAction?.classList).toContain('diffseek-viewed-icon-anchor');
     expect(onAction).toHaveBeenCalledWith(true, [
       'src/app.ts',
       'src/new.ts',
@@ -210,6 +204,49 @@ describe('viewed actions', () => {
     expect(reconciled?.title).toBe('Mark as not viewed');
     expect(firstAction).not.toHaveBeenCalled();
     expect(nextAction).toHaveBeenCalledWith(false, ['src/app.ts']);
+  });
+
+  it('ignores clicks outside the toggle hit area and lets GitHub handle them', () => {
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+    const onAction = vi.fn();
+    mountViewedActions(snapshot, onAction);
+    const anchor = document.querySelector<HTMLElement>(
+      '#src\\/app\\.ts [data-diffseek-viewed-action="true"]',
+    );
+    if (!anchor) throw new Error('Missing anchor');
+    anchor.getBoundingClientRect = () =>
+      ({ left: 10, top: 10, right: 26, bottom: 26 }) as DOMRect;
+    const native = vi.fn();
+    document.addEventListener('click', native);
+
+    const outside = new MouseEvent('click', {
+      bubbles: true, cancelable: true, detail: 1, clientX: 60, clientY: 60,
+    });
+    anchor.dispatchEvent(outside);
+    const inside = new MouseEvent('click', {
+      bubbles: true, cancelable: true, detail: 1, clientX: 28, clientY: 28,
+    });
+    anchor.dispatchEvent(inside);
+    document.removeEventListener('click', native);
+
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(inside.defaultPrevented).toBe(true);
+    expect(outside.defaultPrevented).toBe(false);
+    expect(native).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears toggle attributes when a row no longer has viewable files', () => {
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+    mountViewedActions(snapshot, vi.fn());
+    for (const file of snapshot.files) file.capabilities.viewed = false;
+
+    mountViewedActions(snapshot, vi.fn());
+
+    expect(document.querySelector('[data-diffseek-viewed-action]')).toBeNull();
+    expect(document.querySelector('.diffseek-viewed-icon-anchor')).toBeNull();
+    expect(document.querySelector('[role="tree"] [aria-pressed]')).toBeNull();
   });
 
   it('does not mutate retained overlay state when it is unchanged', async () => {
