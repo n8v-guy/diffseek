@@ -26,9 +26,12 @@ Classic `/pull/:number/files` review URLs are replaced with GitHub's modern
 
 DiffSeek replaces the contents of GitHub's **Filter options** menu with viewed,
 generated-file, owner, type, language, and change-status filters. It retains the
-native menu container and interaction model. Viewed and generated filters cycle
-through shown, hidden, and extension-wide default-hidden states; generated files
-also support default-hidden-and-viewed. Multi-item sections expose row-hover
+native menu container and interaction model. When `diffseek:filter-defaults` has
+never been saved, viewed and generated files start hidden; any stored record is
+applied unchanged, including an explicit empty one. Viewed and generated filters
+cycle through shown, hidden, and extension-wide default-hidden states; generated
+files also support default-hidden-and-viewed. The menu shows that state with the
+mixed mark and `visible/total` counts. Multi-item sections expose row-hover
 `only` and title-hover `all` shortcuts. Non-matches are hidden in the file tree
 and collapsed/muted in place in the diff. File, folder, counter-pill, and
 counter-overlay actions mark their current visible scope viewed through
@@ -105,11 +108,13 @@ pnpm exec playwright open https://github.com/login --save-storage=.cache/github-
 DIFFSEEK_GITHUB_STORAGE_STATE=.cache/github-storage.json pnpm test:e2e:live
 ```
 
-It runs three serial scenarios against `sha-tm/diffseek-test-data#1` by default:
-cold clean-store index, warm cached reopen, and mark-all-generated-viewed. Cold
-and warm primary-action time stops when the generated facet denominator shows
-the full classified total (file list known and categorized by every factor
-except viewed); viewed-state settle is not part of that measurement. Each
+It runs four serial scenarios against `sha-tm/diffseek-test-data#1` by default:
+cold clean-store index, warm cached reopen, mark-all-generated-viewed, and a
+fresh-default check that hides generated and viewed files until they are shown
+again. Cold and warm primary-action time stops when the generated facet
+denominator shows the full classified total (file list known and categorized by
+every factor except viewed). Fresh-install hiding can leave that numerator at
+`0`; viewed-state settle is not part of the measurement. Each
 scenario reports menu-open seconds, primary-action seconds, DiffSeek redraws,
 and extension metadata network requests, checked against optional
 `DIFFSEEK_LIVE_BUDGET_*` env budgets, and writes `.cache/live-perf-latest.json`.

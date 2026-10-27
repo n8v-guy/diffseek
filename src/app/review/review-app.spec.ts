@@ -53,8 +53,11 @@ async function nextReconcile(action: () => void): Promise<void> {
   await ready;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   fakeBrowser.reset();
+  await fakeBrowser.storage.local.set({
+    'diffseek:filter-defaults': { hidden: [], viewed: [] },
+  });
   document.documentElement.innerHTML = fixture;
   installNativeBehavior();
 });
@@ -542,6 +545,121 @@ describe('review app reuse invariants', () => {
           !child.hidden,
       ),
     ).toBe(false);
+    app.stop();
+  });
+});
+
+describe('fresh filter defaults', () => {
+  it('hides generated and viewed files until they are shown again', async () => {
+    await fakeBrowser.storage.local.clear();
+    openMenu();
+    const markFiles = vi.fn(async () => ({
+      requested: 1,
+      completed: ['src/generated.ts'],
+      failed: [],
+    }));
+    const app = await startReviewApp({
+      ...inertMetadata,
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      markFiles,
+      readImmediate: async () => ({
+        codeowners: '',
+        attributes: 'src/generated.ts linguist-generated',
+      }),
+    });
+
+    const viewed = () =>
+      document.querySelector<HTMLButtonElement>(
+        '[data-filter-kind="viewed"][data-filter-value="true"]',
+      );
+    const generated = () =>
+      document.querySelector<HTMLButtonElement>(
+        '[data-filter-kind="generated"][data-filter-value="true"]',
+      );
+    const count = (facet: string) =>
+      document.querySelector(
+        `.diffseek-menu-row:has([data-filter-kind="${facet}"][data-filter-value="true"]) .diffseek-menu-count`,
+      )?.textContent;
+
+    await vi.waitFor(() =>
+      expect(generated()?.getAttribute('aria-checked')).toBe('mixed'),
+    );
+    expect(viewed()?.getAttribute('aria-checked')).toBe('mixed');
+    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
+    expect(count('viewed')).toBe('0/1');
+    expect(count('generated')).toBe('0/1');
+    expect(
+      (await fakeBrowser.storage.local.get('diffseek:filter-defaults'))[
+        'diffseek:filter-defaults'
+      ],
+    ).toBeUndefined();
+
+    viewed()?.click();
+    await vi.waitFor(() =>
+      expect(document.getElementById('docs/readme.md')?.hidden).toBe(false),
+    );
+    expect(viewed()?.getAttribute('aria-checked')).toBe('true');
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+
+    generated()?.click();
+    await vi.waitFor(() => {
+      expect(generated()?.dataset.defaultViewed).toBe('true');
+      expect(generated()?.disabled).toBe(false);
+    });
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+
+    generated()?.click();
+    await vi.waitFor(() => {
+      expect(generated()?.getAttribute('aria-checked')).toBe('true');
+      expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
+    });
+    await vi.waitFor(async () =>
+      expect(
+        await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
+      ).toEqual({
+        'diffseek:filter-defaults': { hidden: [], viewed: [] },
+      }),
+    );
+    app.stop();
+  });
+
+  it('respects a saved preference that hides only viewed files', async () => {
+    await fakeBrowser.storage.local.set({
+      'diffseek:filter-defaults': { hidden: ['viewed'], viewed: [] },
+    });
+    openMenu();
+    const app = await startReviewApp({
+      ...inertMetadata,
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => ({
+        codeowners: '',
+        attributes: 'src/generated.ts linguist-generated',
+      }),
+    });
+
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector(
+          '[data-filter-kind="generated"][data-filter-value="true"]',
+        )?.getAttribute('aria-checked'),
+      ).toBe('true'),
+    );
+    expect(
+      document.querySelector(
+        '[data-filter-kind="viewed"][data-filter-value="true"]',
+      )?.getAttribute('aria-checked'),
+    ).toBe('mixed');
+    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
+    expect(
+      document.querySelector(
+        '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
+      )?.textContent,
+    ).toBe('1/1');
     app.stop();
   });
 });

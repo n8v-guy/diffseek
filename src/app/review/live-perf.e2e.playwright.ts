@@ -16,6 +16,7 @@ import {
   defaultLivePrUrl,
   expectedGeneratedTotal,
   generatedCategorizedPattern,
+  generatedIndexedText,
   isExtensionMetadataRequest,
   isInlineStorageState,
   parseInlineStorageState,
@@ -29,7 +30,11 @@ const livePrUrl = process.env.DIFFSEEK_LIVE_PR_URL ?? defaultLivePrUrl;
 const storageStateSource = process.env.DIFFSEEK_GITHUB_STORAGE_STATE;
 const budgets = defaultLivePerfBudgets();
 const generatedCounter =
-  '[data-diffseek-menu-count-action][data-viewed-facet="generated"][data-viewed-value="true"]';
+  '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count';
+const viewedFilter =
+  '[data-filter-kind="viewed"][data-filter-value="true"]';
+const generatedFilter =
+  '[data-filter-kind="generated"][data-filter-value="true"]';
 const generatedViewedAction =
   '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]';
 const viewedFacetAction =
@@ -100,6 +105,7 @@ describeLive('live DiffSeek performance', () => {
 
   test('cold path: clean store indexes generated files', async () => {
     await clearExtensionStore(context);
+    await writeExtensionDefaults(context, { hidden: [], viewed: [] });
     const setupPage = await context.newPage();
     await setupPage.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
     await assertAuthenticatedReview(setupPage);
@@ -121,6 +127,14 @@ describeLive('live DiffSeek performance', () => {
     await expect(sharedPage.locator(generatedCounter)).toHaveText(
       generatedCategorizedPattern(expectedGeneratedTotal),
       { timeout: 120_000 },
+    );
+    await expect(sharedPage.locator(viewedFilter)).toHaveAttribute(
+      'aria-checked',
+      'mixed',
+    );
+    await expect(sharedPage.locator(generatedFilter)).toHaveAttribute(
+      'aria-checked',
+      'mixed',
     );
     const metrics = collectMetrics(
       'cold',
@@ -160,12 +174,24 @@ describeLive('live DiffSeek performance', () => {
   });
 
   test('marks all generated files viewed', async () => {
+    await writeExtensionDefaults(context, { hidden: [], viewed: [] });
     networkUrls = [];
-    await closeFilterMenu(sharedPage);
+    await sharedPage.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
     await resetRedraws(sharedPage);
+    await expect(sharedPage.getByLabel('Filter options')).toBeVisible({
+      timeout: 120_000,
+    });
     const menuOpenSeconds = await openFilterMenu(sharedPage);
+    await expect(sharedPage.locator(viewedFilter)).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await expect(sharedPage.locator(generatedFilter)).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
     await expect(sharedPage.locator(generatedCounter)).toHaveText(
-      generatedCategorizedPattern(expectedGeneratedTotal),
+      generatedIndexedText(expectedGeneratedTotal),
       { timeout: 120_000 },
     );
     // Mark needs region-enriched viewed controls; indexing no longer waits on that.
@@ -195,6 +221,37 @@ describeLive('live DiffSeek performance', () => {
     );
     reportMetrics(metrics, reported);
     expect(assertWithinBudgets(metrics, budgets)).toEqual([]);
+  });
+
+  test('fresh defaults hide generated and viewed files until shown', async () => {
+    await clearExtensionStore(context);
+    await sharedPage.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
+    await expect(sharedPage.getByLabel('Filter options')).toBeVisible({
+      timeout: 120_000,
+    });
+    await openFilterMenu(sharedPage);
+    const viewed = sharedPage.locator(viewedFilter);
+    const generated = sharedPage.locator(generatedFilter);
+    await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
+    await expect(generated).toHaveAttribute('aria-checked', 'mixed', {
+      timeout: 120_000,
+    });
+    await expect(sharedPage.locator(generatedCounter)).toHaveText(
+      new RegExp(`^0/${expectedGeneratedTotal}$`),
+      { timeout: 120_000 },
+    );
+
+    await viewed.click();
+    await expect(viewed).toHaveAttribute('aria-checked', 'true');
+    await generated.click();
+    await expect(generated).toHaveAttribute('data-default-viewed', 'true');
+    await expect(generated).toBeEnabled({ timeout: 180_000 });
+    await generated.click();
+    await expect(generated).toHaveAttribute('aria-checked', 'true');
+    await expect(sharedPage.locator(generatedCounter)).toHaveText(
+      generatedIndexedText(expectedGeneratedTotal),
+      { timeout: 120_000 },
+    );
   });
 });
 
@@ -243,7 +300,7 @@ async function assertAuthenticatedReview(page: Page): Promise<void> {
     'GitHub session from DIFFSEEK_GITHUB_STORAGE_STATE is not authenticated',
   ).toHaveCount(0);
   await expect(page).toHaveURL(/\/changes(\?|$)/);
-  await expect(page.locator('[data-diffseek-viewed-action]').first()).toBeVisible({
+  await expect(page.locator('[data-diffseek-viewed-action]').first()).toBeAttached({
     timeout: 120_000,
   });
   await expect(page.getByLabel('Filter options')).toBeVisible({
@@ -270,12 +327,6 @@ async function openFilterMenu(page: Page): Promise<number> {
     const entry = performance.getEntriesByName('diffseek-menu-open').at(-1);
     return Number(((entry?.duration ?? 0) / 1000).toFixed(3));
   });
-}
-
-async function closeFilterMenu(page: Page): Promise<void> {
-  if ((await page.locator('[data-diffseek="filters"]').count()) === 0) return;
-  await page.keyboard.press('Escape');
-  await expect(page.locator('[data-diffseek="filters"]')).toHaveCount(0);
 }
 
 async function dismissCompactLinePopover(page: Page): Promise<void> {
@@ -362,15 +413,39 @@ async function pageHasUniqueDiffRegions(page: Page): Promise<boolean> {
 }
 
 async function clearExtensionStore(browserContext: BrowserContext): Promise<void> {
-  const worker =
-    browserContext.serviceWorkers()[0] ??
-    (await browserContext.waitForEvent('serviceworker', { timeout: 30_000 }));
+  const worker = await extensionWorker(browserContext);
   await worker.evaluate(() => {
     const extension = globalThis as unknown as {
       chrome: { storage: { local: { clear: () => Promise<void> } } };
     };
     return extension.chrome.storage.local.clear();
   });
+}
+
+async function writeExtensionDefaults(
+  browserContext: BrowserContext,
+  defaults: { hidden: string[]; viewed: string[] },
+): Promise<void> {
+  const worker = await extensionWorker(browserContext);
+  await worker.evaluate((value) => {
+    const extension = globalThis as unknown as {
+      chrome: {
+        storage: {
+          local: { set: (items: Record<string, unknown>) => Promise<void> };
+        };
+      };
+    };
+    return extension.chrome.storage.local.set({
+      'diffseek:filter-defaults': value,
+    });
+  }, defaults);
+}
+
+async function extensionWorker(browserContext: BrowserContext) {
+  return (
+    browserContext.serviceWorkers()[0] ??
+    (await browserContext.waitForEvent('serviceworker', { timeout: 30_000 }))
+  );
 }
 
 async function clearViewedFiles(page: Page): Promise<void> {

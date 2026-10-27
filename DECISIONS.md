@@ -123,3 +123,13 @@ fallback.
 **Why:** Every file remains classifiable when mixed values make a facet useful,
 without presenting a universal non-choice. **Cost:** A fallback-only facet
 cannot be toggled until repository metadata introduces another value.
+
+## D011 — Missing filter defaults are not an empty preference
+
+**Decision:** Absence of `diffseek:filter-defaults` hides viewed and generated
+files. A present record is parsed as saved, even when both lists are empty.
+Reading defaults does not write the implicit state.
+
+**Why:** New installs reduce review noise without a migration that overwrites
+people who already saved a preference, including show-all. **Cost:** The
+implicit default is reapplied on every session until a remembered row changes.
