@@ -56,7 +56,8 @@ export function scanPage(root: Document): PageSnapshot {
 
   const files: FileRecord[] = [];
   const unavailable = new Map<string, string>();
-  const { byId: regionsById, byPath: regionsByPath } = indexRegions(root);
+  const regions = indexRegions(root);
+  const regionsById = regions.byId;
 
   for (const treeItem of tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')) {
     const link = [...treeItem.querySelectorAll<HTMLAnchorElement>('a[href^="#diff-"]')].find(
@@ -70,10 +71,8 @@ export function scanPage(root: Document): PageSnapshot {
       continue;
     }
 
-    const regions = regionsById.get(anchor) ?? [];
-    const region = regions.length === 1 ? regions[0] : undefined;
-    const displayedPath = region ? displayedPathOf(region) : undefined;
-    if (displayedPath?.startsWith(`${treeItem.id}/`)) continue;
+    const matches = regionsById.get(anchor) ?? [];
+    const region = matches.length === 1 ? matches[0] : undefined;
 
     const status = changeStatusOf(treeItem);
     if (!status) {
@@ -81,11 +80,7 @@ export function scanPage(root: Document): PageSnapshot {
       continue;
     }
 
-    if (
-      region == null ||
-      region.getAttribute('role') !== 'region' ||
-      displayedPath !== treeItem.id
-    ) {
+    if (region == null || region.getAttribute('role') !== 'region') {
       files.push({
         path: treeItem.id,
         anchor,
@@ -122,16 +117,16 @@ export function scanPage(root: Document): PageSnapshot {
     });
   }
 
-  return bindSnapshot(root, files, unavailable, regionsByPath);
+  return bindSnapshot(root, files, unavailable, regions);
 }
 
 export function refreshObservedFiles(
   root: Document,
   files: readonly FileRecord[],
 ): void {
-  const { byPath } = indexRegions(root);
+  const { byId } = indexRegions(root);
   for (const file of files) {
-    const matches = byPath.get(file.path) ?? [];
+    const matches = byId.get(file.anchor) ?? [];
     if (matches.length !== 1) continue;
     const region = matches[0];
     if (!region || region.getAttribute('role') !== 'region') continue;
@@ -157,7 +152,7 @@ export function bindSnapshot(
   root: Document,
   files: FileRecord[],
   unavailable: Map<string, string>,
-  regionsByPath = indexRegions(root).byPath,
+  regions = indexRegions(root),
 ): Extract<PageSnapshot, { supported: true }> {
   const treeItem = (path: string) => {
     const item = root.getElementById(path);
@@ -167,7 +162,9 @@ export function bindSnapshot(
       : null;
   };
   const region = (path: string) => {
-    const matches = regionsByPath.get(path) ?? [];
+    const anchor = files.find((file) => file.path === path)?.anchor;
+    const matches =
+      (anchor ? regions.byId.get(anchor) : regions.byPath.get(path)) ?? [];
     if (matches.length !== 1) return null;
     const element = matches[0];
     return element?.getAttribute('role') === 'region' ? element : null;

@@ -257,9 +257,24 @@ describe('scanPage', () => {
       expect.objectContaining({
         path: 'assets/logo.bin',
         status: 'modified',
-        capabilities: { collapse: false, viewed: false },
+        capabilities: { collapse: true, viewed: false },
       }),
     ]);
+  });
+
+  it('binds a renamed file to its diff by the tree anchor', () => {
+    document.documentElement.innerHTML = edgeCases;
+
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+
+    expect(snapshot.files.find((file) => file.path === 'src/renamed.ts')).toMatchObject({
+      anchor: 'diff-renamed',
+      status: 'renamed',
+      capabilities: { collapse: true, viewed: false },
+    });
+    expect(snapshot.region('src/renamed.ts')?.id).toBe('diff-renamed');
+    expect(snapshot.collapseControl('src/renamed.ts')).not.toBeNull();
   });
 
   it('keeps tree structure stable when only regions change', () => {
