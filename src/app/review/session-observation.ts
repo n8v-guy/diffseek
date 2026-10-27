@@ -1,5 +1,6 @@
 import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
 import {
+  fileToggleAction,
   type PageSnapshot,
   viewedControlState,
 } from '@diffseek/github/review-page/page-adapter';
@@ -184,13 +185,34 @@ export function watchObservationRoots(options: {
       attributes: true,
       attributeFilter: [
         ariaLabelAttribute,
-        'aria-labelledby',
+        labelledByAttribute,
         'aria-pressed',
         'class',
       ],
     });
     options.observedRoots.add(candidate);
   }
+  const filterButton = options.root.querySelector<HTMLElement>(
+    'button[aria-label="Filter options"]',
+  );
+  if (filterButton && !options.observedRoots.has(filterButton)) {
+    options.observer.observe(filterButton, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: [ariaLabelAttribute, 'aria-expanded', 'class'],
+    });
+    options.observedRoots.add(filterButton);
+  }
+}
+
+/** A filtered-out file GitHub expanded again. Structure and labels stay put. */
+export function filteredFileExpanded(root: Document): boolean {
+  for (const button of root.querySelectorAll<HTMLButtonElement>(
+    '[data-diffseek-filtered-out="true"] button',
+  )) {
+    if (fileToggleAction(button) === 'Collapse file') return true;
+  }
+  return false;
 }
 
 function sharedRegionParent(
@@ -230,6 +252,7 @@ export type PanelReconcileSchedule = {
 };
 
 const ariaLabelAttribute = 'aria-label';
+const labelledByAttribute = 'aria-labelledby';
 
 const controlLabels = new Set([
   'Viewed',
@@ -319,7 +342,7 @@ function isImmediateRecord(record: MutationRecord): boolean {
   if (
     name !== ariaLabelAttribute &&
     name !== 'aria-pressed' &&
-    name !== 'aria-labelledby'
+    name !== labelledByAttribute
   ) {
     return false;
   }
@@ -358,15 +381,36 @@ function isCoalescedRecord(record: MutationRecord): boolean {
 }
 
 function isFilterMenuRecord(record: MutationRecord): boolean {
-  if (record.type === 'attributes') return false;
+  if (record.type === 'attributes') {
+    const target = record.target;
+    if (!(target instanceof Element)) return false;
+    return isFilterMenuElement(target) || isFilterOptionsButton(target);
+  }
   if (isFilterMenuElement(record.target)) return true;
-  return [...record.addedNodes, ...record.removedNodes].some(
-    (node) =>
-      isFilterMenuElement(node) ||
-      (node instanceof Element &&
-        node.querySelector('[role="menu"][aria-label="Filter options"]') !=
-          null),
+  return [...record.addedNodes, ...record.removedNodes].some((node) =>
+    containsFilterMenu(node),
   );
+}
+
+function isFilterOptionsButton(target: Element): boolean {
+  const button =
+    target instanceof HTMLButtonElement ? target : target.closest('button');
+  if (!(button instanceof HTMLButtonElement)) return false;
+  if (button.getAttribute(ariaLabelAttribute) === 'Filter options') return true;
+  const labelledBy = button.getAttribute(labelledByAttribute);
+  if (!labelledBy) return false;
+  return labelledBy.split(/\s+/).some(
+    (id) =>
+      button.ownerDocument.getElementById(id)?.textContent === 'Filter options',
+  );
+}
+
+function containsFilterMenu(node: Node): boolean {
+  if (!(node instanceof Element)) return false;
+  if (isFilterMenuElement(node) || node.matches('[role="menu"]')) return true;
+  // Diff panels are large. Only small overlays can be an unlabelled menu shell.
+  if (node.childElementCount > 8) return false;
+  return node.querySelector('[role="menu"]') != null;
 }
 
 function isTreeContainerRecord(record: MutationRecord): boolean {
@@ -383,7 +427,7 @@ function isFilterMenuElement(node: Node): boolean {
     node instanceof Element &&
     node.getAttribute('role') === 'menu' &&
     (node.getAttribute(ariaLabelAttribute) === 'Filter options' ||
-      node.hasAttribute('aria-labelledby'))
+      node.hasAttribute(labelledByAttribute))
   );
 }
 

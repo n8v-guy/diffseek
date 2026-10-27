@@ -49,6 +49,24 @@ describe('panel reconcile scheduling', () => {
       document.body.append(element);
     });
     expect(scheduleForMutations(menu)).toEqual({ immediate: true });
+
+    const shell = document.createElement('div');
+    const unlabelled = document.createElement('ul');
+    unlabelled.setAttribute('role', 'menu');
+    shell.append(unlabelled);
+    const revealed = await captureMutations(() => {
+      document.body.append(shell);
+      unlabelled.setAttribute('aria-label', 'Filter options');
+    });
+    expect(scheduleForMutations(revealed)).toEqual({ immediate: true });
+
+    const trigger = document.createElement('button');
+    trigger.setAttribute('aria-label', 'Filter options');
+    document.body.append(trigger);
+    const opened = await captureMutations(() => {
+      trigger.classList.add('open');
+    });
+    expect(scheduleForMutations(opened)).toEqual({ immediate: true });
   });
 
   it('keeps a coalesced flush on a 64ms timer while the filter menu is open', async () => {

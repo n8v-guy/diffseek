@@ -106,17 +106,20 @@ DIFFSEEK_GITHUB_STORAGE_STATE=.cache/github-storage.json pnpm test:e2e:live
 ```
 
 It runs repeated cold, warm, and hot samples against `sha-tm/diffseek-test-data#1`
-by default (`DIFFSEEK_LIVE_SAMPLES`, default 3). Cold is a first load with an
-empty extension cache, warm is a reload, and hot is the in-page return from the
-conversation tab to Files changed. Each sample records time to the first
-DiffSeek control, time until the filter menu is visible, and time until the
-generated-facet denominator shows the full classified total. It also records
-reconcile passes, DiffSeek DOM mutations, and GitHub file-tree or diff-panel
-rebuilds (removed rows that come back, which must stay 0). The cold sample
-additionally toggles the viewed filter and marks one file viewed. Thresholds
-use the median of the samples for durations and redraw volume, with optional
-`DIFFSEEK_LIVE_BUDGET_*` overrides. Results are written to
-`.cache/live-perf-latest.json`, the job summary, and a `live-perf` artifact.
+by default (`DIFFSEEK_LIVE_SAMPLES`, default 3). Cold clears extension storage,
+then writes an explicit shown filter preference so a fresh-install hide default
+does not collapse the file list, and loads the PR. Warm is a reload. Hot clicks
+Conversation, then Files changed. Each sample records time to the first
+DiffSeek control, time from the Filter click until the DiffSeek menu is
+visible, and time until the generated-facet denominator shows the full
+classified total. It also records reconcile passes, DiffSeek DOM mutations, and
+GitHub file-tree or diff-panel rebuilds (removed rows that come back, which
+must stay 0 on every run). The cold sample also toggles the viewed filter and
+marks one file row viewed. An empty sample set fails. Duration ceilings are
+about three times a local median (first render 12s/10s/8s, menu 6s, panels
+45s/36s/24s) with optional `DIFFSEEK_LIVE_BUDGET_*` overrides. Results are
+written to `.cache/live-perf-latest.json`, the job summary, and a `live-perf`
+artifact.
 Override the target with `DIFFSEEK_LIVE_PR_URL`. The Live E2E workflow is
 manual (`workflow_dispatch`) and also runs on `main` after CI succeeds. It
 requires repository secret `DIFFSEEK_GITHUB_STORAGE_STATE` and fails when that

@@ -301,6 +301,38 @@ describe('review app lifecycle', () => {
     app.stop();
   });
 
+  it('re-collapses a filtered file after GitHub expands it', async () => {
+    const app = await startReviewApp({
+      ...inertMetadata,
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => ({
+        codeowners: '',
+        attributes: 'src/** group=Code',
+      }),
+      refreshDefault: async () => ({
+        metadata: { codeowners: '', attributes: 'src/** group=Code' },
+        changed: false,
+      }),
+    });
+    await nextReconcile(openMenu);
+    document
+      .querySelector<HTMLElement>(
+        '[data-filter-kind="groups"][data-filter-value="Code"]',
+      )
+      ?.click();
+    const button = document.querySelector<HTMLButtonElement>(
+      '#diff-app button[aria-label="Expand file"]',
+    );
+    expect(button).not.toBeNull();
+    button?.setAttribute('aria-label', 'Collapse file');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(document.querySelector('#diff-app button')?.getAttribute('aria-label')).toBe(
+      'Expand file',
+    );
+    app.stop();
+  });
+
   it('keeps a collapsed folder and its known files in the review session', async () => {
     const tree = document.querySelector('[role="tree"]');
     const folder = document.createElement('li');

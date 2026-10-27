@@ -79,15 +79,14 @@ export function noteReconcile(root: Document): void {
 export function trackDiffseekWrites<T>(root: Document, run: () => T): T {
   const trace = traces.get(root);
   if (!trace) return run();
-  const nested = trace.depth > 0;
+  // Keep the childList observer in place. Re-arming attributes on the whole
+  // document made the filter-menu fill wait on a full-page attribute walk.
   trace.depth += 1;
-  if (!nested) observeWrites(trace, root);
   try {
     return run();
   } finally {
     queueMicrotask(() => {
       trace.depth = Math.max(0, trace.depth - 1);
-      if (trace.depth === 0) observeStructure(trace, root);
     });
   }
 }
@@ -187,17 +186,7 @@ function countMutations(records: MutationRecord[]): number {
 }
 
 function observeStructure(trace: Trace, root: Document): void {
-  trace.observer.disconnect();
   trace.observer.observe(root.documentElement, {
-    childList: true,
-    subtree: true,
-  });
-}
-
-function observeWrites(trace: Trace, root: Document): void {
-  trace.observer.disconnect();
-  trace.observer.observe(root.documentElement, {
-    attributes: true,
     childList: true,
     subtree: true,
   });

@@ -51,6 +51,7 @@ import {
   cancelPanelReconcile,
   classifyKeyFor,
   classifySnapshot,
+  filteredFileExpanded,
   pageNodesChanged,
   type PanelReconcileSchedule,
   type PanelScheduleOptions,
@@ -270,6 +271,10 @@ export class ReviewSession {
     const projectionChanged = fingerprint !== this.projectionFingerprint;
     const staleMenus = menus.filter(menuNeedsRemount);
     if (!structureChanged && !projectionChanged && staleMenus.length === 0) {
+      // GitHub expanding a filtered file changes neither key. Re-collapse it.
+      if (filteredFileExpanded(root)) {
+        this.presenter.apply(catalogSnapshot, this.filters);
+      }
       this.reattachObservers();
       return;
     }

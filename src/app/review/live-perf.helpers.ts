@@ -59,13 +59,13 @@ export function defaultLivePerfBudgets(
   env: NodeJS.ProcessEnv = process.env,
 ): LivePerfBudgets {
   return {
-    coldFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S, 45),
-    warmFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S, 30),
-    hotFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S, 20),
-    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, 90),
-    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, 60),
-    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, 45),
-    menuOpenSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MENU_S, 12),
+    coldFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S, 12),
+    warmFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S, 10),
+    hotFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S, 8),
+    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, 45),
+    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, 36),
+    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, 24),
+    menuOpenSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MENU_S, 6),
     reconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_RECONCILES, 500),
     domMutations: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MUTATIONS, 12_000),
     actionReconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_ACTION_RECONCILES, 40),
@@ -129,7 +129,7 @@ export function median(values: number[]): number {
   return Number(((lower + upper) / 2).toFixed(3));
 }
 
-export function medianSample(samples: LivePerfSample[]): LivePerfSample {
+export function medianSample(samples: readonly LivePerfSample[]): LivePerfSample {
   const scenario = samples[0]?.scenario ?? 'cold';
   return {
     scenario,
@@ -183,9 +183,11 @@ export function rebuildFailures(
 
 /** Median timings and redraw volume. Durations are noisy; rebuilds are not. */
 export function medianBudgetFailures(
-  sample: LivePerfSample,
+  samples: readonly LivePerfSample[],
   budgets: LivePerfBudgets,
 ): string[] {
+  if (samples.length === 0) return ['no samples'];
+  const sample = medianSample(samples);
   const failures: string[] = [];
   const renderBudget =
     sample.scenario === 'cold'

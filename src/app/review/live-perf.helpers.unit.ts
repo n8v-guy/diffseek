@@ -79,10 +79,13 @@ describe('live-perf helpers', () => {
     expect(rebuildFailures(slow, defaultLivePerfBudgets({}))).toEqual([
       'cold treeRebuilds 1 > 0',
     ]);
-    expect(medianBudgetFailures(medianSample([slow, slow, slow]), defaultLivePerfBudgets({}))).toEqual([
-      'cold firstRenderSeconds 50 > 45',
-      'cold menuOpenSeconds 20 > 12',
-      'cold panelsSeconds 100 > 90',
+    expect(medianBudgetFailures([], defaultLivePerfBudgets({}))).toEqual([
+      'no samples',
+    ]);
+    expect(medianBudgetFailures([slow, slow, slow], defaultLivePerfBudgets({}))).toEqual([
+      'cold firstRenderSeconds 50 > 12',
+      'cold menuOpenSeconds 20 > 6',
+      'cold panelsSeconds 100 > 45',
       'cold reconciles 800 > 500',
       'cold domMutations 20000 > 12000',
     ]);
