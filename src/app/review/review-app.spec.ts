@@ -935,6 +935,8 @@ describe('review app interactions', () => {
             ),
         )
         .forEach((element) => element.remove());
+      if (!region) return;
+      region.replaceWith(region.cloneNode(true));
     });
 
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
@@ -961,7 +963,10 @@ describe('review app interactions', () => {
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
 
     await nextReconcile(() => {
-      document.querySelector('#diff-generated [role="tooltip"]')?.remove();
+      const region = document.getElementById('diff-generated');
+      region?.querySelector('[role="tooltip"]')?.remove();
+      if (!region) return;
+      region.replaceWith(region.cloneNode(true));
     });
 
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);

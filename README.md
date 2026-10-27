@@ -105,14 +105,18 @@ pnpm exec playwright open https://github.com/login --save-storage=.cache/github-
 DIFFSEEK_GITHUB_STORAGE_STATE=.cache/github-storage.json pnpm test:e2e:live
 ```
 
-It runs three serial scenarios against `sha-tm/diffseek-test-data#1` by default:
-cold clean-store index, warm cached reopen, and mark-all-generated-viewed. Cold
-and warm primary-action time stops when the generated facet denominator shows
-the full classified total (file list known and categorized by every factor
-except viewed); viewed-state settle is not part of that measurement. Each
-scenario reports menu-open seconds, primary-action seconds, DiffSeek redraws,
-and extension metadata network requests, checked against optional
-`DIFFSEEK_LIVE_BUDGET_*` env budgets, and writes `.cache/live-perf-latest.json`.
+It runs repeated cold, warm, and hot samples against `sha-tm/diffseek-test-data#1`
+by default (`DIFFSEEK_LIVE_SAMPLES`, default 3). Cold is a first load with an
+empty extension cache, warm is a reload, and hot is the in-page return from the
+conversation tab to Files changed. Each sample records time to the first
+DiffSeek control, time until the filter menu is visible, and time until the
+generated-facet denominator shows the full classified total. It also records
+reconcile passes, DiffSeek DOM mutations, and GitHub file-tree or diff-panel
+rebuilds (removed rows that come back, which must stay 0). The cold sample
+additionally toggles the viewed filter and marks one file viewed. Thresholds
+use the median of the samples for durations and redraw volume, with optional
+`DIFFSEEK_LIVE_BUDGET_*` overrides. Results are written to
+`.cache/live-perf-latest.json`, the job summary, and a `live-perf` artifact.
 Override the target with `DIFFSEEK_LIVE_PR_URL`. The Live E2E workflow is
 manual (`workflow_dispatch`) and also runs on `main` after CI succeeds. It
 requires repository secret `DIFFSEEK_GITHUB_STORAGE_STATE` and fails when that

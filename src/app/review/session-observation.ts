@@ -45,6 +45,23 @@ export function classifySnapshot(
   });
 }
 
+export function pendingDefaultViewed(
+  files: readonly FileRecord[],
+  defaults: FilterDefaults,
+  attempts: ReadonlySet<string>,
+): string[] {
+  if (!defaults.viewed.has('generated')) return [];
+  return files
+    .filter(
+      (file) =>
+        file.generated &&
+        !file.viewed &&
+        file.capabilities.viewed &&
+        !attempts.has(file.path),
+    )
+    .map((file) => file.path);
+}
+
 export function syncViewedLabels(files: FileRecord[]): void {
   for (const file of files) {
     const rest = file.labels.filter((label) => label.facet !== 'viewed');
@@ -160,12 +177,13 @@ export function watchObservationRoots(options: {
   }
   for (const candidate of candidates) {
     if (options.observedRoots.has(candidate)) continue;
+    // Child list is watched from the document. Attribute noise here must not
+    // schedule a reconcile unless it can change viewed, collapse, or file status.
     options.observer.observe(candidate, {
-      childList: true,
       subtree: true,
       attributes: true,
       attributeFilter: [
-        'aria-label',
+        ariaLabelAttribute,
         'aria-labelledby',
         'aria-pressed',
         'class',
@@ -211,18 +229,55 @@ export type PanelReconcileSchedule = {
   scheduled: boolean;
 };
 
-export function discoverySchedule(
+const ariaLabelAttribute = 'aria-label';
+
+const controlLabels = new Set([
+  'Viewed',
+  'Not Viewed',
+  'Collapse file',
+  'Expand file',
+]);
+
+const structuralSelector = [
+  '[role="tree"][aria-label="File Tree"]',
+  '[role="treeitem"]',
+  '[role="region"][id^="diff-"]',
+  '[data-diff-header-wrapper="true"]',
+  'button[aria-label="Viewed"]',
+  'button[aria-label="Not Viewed"]',
+  'button[aria-label="Collapse file"]',
+  'button[aria-label="Expand file"]',
+].join(',');
+
+/**
+ * Ignore diff-body churn (line nodes, highlight classes). Coalesce tree and
+ * panel structure. Flush viewed/collapse aria and the filter menu immediately.
+ */
+export function scheduleForMutations(
   records: MutationRecord[],
 ): PanelScheduleOptions | null {
   const native = records.filter(isNativeMutation);
   if (native.length === 0) return null;
-  if (addedNodesMatch(native, '[role="menu"][aria-label="Filter options"]')) {
+  if (native.some((record) => isImmediateRecord(record))) {
     return { immediate: true };
   }
-  if (addedNodesMatch(native, '[role="region"][id^="diff-"]')) {
+  if (native.some((record) => isCoalescedRecord(record))) {
     return { coalesce: true };
   }
-  return { immediate: true };
+  return null;
+}
+
+export function pageNodesChanged(
+  previousTree: Element | null,
+  tree: Element | null,
+  previousRegions: readonly Element[],
+  regions: readonly Element[],
+): boolean {
+  return (
+    previousTree !== tree ||
+    previousRegions.length !== regions.length ||
+    regions.some((region, index) => region !== previousRegions[index])
+  );
 }
 
 export function queuePanelReconcile(
@@ -232,10 +287,7 @@ export function queuePanelReconcile(
   run: () => void,
 ): void {
   const view = root.defaultView;
-  const delayMs =
-    options.immediate || filterMenus(root).length > 0 || !options.coalesce
-      ? 0
-      : 64;
+  const delayMs = options.immediate || !options.coalesce ? 0 : 64;
   // Never let a coalesced stream tick postpone an already-queued immediate flush.
   if (state.scheduled && state.delayMs === 0 && delayMs > 0) return;
   if (view && state.timer != null) view.clearTimeout(state.timer);
@@ -260,14 +312,85 @@ export function cancelPanelReconcile(
   state.timer = null;
 }
 
-function addedNodesMatch(records: MutationRecord[], selector: string): boolean {
-  return records.some(
-    (record) =>
-      record.type === 'childList' &&
-      [...record.addedNodes].some(
-        (node) =>
-          node instanceof Element &&
-          (node.matches(selector) || node.querySelector?.(selector) != null),
-      ),
+function isImmediateRecord(record: MutationRecord): boolean {
+  if (isFilterMenuRecord(record) || isTreeContainerRecord(record)) return true;
+  if (record.type !== 'attributes') return false;
+  const name = record.attributeName;
+  if (
+    name !== ariaLabelAttribute &&
+    name !== 'aria-pressed' &&
+    name !== 'aria-labelledby'
+  ) {
+    return false;
+  }
+  const target = record.target;
+  if (!(target instanceof Element)) return false;
+  const button = target.closest('button');
+  if (!(button instanceof HTMLButtonElement)) return false;
+  const label = button.getAttribute(ariaLabelAttribute) ?? '';
+  return (
+    controlLabels.has(label) ||
+    button.closest('[data-diff-header-wrapper="true"]') != null
+  );
+}
+
+function isCoalescedRecord(record: MutationRecord): boolean {
+  if (record.type === 'childList') {
+    return [...record.addedNodes, ...record.removedNodes].some((node) =>
+      matchesStructural(node),
+    );
+  }
+  if (record.type !== 'attributes' || record.attributeName !== 'class') {
+    return false;
+  }
+  const target = record.target;
+  if (!(target instanceof Element)) return false;
+  if (
+    target.closest('[role="tree"]') &&
+    (target.matches('svg') || target.closest('svg') != null)
+  ) {
+    return true;
+  }
+  return (
+    target.closest('button')?.closest('[data-diff-header-wrapper="true"]') !=
+    null
+  );
+}
+
+function isFilterMenuRecord(record: MutationRecord): boolean {
+  if (record.type === 'attributes') return false;
+  if (isFilterMenuElement(record.target)) return true;
+  return [...record.addedNodes, ...record.removedNodes].some(
+    (node) =>
+      isFilterMenuElement(node) ||
+      (node instanceof Element &&
+        node.querySelector('[role="menu"][aria-label="Filter options"]') !=
+          null),
+  );
+}
+
+function isTreeContainerRecord(record: MutationRecord): boolean {
+  if (record.type !== 'childList') return false;
+  return [...record.addedNodes, ...record.removedNodes].some(
+    (node) =>
+      node instanceof Element &&
+      node.matches('[role="tree"][aria-label="File Tree"]'),
+  );
+}
+
+function isFilterMenuElement(node: Node): boolean {
+  return (
+    node instanceof Element &&
+    node.getAttribute('role') === 'menu' &&
+    (node.getAttribute(ariaLabelAttribute) === 'Filter options' ||
+      node.hasAttribute('aria-labelledby'))
+  );
+}
+
+function matchesStructural(node: Node): boolean {
+  return (
+    node instanceof Element &&
+    (node.matches(structuralSelector) ||
+      node.querySelector(structuralSelector) != null)
   );
 }

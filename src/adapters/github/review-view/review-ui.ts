@@ -10,6 +10,17 @@ import {
 
 const snackbarDurationMs = 7_000;
 
+export function menuNeedsRemount(menu: HTMLElement): boolean {
+  if (menu.dataset.diffseekMenuOwned !== 'true') return true;
+  if (!menu.querySelector(':scope > [data-diffseek="filters"]')) return true;
+  return [...menu.children].some(
+    (child) =>
+      child instanceof HTMLElement &&
+      child.dataset.diffseek !== 'filters' &&
+      !child.hidden,
+  );
+}
+
 export function filterMenus(root: Document): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>('[role="menu"]')].filter(
     (menu) => {

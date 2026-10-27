@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -11,38 +11,44 @@ import {
 } from '@playwright/test';
 
 import {
-  assertWithinBudgets,
+  actionFailures,
   defaultLivePerfBudgets,
   defaultLivePrUrl,
   expectedGeneratedTotal,
   generatedCategorizedPattern,
-  isExtensionMetadataRequest,
   isInlineStorageState,
+  livePerfSummary,
+  liveSampleCount,
+  medianBudgetFailures,
+  medianSample,
   parseInlineStorageState,
   parseStorageCookies,
-  type LivePerfMetrics,
+  rebuildFailures,
+  type LivePerfSample,
   type LivePerfScenario,
+  type RedrawCounts,
 } from './live-perf.helpers';
 
 const liveEnabled = process.env.DIFFSEEK_LIVE_E2E === '1';
 const livePrUrl = process.env.DIFFSEEK_LIVE_PR_URL ?? defaultLivePrUrl;
 const storageStateSource = process.env.DIFFSEEK_GITHUB_STORAGE_STATE;
 const budgets = defaultLivePerfBudgets();
+const samples = liveSampleCount();
 const generatedCounter =
   '[data-diffseek-menu-count-action][data-viewed-facet="generated"][data-viewed-value="true"]';
-const generatedViewedAction =
-  '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]';
 const viewedFacetAction =
   '[data-diffseek-menu-viewed-action][data-viewed-facet="viewed"][data-viewed-value="true"]';
+const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
 
 describeLive('live DiffSeek performance', () => {
   test.describe.configure({ mode: 'serial' });
-  test.setTimeout(900_000);
+  test.setTimeout(1_800_000);
 
   let context: BrowserContext;
-  let networkUrls: string[];
-  let sharedPage: Page;
-  const reported: LivePerfMetrics[] = [];
+  const cold: LivePerfSample[] = [];
+  const warm: LivePerfSample[] = [];
+  const hot: LivePerfSample[] = [];
+  const phases: Array<{ sample: number; phase: string } & RedrawCounts> = [];
 
   test.beforeAll(async () => {
     if (!storageStateSource) {
@@ -54,7 +60,6 @@ describeLive('live DiffSeek performance', () => {
     }
     const extension = resolve('.output/chrome-mv3');
     const userDataDir = await mkdtemp(join(tmpdir(), 'diffseek-live-e2e-'));
-    networkUrls = [];
     context = await chromium.launchPersistentContext(userDataDir, {
       channel: 'chromium',
       headless: true,
@@ -73,128 +78,77 @@ describeLive('live DiffSeek performance', () => {
       );
     }
     await context.addCookies(parseStorageCookies(raw));
-    context.on('request', (request) => {
-      if (!request.serviceWorker()) return;
-      const url = request.url();
-      if (isExtensionMetadataRequest(url)) networkUrls.push(url);
-    });
-    await context.addInitScript(() => {
-      document.addEventListener('diffseek-reconciled', () => {
-        const root = document.documentElement;
-        const current = Number(root.dataset.diffseekRedraws ?? '0');
-        root.dataset.diffseekRedraws = String(current + 1);
-      });
-    });
+    const setup = await context.newPage();
+    await setup.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
+    await assertAuthenticatedReview(setup);
+    await clearViewedFiles(setup);
+    await setup.close();
   });
 
   test.afterAll(async () => {
     await context?.close();
-    if (reported.length === 0) return;
+    if (cold.length === 0) return;
+    const report = {
+      prUrl: livePrUrl,
+      samples,
+      cold,
+      warm,
+      hot,
+      medians: {
+        cold: medianSample(cold),
+        warm: medianSample(warm),
+        hot: medianSample(hot),
+      },
+      phases,
+    };
     const outDir = resolve('.cache');
     await mkdir(outDir, { recursive: true });
     await writeFile(
       join(outDir, 'live-perf-latest.json'),
-      `${JSON.stringify({ prUrl: livePrUrl, metrics: reported }, null, 2)}\n`,
+      `${JSON.stringify(report, null, 2)}\n`,
     );
+    const summary = process.env.GITHUB_STEP_SUMMARY;
+    const markdown = livePerfSummary(report);
+    if (summary) await appendFile(summary, `${markdown}\n`);
+    console.log(markdown);
   });
 
-  test('cold path: clean store indexes generated files', async () => {
-    await clearExtensionStore(context);
-    const setupPage = await context.newPage();
-    await setupPage.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
-    await assertAuthenticatedReview(setupPage);
-    await clearViewedFiles(setupPage);
-    await setupPage.close();
+  test('measures cold, warm, and hot reviews', async () => {
+    for (let index = 0; index < samples; index += 1) {
+      await clearExtensionStore(context);
+      const page = await context.newPage();
+      const coldSample = await measureReview(page, 'cold', async () => {
+        await page.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
+      });
+      cold.push(coldSample);
+      expect(rebuildFailures(coldSample, budgets)).toEqual([]);
+      phases.push(
+        { sample: index, phase: 'toggle-filter', ...(await runToggle(page)) },
+        { sample: index, phase: 'mark-viewed', ...(await runMark(page)) },
+      );
 
-    await clearExtensionStore(context);
-    networkUrls = [];
-    sharedPage = await context.newPage();
-    await sharedPage.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
-    await markNavStart(sharedPage);
-    await resetRedraws(sharedPage);
-    await expect(sharedPage.getByLabel('Filter options')).toBeVisible({
-      timeout: 120_000,
-    });
+      const warmSample = await measureReview(page, 'warm', async () => {
+        await page.reload({ waitUntil: 'domcontentloaded' });
+      });
+      warm.push(warmSample);
+      expect(rebuildFailures(warmSample, budgets)).toEqual([]);
 
-    const menuOpenSeconds = await openFilterMenu(sharedPage);
-    // Stop at full non-viewed categorization (denominator), not viewed settle.
-    await expect(sharedPage.locator(generatedCounter)).toHaveText(
-      generatedCategorizedPattern(expectedGeneratedTotal),
-      { timeout: 120_000 },
-    );
-    const metrics = collectMetrics(
-      'cold',
-      menuOpenSeconds,
-      await secondsSinceNav(sharedPage),
-      networkUrls,
-      await readRedraws(sharedPage),
-    );
-    reportMetrics(metrics, reported);
-    expect(assertWithinBudgets(metrics, budgets)).toEqual([]);
-    expect(metrics.networkRequests).toBeGreaterThan(0);
-  });
+      await showConversation(page);
+      const hotSample = await measureReview(page, 'hot', async () => {
+        await resetRedraws(page);
+        await page.locator('#files_tab').click();
+      });
+      hot.push(hotSample);
+      expect(rebuildFailures(hotSample, budgets)).toEqual([]);
+      await page.close();
+    }
 
-  test('warm path: cached store reopens and reindexes', async () => {
-    networkUrls = [];
-    await sharedPage.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
-    await markNavStart(sharedPage);
-    await resetRedraws(sharedPage);
-    await expect(sharedPage.getByLabel('Filter options')).toBeVisible({
-      timeout: 120_000,
-    });
-
-    const menuOpenSeconds = await openFilterMenu(sharedPage);
-    await expect(sharedPage.locator(generatedCounter)).toHaveText(
-      generatedCategorizedPattern(expectedGeneratedTotal),
-      { timeout: 120_000 },
-    );
-    const metrics = collectMetrics(
-      'warm',
-      menuOpenSeconds,
-      await secondsSinceNav(sharedPage),
-      networkUrls,
-      await readRedraws(sharedPage),
-    );
-    reportMetrics(metrics, reported);
-    expect(assertWithinBudgets(metrics, budgets)).toEqual([]);
-  });
-
-  test('marks all generated files viewed', async () => {
-    networkUrls = [];
-    await closeFilterMenu(sharedPage);
-    await resetRedraws(sharedPage);
-    const menuOpenSeconds = await openFilterMenu(sharedPage);
-    await expect(sharedPage.locator(generatedCounter)).toHaveText(
-      generatedCategorizedPattern(expectedGeneratedTotal),
-      { timeout: 120_000 },
-    );
-    // Mark needs region-enriched viewed controls; indexing no longer waits on that.
-    await expect
-      .poll(() => pageHasUniqueDiffRegions(sharedPage), { timeout: 180_000 })
-      .toBe(true);
-
-    const action = sharedPage.locator(generatedViewedAction);
-    await expect(action).toHaveAttribute('aria-label', 'Mark as viewed');
-    await markNavStart(sharedPage);
-    await action.click();
-    await expect(
-      sharedPage.locator('[data-diffseek="snackbar"]').last(),
-    ).toContainText(`Marked ${expectedGeneratedTotal} files as viewed`, {
-      timeout: 180_000,
-    });
-    await expect(action).toHaveAttribute('aria-label', 'Mark as not viewed', {
-      timeout: 60_000,
-    });
-    await settleRedraws(sharedPage);
-    const metrics = collectMetrics(
-      'mark-generated-viewed',
-      menuOpenSeconds,
-      await secondsSinceNav(sharedPage),
-      networkUrls,
-      await readRedraws(sharedPage),
-    );
-    reportMetrics(metrics, reported);
-    expect(assertWithinBudgets(metrics, budgets)).toEqual([]);
+    for (const phase of phases) {
+      expect(actionFailures(phase.phase, phase, budgets)).toEqual([]);
+    }
+    expect(medianBudgetFailures(medianSample(cold), budgets)).toEqual([]);
+    expect(medianBudgetFailures(medianSample(warm), budgets)).toEqual([]);
+    expect(medianBudgetFailures(medianSample(hot), budgets)).toEqual([]);
   });
 });
 
@@ -208,33 +162,119 @@ async function loadStorageState(source: string): Promise<unknown> {
   return JSON.parse(await readFile(source, 'utf8'));
 }
 
-function collectMetrics(
+async function measureReview(
+  page: Page,
   scenario: LivePerfScenario,
-  menuOpenSeconds: number,
-  indexingSeconds: number,
-  urls: string[],
-  redraws: number,
-): LivePerfMetrics {
-  return {
+  navigate: () => Promise<void>,
+): Promise<LivePerfSample> {
+  const started = Date.now();
+  await navigate();
+  await expect(page.locator('[data-diffseek-viewed-action]').first()).toBeVisible({
+    timeout: 120_000,
+  });
+  const firstRenderSeconds = await renderSeconds(page, started);
+  const menuOpenSeconds = await openFilterMenu(page);
+  await expect(page.locator(generatedCounter)).toHaveText(
+    generatedCategorizedPattern(expectedGeneratedTotal),
+    { timeout: 120_000 },
+  );
+  const counts = await readRedraws(page);
+  const sample: LivePerfSample = {
     scenario,
+    firstRenderSeconds,
     menuOpenSeconds,
-    indexingSeconds,
-    networkRequests: urls.length,
-    networkUrls: [...urls],
-    redraws,
+    panelsSeconds: secondsBetween(started),
+    ...counts,
   };
+  test.info().annotations.push({
+    type: `live-perf:${scenario}`,
+    description: JSON.stringify(sample),
+  });
+  console.log(`diffseek live-perf:${scenario}`, sample);
+  return sample;
 }
 
-function reportMetrics(
-  metrics: LivePerfMetrics,
-  sink: LivePerfMetrics[],
-): void {
-  sink.push(metrics);
-  test.info().annotations.push({
-    type: `live-perf:${metrics.scenario}`,
-    description: JSON.stringify(metrics),
+async function runToggle(page: Page): Promise<RedrawCounts> {
+  await closeFilterMenu(page);
+  await resetRedraws(page);
+  await openFilterMenu(page);
+  const before = await readRedraws(page);
+  await page.locator(viewedToggle).click();
+  await expect
+    .poll(async () => (await readRedraws(page)).reconciles)
+    .toBeGreaterThan(before.reconciles);
+  return subtractCounts(await readRedraws(page), before);
+}
+
+async function runMark(page: Page): Promise<RedrawCounts> {
+  await resetRedraws(page);
+  const before = await readRedraws(page);
+  const action = page.locator('[data-diffseek-viewed-action][aria-pressed="false"]').first();
+  await action.click();
+  await expect(action).toHaveAttribute('aria-pressed', 'true', { timeout: 60_000 });
+  return subtractCounts(await readRedraws(page), before);
+}
+
+async function showConversation(page: Page): Promise<void> {
+  const conversation = page.locator('#conversation_tab');
+  const files = page.locator('#files_tab');
+  if ((await conversation.count()) === 0 || (await files.count()) === 0) {
+    const tabs = await page.locator('.tabnav').first().innerText().catch(() => '');
+    throw new Error(`PR tabs missing at ${page.url()}: ${tabs}`);
+  }
+  await conversation.click();
+  await expect(page.locator('[data-diffseek-viewed-action]')).toHaveCount(0, {
+    timeout: 60_000,
   });
-  console.log(`diffseek live-perf:${metrics.scenario}`, metrics);
+}
+
+async function renderSeconds(page: Page, started: number): Promise<number> {
+  const raw = await page.locator('html').getAttribute('data-diffseek-first-render-epoch');
+  const epoch = Number(raw);
+  if (Number.isFinite(epoch) && epoch >= started) {
+    return Number(((epoch - started) / 1000).toFixed(3));
+  }
+  return secondsBetween(started);
+}
+
+function secondsBetween(started: number): number {
+  return Number(((Date.now() - started) / 1000).toFixed(3));
+}
+
+async function readRedraws(page: Page): Promise<RedrawCounts> {
+  const counts = await page.locator('html').evaluate((root) => {
+    const data = root.dataset;
+    const value = (key: string) => {
+      const parsed = Number(data[key] ?? '0');
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    return {
+      reconciles: value('diffseekReconciles'),
+      domMutations: value('diffseekDomMutations'),
+      treeRebuilds: value('diffseekTreeRebuilds'),
+      panelRebuilds: value('diffseekPanelRebuilds'),
+      treeRowsRemoved: value('diffseekTreeRowsRemoved'),
+      panelsRemoved: value('diffseekPanelsRemoved'),
+    };
+  });
+  return counts;
+}
+
+async function resetRedraws(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    document.dispatchEvent(new Event('diffseek-redraw-reset'));
+  });
+}
+
+function subtractCounts(after: RedrawCounts, before: RedrawCounts): RedrawCounts {
+  return {
+    reconciles: after.reconciles - before.reconciles,
+    domMutations: after.domMutations - before.domMutations,
+    treeRebuilds: after.treeRebuilds - before.treeRebuilds,
+    panelRebuilds: after.panelRebuilds - before.panelRebuilds,
+    treeRowsRemoved: after.treeRowsRemoved - before.treeRowsRemoved,
+    panelsRemoved: after.panelsRemoved - before.panelsRemoved,
+  };
 }
 
 async function assertAuthenticatedReview(page: Page): Promise<void> {
@@ -252,7 +292,7 @@ async function assertAuthenticatedReview(page: Page): Promise<void> {
 }
 
 async function openFilterMenu(page: Page): Promise<number> {
-  await page.evaluate(() => performance.mark('diffseek-menu-click'));
+  const started = Date.now();
   const filters = page.locator('[data-diffseek="filters"]');
   const button = page.getByRole('button', { name: 'Filter options' });
   for (let attempt = 0; attempt < 8 && (await filters.count()) === 0; attempt += 1) {
@@ -260,16 +300,7 @@ async function openFilterMenu(page: Page): Promise<number> {
     await button.click({ delay: 80 }).catch(() => undefined);
   }
   await expect(filters).toHaveCount(1, { timeout: 60_000 });
-  return page.evaluate(() => {
-    performance.mark('diffseek-menu-ready');
-    performance.measure(
-      'diffseek-menu-open',
-      'diffseek-menu-click',
-      'diffseek-menu-ready',
-    );
-    const entry = performance.getEntriesByName('diffseek-menu-open').at(-1);
-    return Number(((entry?.duration ?? 0) / 1000).toFixed(3));
-  });
+  return secondsBetween(started);
 }
 
 async function closeFilterMenu(page: Page): Promise<void> {
@@ -285,79 +316,6 @@ async function dismissCompactLinePopover(page: Page): Promise<void> {
     )) {
       if (popover.textContent?.includes('compact line height')) popover.remove();
     }
-  });
-}
-
-async function markNavStart(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    performance.clearMarks('diffseek-nav-start');
-    performance.mark('diffseek-nav-start');
-  });
-}
-
-async function secondsSinceNav(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    performance.mark('diffseek-nav-end');
-    performance.measure(
-      'diffseek-nav',
-      'diffseek-nav-start',
-      'diffseek-nav-end',
-    );
-    const entry = performance.getEntriesByName('diffseek-nav').at(-1);
-    return Number(((entry?.duration ?? 0) / 1000).toFixed(3));
-  });
-}
-
-async function resetRedraws(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    document.documentElement.dataset.diffseekRedraws = '0';
-  });
-}
-
-async function readRedraws(page: Page): Promise<number> {
-  const value = Number(
-    await page.locator('html').getAttribute('data-diffseek-redraws'),
-  );
-  return Number.isFinite(value) ? value : 0;
-}
-
-async function settleRedraws(page: Page, quietMs = 750): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const before = await readRedraws(page);
-        await page.evaluate(
-          (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-          quietMs,
-        );
-        return (await readRedraws(page)) === before;
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(true);
-}
-
-async function pageHasUniqueDiffRegions(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const tree = document.querySelector(
-      '[role="tree"][aria-label="File Tree"]',
-    );
-    if (!tree) return false;
-    const fileRows = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')]
-      .filter((item) =>
-        [...item.querySelectorAll('a[href^="#diff-"]')].some(
-          (link) => link.closest('[role="treeitem"]') === item,
-        ),
-      );
-    const regions = [
-      ...document.querySelectorAll('[role="region"][id^="diff-"]'),
-    ];
-    if (fileRows.length === 0 || regions.length !== fileRows.length) return false;
-    const counts = new Map<string, number>();
-    for (const region of regions) {
-      counts.set(region.id, (counts.get(region.id) ?? 0) + 1);
-    }
-    return [...counts.values()].every((count) => count === 1);
   });
 }
 

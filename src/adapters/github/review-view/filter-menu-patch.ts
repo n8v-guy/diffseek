@@ -89,14 +89,16 @@ function patchRow(
       viewed: escapeViewed || row.viewed,
       disabled: row.disabled === true,
     };
-    countAction.textContent = `${row.visible}/${row.total}`;
+    const count = `${row.visible}/${row.total}`;
+    if (countAction.textContent !== count) countAction.textContent = count;
     configureViewedAction(countAction, actionOptions);
     configureViewedAction(viewedAction, actionOptions);
     return true;
   }
   if (countAction || viewedAction) return false;
   if (counter) {
-    counter.textContent = `${row.visible}/${row.total}`;
+    const count = `${row.visible}/${row.total}`;
+    if (counter.textContent !== count) counter.textContent = count;
     return true;
   }
   return false;
