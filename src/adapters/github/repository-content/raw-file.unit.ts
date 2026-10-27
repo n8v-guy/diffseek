@@ -28,7 +28,7 @@ describe('raw repository files', () => {
   });
 
   it('returns text and response metadata', async () => {
-    const request = vi.fn(async () =>
+    const request = vi.fn<typeof fetch>(async () =>
       new Response('*.ts group=code', {
         headers: { 'content-type': 'text/plain' },
       }),

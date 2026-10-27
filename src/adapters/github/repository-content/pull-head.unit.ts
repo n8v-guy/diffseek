@@ -4,7 +4,7 @@ import { fetchPullHead, pullCommitsUrl } from './pull-head';
 
 describe('pull head', () => {
   it('resolves the final commit from GitHub commits-page data', async () => {
-    const request = vi.fn(async () =>
+    const request = vi.fn<typeof fetch>(async () =>
       new Response(
         [
           `{"oid":"${'1'.repeat(40)}"}`,
