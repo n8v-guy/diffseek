@@ -1,7 +1,7 @@
-import type {
-  FilterDefaults,
-  FilterDefaultState,
-  RememberedFilterFacet,
+import {
+  type FilterDefaults,
+  type FilterDefaultState,
+  type RememberedFilterFacet,
 } from '@diffseek/browser/filter-defaults';
 import type { LabelFacet } from '@diffseek/review';
 
@@ -40,37 +40,53 @@ export function applyCheckedState(
 }
 
 export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
-  if (
-    !isRememberedFilterFacet(options.facet) ||
-    !options.filterDefaults
-  ) {
-    return false;
-  }
   const defaults = options.filterDefaults;
-  if (
-    options.facet === 'generated' &&
-    defaults.viewed.has('generated')
-  ) {
+  if (!isRememberedFilterFacet(options.facet) || !defaults) return false;
+  if (options.facet === 'generated') cycleGenerated(options, defaults);
+  else cycleViewed(options, defaults);
+  return true;
+}
+
+function cycleGenerated(
+  options: FilterDefaultOptions,
+  defaults: FilterDefaults,
+): void {
+  if (defaults.viewed.has('generated')) {
     defaults.viewed.delete('generated');
+    options.onFilterDefaultChange?.('generated', 'hidden');
+    return;
+  }
+  if (defaults.hidden.has('generated')) {
     defaults.hidden.delete('generated');
     options.excluded.delete(options.value);
     options.onFilterDefaultChange?.('generated', 'shown');
-  } else if (defaults.hidden.has(options.facet)) {
-    if (options.facet === 'generated') {
-      defaults.viewed.add('generated');
-      options.onFilterDefaultChange?.('generated', 'hidden-viewed');
-    } else {
-      defaults.hidden.delete(options.facet);
-      options.excluded.delete(options.value);
-      options.onFilterDefaultChange?.(options.facet, 'shown');
-    }
-  } else if (options.excluded.has(options.value)) {
-    defaults.hidden.add(options.facet);
-    options.onFilterDefaultChange?.(options.facet, 'hidden');
-  } else {
-    options.excluded.add(options.value);
+    return;
   }
-  return true;
+  if (options.excluded.has(options.value)) {
+    defaults.hidden.add('generated');
+    defaults.viewed.add('generated');
+    options.onFilterDefaultChange?.('generated', 'hidden-viewed');
+    return;
+  }
+  options.excluded.add(options.value);
+}
+
+function cycleViewed(
+  options: FilterDefaultOptions,
+  defaults: FilterDefaults,
+): void {
+  if (defaults.hidden.has('viewed')) {
+    defaults.hidden.delete('viewed');
+    options.excluded.delete(options.value);
+    options.onFilterDefaultChange?.('viewed', 'shown');
+    return;
+  }
+  if (options.excluded.has(options.value)) {
+    defaults.hidden.add('viewed');
+    options.onFilterDefaultChange?.('viewed', 'hidden');
+    return;
+  }
+  options.excluded.add(options.value);
 }
 
 function isRememberedFilterFacet(

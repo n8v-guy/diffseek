@@ -27,11 +27,12 @@ Classic `/pull/:number/files` review URLs are replaced with GitHub's modern
 DiffSeek replaces the contents of GitHub's **Filter options** menu with viewed,
 generated-file, owner, type, language, and change-status filters. It retains the
 native menu container and interaction model. When `diffseek:filter-defaults` has
-never been saved, viewed and generated files start hidden; any stored record is
-applied unchanged, including an explicit empty one. Viewed and generated filters
-cycle through shown, hidden, and extension-wide default-hidden states; generated
-files also support default-hidden-and-viewed. The menu shows that state with the
-mixed mark and `visible/total` counts. Multi-item sections expose row-hover
+never been saved, viewed and generated files start on always hide; any stored
+record is applied unchanged, including an explicit empty one. Viewed files cycle
+show, hide, always hide. Generated files cycle show, hide, always hide and mark
+as read, always hide. The fresh always-hide state means the first Generated
+click shows those files and does not mark them viewed. The menu shows that state
+with the mixed mark and `visible/total` counts. Multi-item sections expose row-hover
 `only` and title-hover `all` shortcuts. Non-matches are hidden in the file tree
 and collapsed/muted in place in the diff. File, folder, counter-pill, and
 counter-overlay actions mark their current visible scope viewed through

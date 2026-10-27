@@ -133,3 +133,6 @@ Reading defaults does not write the implicit state.
 **Why:** New installs reduce review noise without a migration that overwrites
 people who already saved a preference, including show-all. **Cost:** The
 implicit default is reapplied on every session until a remembered row changes.
+Generated clicks run show, hide, always hide and mark as read, always hide, so
+the fresh always-hide state returns to show on the first click and does not
+mark files viewed.

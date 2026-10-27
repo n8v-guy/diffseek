@@ -515,9 +515,7 @@ test('clears native filters before taking over the menu', async () => {
   ).toHaveCount(0);
 
   await generated.click();
-  await generated.click();
-  await expect(generated).toHaveAttribute('aria-checked', 'mixed');
-  await expect(generated).not.toHaveAttribute('data-default-viewed', 'true');
+  await expect(generated).toHaveAttribute('aria-checked', 'false');
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'mixed');
   await expect(generated).toHaveAttribute('data-default-viewed', 'true');
@@ -531,6 +529,12 @@ test('clears native filters before taking over the menu', async () => {
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
+  await generated.click();
+  await expect(generated).toHaveAttribute('aria-checked', 'mixed');
+  await expect(generated).not.toHaveAttribute('data-default-viewed', 'true');
+  await expect(
+    page.locator('[data-diffseek="snackbar"]').last(),
+  ).toContainText('Hide generated files by default');
   await generated.click();
   await expect(
     page.locator(
@@ -825,16 +829,14 @@ test('hides generated and viewed files for a fresh install and honors saved pref
   ).toBeHidden();
 
   await generated.click();
-  await expect(generated).toHaveAttribute('data-default-viewed', 'true');
-  await expect(generated).toBeEnabled();
-  await expect(
-    page.locator('#diff-generated button[aria-label="Viewed"]'),
-  ).toHaveAttribute('aria-pressed', 'true');
-  await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'true');
+  await expect(generated).not.toHaveAttribute('data-default-viewed', 'true');
   await expect(
     page.locator('[role="treeitem"][id="src/generated.ts"]'),
   ).toBeVisible();
+  await expect(
+    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'false');
   expect(await readStoredFilterDefaults()).toEqual({
     'diffseek:filter-defaults': { hidden: [], viewed: [] },
   });

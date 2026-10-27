@@ -606,16 +606,11 @@ describe('fresh filter defaults', () => {
 
     generated()?.click();
     await vi.waitFor(() => {
-      expect(generated()?.dataset.defaultViewed).toBe('true');
-      expect(generated()?.disabled).toBe(false);
-    });
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
-
-    generated()?.click();
-    await vi.waitFor(() => {
       expect(generated()?.getAttribute('aria-checked')).toBe('true');
       expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
     });
+    expect(generated()?.dataset.defaultViewed).toBeUndefined();
+    expect(markFiles).not.toHaveBeenCalled();
     await vi.waitFor(async () =>
       expect(
         await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
@@ -744,6 +739,28 @@ describe('review app interactions', () => {
         )?.disabled,
       ).toBe(false),
     );
+
+    document
+      .querySelector<HTMLButtonElement>(
+        '[data-filter-kind="generated"][data-filter-value="true"]',
+      )
+      ?.click();
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector<HTMLButtonElement>(
+          '[data-filter-kind="generated"][data-filter-value="true"]',
+        )?.dataset.defaultViewed,
+      ).toBeUndefined(),
+    );
+    expect(
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-filter-kind="generated"][data-filter-value="true"]',
+        )
+        ?.getAttribute('aria-checked'),
+    ).toBe('mixed');
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(markFiles).toHaveBeenCalledTimes(1);
 
     document
       .querySelector<HTMLButtonElement>(
