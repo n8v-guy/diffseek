@@ -23,13 +23,17 @@ adapter is a high-value integration seam and therefore needs broader fixtures.
 cached default-branch, else bundled assumptions. Uncached pull-head content
 replaces the open review and is stored in that LRU. A default-branch `HEAD`
 refresh is an isolated cache prefetch only when the repo has no default-branch
-cache yet; it does not replace the open review. Failures retain the preceding
-level.
+cache yet; it does not replace a settled pull-head result. If that pull-head
+read fails, the open review adopts the settled default-branch result. A
+transport failure is not stored. The read is retried, and a later success
+replaces the open review. A missing file retains the preceding level.
 
 **Why:** Warm revisits skip `CODEOWNERS` / `.gitattributes` reloads while unknown
-PRs still start from HEAD. **Cost:** a PR-head file at a GitHub-higher path than
-the last default-branch hit is not seen until that cached path 404s or the PR
-head SHA changes.
+PRs still start from HEAD. A cold review still picks up generated and owner
+rules when the first raw fetch is slow or fails. **Cost:** a PR-head file at a
+GitHub-higher path than the last default-branch hit is not seen until that
+cached path 404s or the PR head SHA changes. A hung raw fetch is abandoned
+after 20s and retried.
 
 ## D004 — Label sources compose through one interface
 

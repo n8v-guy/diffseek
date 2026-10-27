@@ -38,6 +38,8 @@ export function rawFileUrl(request: RawFileRequest): string {
   ].join('/');
 }
 
+const rawFileTimeoutMs = 20_000;
+
 export async function fetchRawFile(
   input: RawFileRequest,
   request: typeof fetch = fetch,
@@ -45,6 +47,7 @@ export async function fetchRawFile(
   const response = await request(rawFileUrl(input), {
     credentials: 'include',
     redirect: 'follow',
+    signal: AbortSignal.timeout(rawFileTimeoutMs),
   });
   if (response.status === 404) return { status: 'missing' };
   if (!response.ok) {

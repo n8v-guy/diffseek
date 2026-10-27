@@ -18,7 +18,11 @@ describe('pull head', () => {
     ).resolves.toBe('2'.repeat(40));
     expect(request).toHaveBeenCalledWith(
       'https://github.com/owner/repo/pull/42/commits',
-      { credentials: 'include', redirect: 'follow' },
+      expect.objectContaining({
+        credentials: 'include',
+        redirect: 'follow',
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 

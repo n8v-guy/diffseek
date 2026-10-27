@@ -121,7 +121,7 @@ describe('review app lifecycle', () => {
 
     expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull();
     expect(readPull).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ pull: 1 }), { codeowners: '', attributes: 'src/** group=cached' });
-    expect(refreshDefault).not.toHaveBeenCalled();
+    expect(refreshDefault).toHaveBeenCalledOnce();
     resolvePull?.({
       codeowners: '',
       attributes: 'src/** group=pull',
@@ -216,6 +216,41 @@ describe('review app lifecycle', () => {
     );
     expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
     setSpy.mockRestore();
+    app.stop();
+  });
+
+  it('adopts default-branch attributes when the pull-head read keeps failing', async () => {
+    await fakeBrowser.storage.local.clear();
+    openMenu();
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => ({
+        codeowners: '',
+        attributes: 'docs/** group=Docs',
+      }),
+      readPull: async () => {
+        throw new Error('offline');
+      },
+      refreshDefault: async () => ({
+        metadata: {
+          codeowners: '',
+          attributes: 'src/generated.ts linguist-generated',
+        },
+        changed: true,
+      }),
+    });
+
+    await vi.waitFor(() =>
+      expect(
+        document
+          .querySelector(
+            '[data-filter-kind="generated"][data-filter-value="true"]',
+          )
+          ?.getAttribute('aria-checked'),
+      ).toBe('mixed'),
+    );
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
     app.stop();
   });
 

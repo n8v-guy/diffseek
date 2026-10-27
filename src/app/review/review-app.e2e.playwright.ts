@@ -842,6 +842,62 @@ test('hides generated and viewed files for a fresh install and honors saved pref
   });
 });
 
+test('applies a late gitattributes fetch on a fresh store', async () => {
+  await writeFilterDefaults(null);
+  let releaseAttributes = () => {};
+  const attributesReady = new Promise<void>((resolve) => {
+    releaseAttributes = resolve;
+  });
+  const attributesRoute = 'https://github.com/octo/repo/raw/**/.gitattributes';
+  await context.route(attributesRoute, async (route) => {
+    await attributesReady;
+    await route.fulfill({
+      contentType: 'text/plain',
+      body: [
+        'src/** group=Code',
+        'docs/** group=Docs',
+        '*.ts linguist-language=TypeScript',
+        'src/generated.ts linguist-generated',
+      ].join('\n'),
+    });
+  });
+  try {
+    const page = await context.newPage();
+    const fixture = await readFile(fixturePath, 'utf8');
+    await page.route(
+      'https://github.com/octo/repo/pull/10/changes',
+      async (route) => {
+        await route.fulfill({
+          contentType: 'text/html',
+          body: instrument(fixture),
+        });
+      },
+    );
+    await page.goto('https://github.com/octo/repo/pull/10/changes');
+    await page.getByLabel('Filter options').click();
+    const generated = page.locator(
+      '[data-filter-kind="generated"][data-filter-value="true"]',
+    );
+    await expect(
+      page.locator('[data-filter-kind="viewed"][data-filter-value="true"]'),
+    ).toHaveAttribute('aria-checked', 'mixed');
+    await expect(generated).toHaveCount(0);
+    await expect(
+      page.locator('[role="treeitem"][id="src/generated.ts"]'),
+    ).toBeVisible();
+
+    releaseAttributes();
+    await expect(generated).toHaveAttribute('aria-checked', 'mixed');
+    await expect(
+      page.locator('[role="treeitem"][id="src/generated.ts"]'),
+    ).toBeHidden();
+    expect(await readStoredFilterDefaults()).toEqual({});
+  } finally {
+    releaseAttributes();
+    await context.unroute(attributesRoute);
+  }
+});
+
 async function extensionWorker() {
   return (
     context.serviceWorkers()[0] ??

@@ -20,6 +20,36 @@ import {
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
+export async function replaceReviewMetadata(options: {
+  readPull: () => Promise<RepositoryMetadata>;
+  refreshDefault: () => Promise<{
+    metadata: RepositoryMetadata;
+    changed: boolean;
+  }>;
+  commit: (metadata: RepositoryMetadata) => Promise<boolean>;
+  aborted: () => boolean;
+  apply: (metadata: RepositoryMetadata) => void;
+}): Promise<void> {
+  let pullApplied = false;
+  await Promise.all([
+    options
+      .readPull()
+      .then((metadata) => {
+        pullApplied = true;
+        if (!options.aborted()) options.apply(metadata);
+      })
+      .catch(() => undefined),
+    options
+      .refreshDefault()
+      .then(async (result) => {
+        if (options.aborted() || !result.changed) return;
+        await options.commit(result.metadata).catch(() => false);
+        if (!pullApplied && !options.aborted()) options.apply(result.metadata);
+      })
+      .catch(() => undefined),
+  ]);
+}
+
 export function classifyKeyFor(
   metadata: RepositoryMetadata,
   files: readonly FileRecord[],

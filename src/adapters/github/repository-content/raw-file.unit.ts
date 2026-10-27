@@ -47,7 +47,11 @@ describe('raw repository files', () => {
     });
     expect(request).toHaveBeenCalledWith(
       'https://github.com/owner/repo/raw/HEAD/.gitattributes',
-      { credentials: 'include', redirect: 'follow' },
+      expect.objectContaining({
+        credentials: 'include',
+        redirect: 'follow',
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 

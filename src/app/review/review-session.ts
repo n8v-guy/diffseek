@@ -52,6 +52,7 @@ import {
   projectionKeyFor,
   queuePanelReconcile,
   refreshViewedState,
+  replaceReviewMetadata,
   retainNativeOwners,
   syncViewedLabels,
   watchObservationRoots,
@@ -383,27 +384,25 @@ export class ReviewSession {
     });
   }
 
-  private async refreshMetadata(): Promise<void> {
-    const pullMetadata = await this.options
-      .readPull(this.options.review, this.metadata)
-      .catch(() => this.metadata);
-    if (this.lifecycle.signal.aborted) return;
-    if (JSON.stringify(this.metadata) !== JSON.stringify(pullMetadata)) {
-      this.metadata = pullMetadata;
-      this.classifyKey = '';
-      this.reconcile();
-    }
-    const defaultResult = await this.options
-      .refreshDefault(this.options.review)
-      .catch(() => ({ metadata: this.metadata, changed: false }));
-    if (this.lifecycle.signal.aborted || !defaultResult.changed) return;
-    await this.options.metadataCommits
-      .commit(
-        this.options.review,
-        this.metadataRevision,
-        defaultResult.metadata,
-      )
-      .catch(() => false);
+  private refreshMetadata(): Promise<void> {
+    const fallback = this.metadata;
+    return replaceReviewMetadata({
+      readPull: () => this.options.readPull(this.options.review, fallback),
+      refreshDefault: () => this.options.refreshDefault(this.options.review),
+      commit: (metadata) =>
+        this.options.metadataCommits.commit(
+          this.options.review,
+          this.metadataRevision,
+          metadata,
+        ),
+      aborted: () => this.lifecycle.signal.aborted,
+      apply: (metadata) => {
+        if (JSON.stringify(this.metadata) === JSON.stringify(metadata)) return;
+        this.metadata = metadata;
+        this.classifyKey = '';
+        this.reconcile();
+      },
+    });
   }
 
   private classifyIfNeeded(snapshot: SupportedSnapshot): void {
