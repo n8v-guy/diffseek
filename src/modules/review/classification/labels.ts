@@ -28,6 +28,8 @@ export type LabelFacet = (typeof labelFacets)[number];
 export type FileLabel = {
   facet: LabelFacet;
   value: string;
+  /** Languages facet: true when value comes from linguist-language. */
+  mapped?: boolean;
 };
 
 export type LabelContext = {

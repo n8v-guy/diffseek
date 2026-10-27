@@ -20,8 +20,8 @@ export const facetDefinitions: FacetDefinition[] = [
     native: false,
     label: (value) => (value === 'Unmapped' ? 'No owner' : value),
   },
-  { facet: 'groups', heading: 'Types', native: false, label: identity },
-  { facet: 'languages', heading: 'Languages', native: false, label: identity },
+  { facet: 'groups', heading: 'Groups', native: false, label: identity },
+  { facet: 'languages', heading: 'Formats', native: false, label: identity },
   {
     facet: 'viewed',
     heading: 'Viewed',
@@ -65,18 +65,25 @@ export function facetChoices(
   labelSets: FileLabel[][],
   excluded: FacetExclusions,
 ): string[] {
-  return [
-    ...new Set([
-      ...labelSets
-        .flat()
-        .filter((label) => label.facet === facet)
-        .map((label) => label.value),
-      ...(excluded.get(facet) ?? []),
-    ]),
-  ].sort((left, right) => {
-    const leftSpecial = isFallbackFacetValue(facet, left);
-    const rightSpecial = isFallbackFacetValue(facet, right);
-    if (leftSpecial !== rightSpecial) return leftSpecial ? 1 : -1;
+  const sortGroup = new Map<string, number>();
+  for (const label of labelSets.flat()) {
+    if (label.facet !== facet) continue;
+    const group = facetSortGroup(facet, label);
+    const previous = sortGroup.get(label.value);
+    sortGroup.set(
+      label.value,
+      previous == null ? group : Math.min(previous, group),
+    );
+  }
+  for (const value of excluded.get(facet) ?? []) {
+    if (!sortGroup.has(value)) {
+      sortGroup.set(value, isFallbackFacetValue(facet, value) ? 2 : 0);
+    }
+  }
+  return [...sortGroup.keys()].sort((left, right) => {
+    const leftGroup = sortGroup.get(left) ?? 0;
+    const rightGroup = sortGroup.get(right) ?? 0;
+    if (leftGroup !== rightGroup) return leftGroup - rightGroup;
     const foldedLeft = left.toLocaleLowerCase();
     const foldedRight = right.toLocaleLowerCase();
     return foldedLeft < foldedRight
@@ -89,6 +96,12 @@ export function facetChoices(
             ? 1
             : 0;
   });
+}
+
+function facetSortGroup(facet: LabelFacet, label: FileLabel): number {
+  if (isFallbackFacetValue(facet, label.value)) return 2;
+  if (facet === 'languages' && !label.mapped) return 1;
+  return 0;
 }
 
 export function excludedFacetCount(excluded: FacetExclusions): number {

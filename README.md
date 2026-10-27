@@ -68,12 +68,12 @@ dist/source/** -linguist-generated
 ```
 
 Rules follow ordered Git-attribute assignment: the last matching value for each
-attribute wins. Paths without `linguist-language` fall back to their lowercase
-extension or `No extension`; paths without `group` use `No type`. If one
-explicit language spans multiple extensions in a PR, DiffSeek exposes aggregate
-and specific choices such as `TypeScript`, `TypeScript (ts)`, and
-`TypeScript (tsx)`. Owners, Types, or Languages is omitted when its only choice
-is respectively `No owner`, `No type`, or `No extension`.
+attribute wins. Paths without `linguist-language` fall back to their file
+extension or `No extension`; paths without `group` use `No type`. Mapped
+languages appear first in Formats as one entry each (for example `TypeScript`
+for both `.ts` and `.tsx`); unmapped extensions follow. Owners, Groups, or
+Formats is omitted when its only choice is respectively `No owner`, `No type`,
+or `No extension`.
 
 Missing default-branch files retain bundled assumptions. Missing PR-head files
 retain the corresponding default-branch fallback. Default-branch metadata is

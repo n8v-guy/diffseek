@@ -458,7 +458,7 @@ test('clears native filters before taking over the menu', async () => {
   ).toBeVisible();
   await expect(
     menu.locator('.diffseek-menu-section h3'),
-  ).toHaveText(['Owners', 'Types', 'Languages', 'Change status']);
+  ).toHaveText(['Owners', 'Groups', 'Formats', 'Change status']);
 
   const ownerRow = page.locator(
     '.diffseek-menu-row:has([data-filter-kind="owners"][data-filter-value="@pull-source"])',
