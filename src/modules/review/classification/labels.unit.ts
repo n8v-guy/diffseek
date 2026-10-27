@@ -29,23 +29,20 @@ src/app.test.ts linguist-generated
         { facet: 'groups', value: 'code' },
         { facet: 'owners', value: '@team' },
         { facet: 'languages', value: 'TypeScript' },
-        { facet: 'languages', value: 'TypeScript (ts)' },
         { facet: 'statuses', value: 'added' },
         { facet: 'generated', value: 'true' },
       ]),
     );
-    expect(files[1]?.labels).toEqual(
-      expect.arrayContaining([
-        { facet: 'languages', value: 'TypeScript' },
-        { facet: 'languages', value: 'TypeScript (tsx)' },
-      ]),
-    );
+    expect(languageValues(files[0]!)).toEqual(['TypeScript']);
+    expect(languageValues(files[1]!)).toEqual(['TypeScript']);
   });
 
   it('falls back to lowercase extensions and No extension', () => {
     const files = [
       file('src/app.ts', '.ts'),
-      file('scripts/build.MJS', '.mjs'),
+      file('scripts/build.MJS', '.MJS'),
+      file('config/App.YAML', '.YAML'),
+      file('config/other.yaml', '.yaml'),
       file('LICENSE', null),
     ];
 
@@ -58,7 +55,9 @@ src/app.test.ts linguist-generated
 
     expect(languageValues(files[0]!)).toEqual(['TypeScript']);
     expect(languageValues(files[1]!)).toEqual(['mjs']);
-    expect(languageValues(files[2]!)).toEqual(['No extension']);
+    expect(languageValues(files[2]!)).toEqual(['yaml']);
+    expect(languageValues(files[3]!)).toEqual(['yaml']);
+    expect(languageValues(files[4]!)).toEqual(['No extension']);
   });
 
   it('labels only viewed files with the viewed facet', () => {

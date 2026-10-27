@@ -20,8 +20,8 @@ export const facetDefinitions: FacetDefinition[] = [
     native: false,
     label: (value) => (value === 'Unmapped' ? 'No owner' : value),
   },
-  { facet: 'groups', heading: 'Types', native: false, label: identity },
-  { facet: 'languages', heading: 'Languages', native: false, label: identity },
+  { facet: 'groups', heading: 'Groups', native: false, label: identity },
+  { facet: 'languages', heading: 'Formats', native: false, label: identity },
   {
     facet: 'viewed',
     heading: 'Viewed',
@@ -74,9 +74,9 @@ export function facetChoices(
       ...(excluded.get(facet) ?? []),
     ]),
   ].sort((left, right) => {
-    const leftSpecial = isFallbackFacetValue(facet, left);
-    const rightSpecial = isFallbackFacetValue(facet, right);
-    if (leftSpecial !== rightSpecial) return leftSpecial ? 1 : -1;
+    const leftGroup = facetSortGroup(facet, left);
+    const rightGroup = facetSortGroup(facet, right);
+    if (leftGroup !== rightGroup) return leftGroup - rightGroup;
     const foldedLeft = left.toLocaleLowerCase();
     const foldedRight = right.toLocaleLowerCase();
     return foldedLeft < foldedRight
@@ -89,6 +89,13 @@ export function facetChoices(
             ? 1
             : 0;
   });
+}
+
+function facetSortGroup(facet: LabelFacet, value: string): number {
+  if (isFallbackFacetValue(facet, value)) return 2;
+  // Unmapped extensions are lowercased; mapped language names keep their casing.
+  if (facet === 'languages' && value === value.toLocaleLowerCase()) return 1;
+  return 0;
 }
 
 export function excludedFacetCount(excluded: FacetExclusions): number {

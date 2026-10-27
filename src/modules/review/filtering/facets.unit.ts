@@ -43,14 +43,16 @@ describe('filter facets', () => {
     ]);
   });
 
-  it('sorts ordinary values case-insensitively before special fallbacks', () => {
+  it('sorts mapped languages before unmapped extensions and fallbacks', () => {
     const selected = emptyFacetExclusions();
     const choices: FileLabel[][] = [
       [
         { facet: 'languages', value: 'No extension' },
         { facet: 'languages', value: 'zsh' },
+        { facet: 'languages', value: 'TypeScript' },
         { facet: 'languages', value: 'CSS' },
         { facet: 'languages', value: 'bash' },
+        { facet: 'languages', value: 'yaml' },
         { facet: 'owners', value: 'Unmapped' },
         { facet: 'owners', value: '@zeta' },
         { facet: 'owners', value: '@Alpha' },
@@ -62,8 +64,10 @@ describe('filter facets', () => {
     ];
 
     expect(facetChoices('languages', choices, selected)).toEqual([
-      'bash',
       'CSS',
+      'TypeScript',
+      'bash',
+      'yaml',
       'zsh',
       'No extension',
     ]);

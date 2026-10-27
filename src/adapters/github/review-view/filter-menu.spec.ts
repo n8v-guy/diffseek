@@ -99,9 +99,9 @@ describe('mountFilterMenu', () => {
       element.querySelectorAll('[data-diffseek-native-hidden]'),
     ).toHaveLength(2);
     expect(element.querySelectorAll('[data-diffseek="filters"]')).toHaveLength(1);
-    expect(element.textContent).toContain('Types');
+    expect(element.textContent).toContain('Groups');
     expect(element.textContent).toContain('Owners');
-    expect(element.textContent).toContain('Languages');
+    expect(element.textContent).toContain('Formats');
     expect(element.textContent).toContain('Viewed files');
     expect(element.textContent).toContain('Generated files');
     expect(element.textContent).toContain('Change status');
@@ -109,7 +109,7 @@ describe('mountFilterMenu', () => {
       [...element.querySelectorAll('.diffseek-menu-section h3')].map(
         (heading) => heading.textContent,
       ),
-    ).toEqual(['Owners', 'Types', 'Languages', 'Change status']);
+    ).toEqual(['Owners', 'Groups', 'Formats', 'Change status']);
     expect(
       element.querySelector(
         '[data-filter-kind="generated"][data-filter-value="true"]',

@@ -117,7 +117,7 @@ unrelated files. **Cost:** Action scope exceptionally extends beyond visible
 ## D010 — Fallback labels remain data but not menu noise
 
 **Decision:** Ungrouped files receive `No type`, matching `No owner` and
-`No extension`. Omit Owners, Types, or Languages when its sole value is its
+`No extension`. Omit Owners, Groups, or Formats when its sole value is its
 fallback.
 
 **Why:** Every file remains classifiable when mixed values make a facet useful,
