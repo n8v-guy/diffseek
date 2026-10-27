@@ -43,9 +43,14 @@ import {
 
 import { ViewedActionExecutor } from './action-executor';
 import {
+  cancelPanelReconcile,
   classifyKeyFor,
   classifySnapshot,
+  discoverySchedule,
+  type PanelReconcileSchedule,
+  type PanelScheduleOptions,
   projectionKeyFor,
+  queuePanelReconcile,
   refreshViewedState,
   retainNativeOwners,
   syncViewedLabels,
@@ -85,7 +90,11 @@ export class ReviewSession {
   private readonly observedRoots = new Set<Element>();
   private readonly onNativeClick: (event: MouseEvent) => void;
   private snapshot: SupportedSnapshot | null = null;
-  private scheduled = false;
+  private readonly scheduleState: PanelReconcileSchedule = {
+    timer: null,
+    delayMs: 0,
+    scheduled: false,
+  };
   private reconciling = false;
   private dirty = false;
   private defaultViewedInFlight = 0;
@@ -129,12 +138,13 @@ export class ReviewSession {
     };
     options.root.addEventListener('click', this.onNativeClick, true);
     this.observer = new MutationObserver((records) => {
-      if (records.some(isNativeMutation)) this.schedule();
+      if (records.some(isNativeMutation)) this.schedule({ immediate: true });
     });
     this.discoveryObserver = new MutationObserver((records) => {
-      if (!records.some(isNativeMutation)) return;
+      const mode = discoverySchedule(records);
+      if (!mode) return;
       this.refreshObservationRoots();
-      this.schedule();
+      this.schedule(mode);
     });
     this.discoveryObserver.observe(options.root.body, {
       childList: true,
@@ -154,7 +164,7 @@ export class ReviewSession {
       return;
     }
     this.reconciling = true;
-    this.scheduled = false;
+    this.scheduleState.scheduled = false;
     try {
       do {
         this.dirty = false;
@@ -174,10 +184,16 @@ export class ReviewSession {
     this.observer.disconnect();
     this.discoveryObserver.disconnect();
     this.observedRoots.clear();
+    cancelPanelReconcile(this.scheduleState, this.options.root.defaultView);
     this.clearInjected();
   }
 
   private reconcileOnce(): void {
+    // Disconnect while writing so our own hidden/dataset toggles do not
+    // immediately re-schedule another full reconcile during panel storms.
+    this.observer.disconnect();
+    this.discoveryObserver.disconnect();
+    this.observedRoots.clear();
     const treeKey = treeStructureKey(this.options.root);
     const regionKey = regionStructureKey(this.options.root);
     let next: PageSnapshot;
@@ -210,6 +226,7 @@ export class ReviewSession {
       if (excludedFacetCount(this.filters) > 0) {
         showUnavailable(this.options.root, next.reason);
       }
+      this.reattachObservers();
       this.emitReconciled();
       return;
     }
@@ -251,6 +268,7 @@ export class ReviewSession {
           this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
         }
       }
+      this.reattachObservers();
       this.emitReconciled();
       return;
     }
@@ -261,24 +279,30 @@ export class ReviewSession {
     for (const menu of menus) {
       this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
     }
-    this.refreshObservationRoots();
+    this.reattachObservers();
     this.emitReconciled();
   }
 
-  private schedule(): void {
-    if (this.lifecycle.signal.aborted || this.defaultViewedInFlight > 0) {
-      return;
-    }
+  private reattachObservers(): void {
+    this.discoveryObserver.observe(this.options.root.body, {
+      childList: true,
+      subtree: true,
+    });
+    this.refreshObservationRoots();
+  }
+
+  private schedule(options: PanelScheduleOptions = {}): void {
+    if (this.lifecycle.signal.aborted || this.defaultViewedInFlight > 0) return;
     if (this.reconciling) {
       this.dirty = true;
       return;
     }
-    if (this.scheduled) return;
-    this.scheduled = true;
-    queueMicrotask(() => {
-      this.scheduled = false;
-      this.reconcile();
-    });
+    queuePanelReconcile(
+      this.scheduleState,
+      this.options.root,
+      options,
+      () => this.reconcile(),
+    );
   }
 
   private batch(viewed: boolean, paths: string[]): void {

@@ -3,7 +3,10 @@ import {
   type PageSnapshot,
   viewedControlState,
 } from '@diffseek/github/review-page/page-adapter';
-import { filterMenus } from '@diffseek/github/review-view/review-ui';
+import {
+  filterMenus,
+  isNativeMutation,
+} from '@diffseek/github/review-view/review-ui';
 import {
   parseCodeowners,
   parseGitAttributes,
@@ -137,12 +140,24 @@ export function watchObservationRoots(options: {
     '[role="tree"][aria-label="File Tree"]',
   );
   if (tree) candidates.push(tree);
-  for (const region of options.root.querySelectorAll(
-    '[role="region"][id^="diff-"]',
-  )) {
-    candidates.push(region);
-  }
   for (const menu of filterMenus(options.root)) candidates.push(menu);
+  // Prefer one region-container observer over N per-panel observers. Streaming
+  // fixtures expose #diffseek-stream-host; otherwise use a non-body parent that
+  // contains every diff region. Fall back to per-region only for small pages.
+  const streamHost = options.root.querySelector('#diffseek-stream-host');
+  if (streamHost) {
+    candidates.push(streamHost);
+  } else {
+    const regions = [
+      ...options.root.querySelectorAll('[role="region"][id^="diff-"]'),
+    ];
+    const sharedParent = sharedRegionParent(regions, options.root);
+    if (sharedParent) {
+      candidates.push(sharedParent);
+    } else if (regions.length <= 40) {
+      candidates.push(...regions);
+    }
+  }
   for (const candidate of candidates) {
     if (options.observedRoots.has(candidate)) continue;
     options.observer.observe(candidate, {
@@ -158,4 +173,101 @@ export function watchObservationRoots(options: {
     });
     options.observedRoots.add(candidate);
   }
+}
+
+function sharedRegionParent(
+  regions: Element[],
+  root: Document,
+): Element | null {
+  const first = regions[0];
+  if (!first?.parentElement) return null;
+  let parent: Element | null = first.parentElement;
+  while (
+    parent &&
+    parent !== root.body &&
+    parent !== root.documentElement &&
+    !regions.every((region) => parent?.contains(region))
+  ) {
+    parent = parent.parentElement;
+  }
+  if (
+    !parent ||
+    parent === root.body ||
+    parent === root.documentElement
+  ) {
+    return null;
+  }
+  return parent;
+}
+
+export type PanelScheduleOptions = {
+  immediate?: boolean;
+  coalesce?: boolean;
+};
+
+export type PanelReconcileSchedule = {
+  timer: number | null;
+  delayMs: number;
+  scheduled: boolean;
+};
+
+export function discoverySchedule(
+  records: MutationRecord[],
+): PanelScheduleOptions | null {
+  const native = records.filter(isNativeMutation);
+  if (native.length === 0) return null;
+  if (addedNodesMatch(native, '[role="menu"][aria-label="Filter options"]')) {
+    return { immediate: true };
+  }
+  if (addedNodesMatch(native, '[role="region"][id^="diff-"]')) {
+    return { coalesce: true };
+  }
+  return { immediate: true };
+}
+
+export function queuePanelReconcile(
+  state: PanelReconcileSchedule,
+  root: Document,
+  options: PanelScheduleOptions,
+  run: () => void,
+): void {
+  const view = root.defaultView;
+  const delayMs =
+    options.immediate || filterMenus(root).length > 0 || !options.coalesce
+      ? 0
+      : 64;
+  // Never let a coalesced stream tick postpone an already-queued immediate flush.
+  if (state.scheduled && state.delayMs === 0 && delayMs > 0) return;
+  if (view && state.timer != null) view.clearTimeout(state.timer);
+  state.scheduled = true;
+  state.delayMs = delayMs;
+  const fire = () => {
+    state.scheduled = false;
+    state.delayMs = 0;
+    state.timer = null;
+    run();
+  };
+  if (view) state.timer = view.setTimeout(fire, delayMs);
+  else queueMicrotask(fire);
+}
+
+export function cancelPanelReconcile(
+  state: PanelReconcileSchedule,
+  view: Window | null,
+): void {
+  if (state.timer == null) return;
+  view?.clearTimeout(state.timer);
+  state.timer = null;
+}
+
+function addedNodesMatch(records: MutationRecord[], selector: string): boolean {
+  return records.some(
+    (record) =>
+      record.type === 'childList' &&
+      [...record.addedNodes].some(
+        (node) =>
+          node instanceof Element &&
+          (node.matches(selector) || node.querySelector?.(selector) != null),
+      ),
+  );
 }
