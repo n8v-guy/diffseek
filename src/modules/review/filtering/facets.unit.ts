@@ -49,10 +49,10 @@ describe('filter facets', () => {
       [
         { facet: 'languages', value: 'No extension' },
         { facet: 'languages', value: 'zsh' },
-        { facet: 'languages', value: 'TypeScript' },
-        { facet: 'languages', value: 'CSS' },
+        { facet: 'languages', value: 'typescript', mapped: true },
+        { facet: 'languages', value: 'CSS', mapped: true },
         { facet: 'languages', value: 'bash' },
-        { facet: 'languages', value: 'yaml' },
+        { facet: 'languages', value: 'YAML' },
         { facet: 'owners', value: 'Unmapped' },
         { facet: 'owners', value: '@zeta' },
         { facet: 'owners', value: '@Alpha' },
@@ -65,9 +65,9 @@ describe('filter facets', () => {
 
     expect(facetChoices('languages', choices, selected)).toEqual([
       'CSS',
-      'TypeScript',
+      'typescript',
       'bash',
-      'yaml',
+      'YAML',
       'zsh',
       'No extension',
     ]);

@@ -65,17 +65,24 @@ export function facetChoices(
   labelSets: FileLabel[][],
   excluded: FacetExclusions,
 ): string[] {
-  return [
-    ...new Set([
-      ...labelSets
-        .flat()
-        .filter((label) => label.facet === facet)
-        .map((label) => label.value),
-      ...(excluded.get(facet) ?? []),
-    ]),
-  ].sort((left, right) => {
-    const leftGroup = facetSortGroup(facet, left);
-    const rightGroup = facetSortGroup(facet, right);
+  const sortGroup = new Map<string, number>();
+  for (const label of labelSets.flat()) {
+    if (label.facet !== facet) continue;
+    const group = facetSortGroup(facet, label);
+    const previous = sortGroup.get(label.value);
+    sortGroup.set(
+      label.value,
+      previous == null ? group : Math.min(previous, group),
+    );
+  }
+  for (const value of excluded.get(facet) ?? []) {
+    if (!sortGroup.has(value)) {
+      sortGroup.set(value, isFallbackFacetValue(facet, value) ? 2 : 0);
+    }
+  }
+  return [...sortGroup.keys()].sort((left, right) => {
+    const leftGroup = sortGroup.get(left) ?? 0;
+    const rightGroup = sortGroup.get(right) ?? 0;
     if (leftGroup !== rightGroup) return leftGroup - rightGroup;
     const foldedLeft = left.toLocaleLowerCase();
     const foldedRight = right.toLocaleLowerCase();
@@ -91,10 +98,9 @@ export function facetChoices(
   });
 }
 
-function facetSortGroup(facet: LabelFacet, value: string): number {
-  if (isFallbackFacetValue(facet, value)) return 2;
-  // Unmapped extensions are lowercased; mapped language names keep their casing.
-  if (facet === 'languages' && value === value.toLocaleLowerCase()) return 1;
+function facetSortGroup(facet: LabelFacet, label: FileLabel): number {
+  if (isFallbackFacetValue(facet, label.value)) return 2;
+  if (facet === 'languages' && !label.mapped) return 1;
   return 0;
 }
 

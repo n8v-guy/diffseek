@@ -28,21 +28,23 @@ src/app.test.ts linguist-generated
       expect.arrayContaining([
         { facet: 'groups', value: 'code' },
         { facet: 'owners', value: '@team' },
-        { facet: 'languages', value: 'TypeScript' },
+        { facet: 'languages', value: 'TypeScript', mapped: true },
         { facet: 'statuses', value: 'added' },
         { facet: 'generated', value: 'true' },
       ]),
     );
-    expect(languageValues(files[0]!)).toEqual(['TypeScript']);
-    expect(languageValues(files[1]!)).toEqual(['TypeScript']);
+    expect(languageLabels(files[0]!)).toEqual([
+      { facet: 'languages', value: 'TypeScript', mapped: true },
+    ]);
+    expect(languageLabels(files[1]!)).toEqual([
+      { facet: 'languages', value: 'TypeScript', mapped: true },
+    ]);
   });
 
-  it('falls back to lowercase extensions and No extension', () => {
+  it('falls back to the file extension or No extension', () => {
     const files = [
       file('src/app.ts', '.ts'),
       file('scripts/build.MJS', '.MJS'),
-      file('config/App.YAML', '.YAML'),
-      file('config/other.yaml', '.yaml'),
       file('LICENSE', null),
     ];
 
@@ -53,11 +55,15 @@ src/app.test.ts linguist-generated
       codeowners: [],
     });
 
-    expect(languageValues(files[0]!)).toEqual(['TypeScript']);
-    expect(languageValues(files[1]!)).toEqual(['mjs']);
-    expect(languageValues(files[2]!)).toEqual(['yaml']);
-    expect(languageValues(files[3]!)).toEqual(['yaml']);
-    expect(languageValues(files[4]!)).toEqual(['No extension']);
+    expect(languageLabels(files[0]!)).toEqual([
+      { facet: 'languages', value: 'TypeScript', mapped: true },
+    ]);
+    expect(languageLabels(files[1]!)).toEqual([
+      { facet: 'languages', value: 'MJS' },
+    ]);
+    expect(languageLabels(files[2]!)).toEqual([
+      { facet: 'languages', value: 'No extension' },
+    ]);
   });
 
   it('labels only viewed files with the viewed facet', () => {
@@ -137,8 +143,6 @@ function file(path: string, extension: string | null): FileRecord {
   };
 }
 
-function languageValues(file: FileRecord): string[] {
-  return file.labels
-    .filter((label) => label.facet === 'languages')
-    .map((label) => label.value);
+function languageLabels(file: FileRecord) {
+  return file.labels.filter((label) => label.facet === 'languages');
 }
