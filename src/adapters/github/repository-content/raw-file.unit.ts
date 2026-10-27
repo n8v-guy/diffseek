@@ -50,9 +50,9 @@ describe('raw repository files', () => {
       expect.objectContaining({
         credentials: 'include',
         redirect: 'follow',
-        signal: expect.any(AbortSignal),
       }),
     );
+    expect(request.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('distinguishes missing files and rejects other failures', async () => {

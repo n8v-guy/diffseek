@@ -21,9 +21,9 @@ describe('pull head', () => {
       expect.objectContaining({
         credentials: 'include',
         redirect: 'follow',
-        signal: expect.any(AbortSignal),
       }),
     );
+    expect(request.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('rejects invalid requests and responses without a commit', async () => {
