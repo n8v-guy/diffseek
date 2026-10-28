@@ -93,8 +93,6 @@ function patchRow(
     button.removeAttribute('aria-disabled');
     button.removeAttribute('aria-busy');
   }
-  const escapeViewed = row.hiddenViewedPaths.length > 0;
-  const actionPaths = escapeViewed ? row.hiddenViewedPaths : row.paths;
   const onViewed = row.onViewed;
   const counter = rowElement.querySelector<HTMLElement>('.diffseek-menu-count');
   const viewedAction = rowElement.querySelector<HTMLButtonElement>(
@@ -103,15 +101,16 @@ function patchRow(
   const countAction = rowElement.querySelector<HTMLButtonElement>(
     '[data-diffseek-menu-count-action]',
   );
-  if (actionPaths.length > 0 && onViewed) {
+  if (row.paths.length > 0 && onViewed) {
     if (!countAction || !viewedAction) return false;
     const actionOptions = {
+      counted: row.counted,
+      disabled: row.disabled === true,
       facet: row.facet,
       onViewed,
-      paths: actionPaths,
+      paths: row.paths,
       value: row.value,
-      viewed: escapeViewed || row.viewed,
-      disabled: row.disabled === true,
+      viewedCount: row.viewedCount,
     };
     const count = `${row.visible}/${row.total}`;
     if (countAction.textContent !== count) countAction.textContent = count;

@@ -439,8 +439,9 @@ describe('mountFilterMenu', () => {
         '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Tests"]',
       ),
     ).toBeNull();
-    expect(action?.title).toBe('Mark as viewed');
-    expect(counter?.title).toBe('Mark as viewed');
+    expect(action?.title).toBe('Mark 1 remaining as viewed (0 of 1 viewed)');
+    expect(counter?.title).toBe('Mark 1 remaining as viewed (0 of 1 viewed)');
+    expect(action?.getAttribute('aria-pressed')).toBe('false');
     counter?.click();
     expect(onViewed).toHaveBeenCalledWith(true, ['unmapped.txt']);
     onViewed.mockClear();
@@ -475,7 +476,7 @@ describe('mountFilterMenu', () => {
     expect(onViewed).toHaveBeenCalledWith(false, ['docs/guide.md']);
   });
 
-  it('offers hidden viewed files as a category escape action', () => {
+  it('marks visible unread files when some counted files are hidden as viewed', () => {
     const element = menu();
     const state = filters();
     const onViewed = vi.fn();
@@ -510,13 +511,17 @@ describe('mountFilterMenu', () => {
       '[data-diffseek-menu-count-action]',
     );
     expect(counter?.textContent).toBe('1/2');
-    expect(action?.title).toBe('Mark as not viewed');
-    expect(counter?.title).toBe('Mark as not viewed');
+    expect(action?.title).toBe('Mark 1 remaining as viewed (1 of 2 viewed)');
+    expect(counter?.title).toBe('Mark 1 remaining as viewed (1 of 2 viewed)');
+    expect(action?.getAttribute('aria-pressed')).toBe('mixed');
+    expect(action?.classList.contains('diffseek-viewed-partial')).toBe(true);
+    expect(counter?.classList.contains('diffseek-viewed-partial')).toBe(false);
+    expect(counter?.getAttribute('aria-pressed')).toBe('mixed');
     counter?.click();
-    expect(onViewed).toHaveBeenCalledWith(false, ['docs/guide.md']);
+    expect(onViewed).toHaveBeenCalledWith(true, ['src/app.test.ts']);
     onViewed.mockClear();
     action?.click();
-    expect(onViewed).toHaveBeenCalledWith(false, ['docs/guide.md']);
+    expect(onViewed).toHaveBeenCalledWith(true, ['src/app.test.ts']);
   });
 
   it('keeps a selected value available when it is not currently observed', () => {

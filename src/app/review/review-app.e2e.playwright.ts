@@ -7,6 +7,10 @@ let context: BrowserContext;
 const fixturePath = resolve(
   'src/adapters/github/review-page/fixtures/github-pr.html',
 );
+const srcUnread = 'Mark 3 remaining as viewed (0 of 3 viewed)';
+const srcPartial = 'Mark 1 remaining as viewed (2 of 3 viewed)';
+const codeUnread = 'Mark 2 remaining as viewed (0 of 2 viewed)';
+const codePartial = 'Mark 1 remaining as viewed (1 of 2 viewed)';
 
 test.beforeAll(async () => {
   const extension = resolve('.output/chrome-mv3');
@@ -261,7 +265,7 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
     page.locator('[role="treeitem"][id="docs/readme.md"]'),
   ).toBeVisible();
 
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
   await expect(page.locator('html')).toHaveAttribute(
     'data-native-click-after-snackbar-paint',
     'true',
@@ -309,21 +313,21 @@ test('interleaves native and DiffSeek viewed actions in action order', async () 
   });
 
   await page.locator('#diff-app button[aria-label="Not Viewed"]').click();
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
   await expect(
-    page.locator('#src [aria-label="Mark as viewed"]'),
+    page.locator(`#src [aria-label="${srcPartial}"]`),
   ).toBeVisible();
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcPartial}"]`).click();
   await expect(
     page.locator('#diff-app button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toContainText('Marked 3 files as viewed');
+  ).toContainText('Marked 1 file as viewed');
 });
 
 test('does not overwrite a later native action with a pending batch path', async () => {
@@ -346,7 +350,7 @@ test('does not overwrite a later native action with a pending batch path', async
     document.documentElement.dataset.nativeDelay = '75';
   });
 
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
   const generated = page.locator(
     '#diff-generated button[aria-label="Not Viewed"]',
   );
@@ -383,7 +387,7 @@ test('drops a pending viewed result after route navigation', async () => {
   );
   await page.goto('https://github.com/octo/repo/pull/3/changes');
 
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
   await page.evaluate(() => {
     history.pushState({}, '', '/octo/repo/issues/3');
     document.body.innerHTML = '<main>Issue route</main>';
@@ -656,15 +660,15 @@ test('stays idempotent through a deterministic native-extension action storm', a
     document.documentElement.dataset.nativeDelay = '75';
   });
   await page.locator('#diff-app button[aria-label="Not Viewed"]').click();
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
   await expect(
-    page.locator('#src [aria-label="Mark as viewed"]'),
+    page.locator(`#src [aria-label="${srcPartial}"]`),
   ).toBeVisible();
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcPartial}"]`).click();
   await expect(
     page.locator('#diff-app button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
@@ -721,8 +725,9 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   const codeViewed = page.locator(
     '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
   );
-  await expect(codeViewed).toHaveAttribute('aria-label', 'Mark as viewed');
-  await expect(codeCounter).toHaveAttribute('aria-label', 'Mark as viewed');
+  await expect(codeViewed).toHaveAttribute('aria-label', codeUnread);
+  await expect(codeCounter).toHaveAttribute('aria-label', codeUnread);
+  await expect(codeViewed).toHaveAttribute('aria-pressed', 'false');
   const badgeStyle = await codeViewed.evaluate((action) => ({
     height: getComputedStyle(action, '::before').height,
     right: getComputedStyle(action, '::before').right,
@@ -748,8 +753,15 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   ).toContainText('Marked 2 files as viewed');
 
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
-  await expect(codeViewed).toHaveAttribute('aria-label', 'Mark as viewed');
-  await expect(codeCounter).toHaveAttribute('aria-label', 'Mark as viewed');
+  await expect(codeViewed).toHaveAttribute('aria-label', codePartial);
+  await expect(codeCounter).toHaveAttribute('aria-label', codePartial);
+  await expect(codeViewed).toHaveAttribute('aria-pressed', 'mixed');
+  await expect(codeViewed).toHaveClass(/diffseek-viewed-partial/);
+  expect(
+    await codeViewed.evaluate(
+      (action) => getComputedStyle(action, '::before').backgroundImage,
+    ),
+  ).toContain('linear-gradient');
   await codeViewed.click();
   await expect(
     page.locator('#diff-app button[aria-label="Viewed"]'),
@@ -778,7 +790,8 @@ test('retains collapsed folders and marks only visible facet files', async () =>
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'false');
   await expect(codeCounter).toHaveText('2/3');
-  await expect(codeViewed).toHaveAttribute('aria-label', 'Mark as viewed');
+  await expect(codeViewed).toHaveAttribute('aria-label', codeUnread);
+  await expect(codeViewed).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('hides generated and viewed files for a fresh install and honors saved preferences', async () => {

@@ -437,7 +437,14 @@ describe('review app lifecycle', () => {
           '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
         )
         ?.getAttribute('aria-label'),
-    ).toBe('Mark as viewed');
+    ).toBe('Mark 1 remaining as viewed (2 of 3 viewed)');
+    expect(
+      document
+        .querySelector(
+          '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
+        )
+        ?.getAttribute('aria-pressed'),
+    ).toBe('mixed');
     app.stop();
   });
 

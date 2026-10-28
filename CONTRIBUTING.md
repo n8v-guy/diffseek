@@ -69,13 +69,20 @@ always hide and the first click shows them. The Generated row has an
 for a fresh install. A saved always-hide-and-mark-read record is read as always
 hide with auto-view on. Multi-item sections expose row-hover
 `only` and title-hover `all` shortcuts. Non-matches are hidden in the file tree
-and collapsed/muted in place in the diff. File, folder, counter-pill, and
-counter-overlay actions mark their current visible scope viewed through
-GitHub's native controls. Reset clears review-local filters without changing
-viewed/generated defaults. When viewed files are hidden, a category containing
-matching hidden viewed files instead offers to mark only those files not
-viewed, making them visible again. Started and completed actions appear in a
-short-lived top-right notification stack.
+and collapsed/muted in place in the diff. File actions mark that file viewed or not viewed. Folder badges, counter
+pills, and corner circles share one counted set: files that pass every active
+filter except the Viewed filter's hiding. Generated files count only while the
+Generated filter shows them. Files hidden by an owner, group, or format filter
+do not count. The circle is empty, half filled, or filled as none, some, or all
+of that set are viewed. The half is a fixed left half. An empty or half circle
+marks the visible unread files viewed and never hidden files. A filled circle
+marks the counted files not viewed. Its tooltip says how many remain, for
+example "Mark 8 remaining as viewed (12 of 20 viewed)"; a filled circle says
+"Mark as not viewed". Partial uses `aria-pressed="mixed"`. A folder sums the
+files under it, so a fully viewed folder still disappears while viewed files
+are hidden. The counter badge stays visible/total. Reset clears review-local
+filters without changing viewed/generated defaults. Started and completed
+actions appear in a short-lived top-right notification stack.
 
 Repository metadata for the open review starts from cache, then PR head:
 

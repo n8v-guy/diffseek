@@ -278,6 +278,15 @@ span.diffseek-menu-count {
   width: 12px;
 }
 
+/* Partial mark. This is the only block that paints it; swap the glyph here. */
+.diffseek-viewed-partial::before {
+  background: linear-gradient(
+    90deg,
+    var(--diffseek-accent) 50%,
+    var(--diffseek-background) 50%
+  );
+}
+
 .diffseek-viewed-icon-anchor[aria-pressed='true']::before,
 .diffseek-menu-viewed-action[aria-pressed='true']::before {
   background: var(--diffseek-accent);

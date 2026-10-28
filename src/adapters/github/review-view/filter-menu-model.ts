@@ -33,9 +33,9 @@ export type MenuRowModel = {
   paths: string[];
   total: number;
   value: string;
-  viewed: boolean;
+  counted: number;
+  viewedCount: number;
   visible: number;
-  hiddenViewedPaths: string[];
   excluded: Set<string>;
   onlyValues?: string[];
   filterDefaults?: FilterDefaults;
@@ -139,10 +139,11 @@ export function selection(filters: FilterState, facet: LabelFacet): Set<string> 
 
 export function emptyProjection() {
   return {
-    hiddenViewedPaths: [] as string[],
+    counted: 0,
     paths: [] as string[],
     total: 0,
-    viewed: false,
+    viewedCount: 0,
+    viewedState: 'empty' as const,
     visible: 0,
   };
 }

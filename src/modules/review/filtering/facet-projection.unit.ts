@@ -43,22 +43,24 @@ describe('projectFacet', () => {
     filters.get('groups')?.add('Tests');
 
     expect(projectFacet('owners', files, filters).get('@org/backend')).toEqual({
-      hiddenViewedPaths: [],
+      counted: 1,
       paths: ['src/app.ts'],
       total: 2,
-      viewed: false,
+      viewedCount: 0,
+      viewedState: 'empty',
       visible: 1,
     });
     expect(projectFacet('groups', files, filters).get('Tests')).toEqual({
-      hiddenViewedPaths: [],
+      counted: 0,
       paths: [],
       total: 1,
-      viewed: false,
+      viewedCount: 0,
+      viewedState: 'empty',
       visible: 0,
     });
   });
 
-  it('treats a partially viewed visible scope as markable viewed', () => {
+  it('treats a partially viewed scope as half marked', () => {
     const files = [
       file('src/first.ts', [{ facet: 'groups', value: 'Code' }], true),
       file('src/second.ts', [{ facet: 'groups', value: 'Code' }]),
@@ -67,8 +69,10 @@ describe('projectFacet', () => {
     expect(
       projectFacet('groups', files, emptyFacetExclusions()).get('Code'),
     ).toMatchObject({
-      paths: ['src/first.ts', 'src/second.ts'],
-      viewed: false,
+      counted: 2,
+      paths: ['src/second.ts'],
+      viewedCount: 1,
+      viewedState: 'partial',
       visible: 2,
     });
   });
@@ -85,14 +89,16 @@ describe('projectFacet', () => {
         'true',
       ),
     ).toMatchObject({
+      counted: 1,
       paths: ['src/ready.ts'],
       total: 2,
+      viewedCount: 0,
+      viewedState: 'empty',
       visible: 2,
-      viewed: false,
     });
   });
 
-  it('reports viewed paths hidden only by the viewed facet', () => {
+  it('counts viewed files hidden only by the viewed filter', () => {
     const files = [
       file('src/visible.ts', [
         { facet: 'groups', value: 'Code' },
@@ -121,12 +127,44 @@ describe('projectFacet', () => {
     filters.get('viewed')?.add('true');
     filters.get('statuses')?.add('added');
 
-    expect(projectFacet('groups', files, filters).get('Code')).toMatchObject({
-      hiddenViewedPaths: ['src/hidden-viewed.ts'],
+    expect(projectFacet('groups', files, filters).get('Code')).toEqual({
+      counted: 2,
       paths: ['src/visible.ts'],
       total: 3,
-      viewed: false,
+      viewedCount: 1,
+      viewedState: 'partial',
       visible: 1,
+    });
+  });
+
+  it('clears every counted file when the circle is filled', () => {
+    const files = [
+      file(
+        'src/hidden-viewed.ts',
+        [
+          { facet: 'viewed', value: 'true' },
+          { facet: 'groups', value: 'Code' },
+        ],
+        true,
+      ),
+      file(
+        'src/also-viewed.ts',
+        [
+          { facet: 'viewed', value: 'true' },
+          { facet: 'groups', value: 'Code' },
+        ],
+        true,
+      ),
+    ];
+    const filters = emptyFacetExclusions();
+    filters.get('viewed')?.add('true');
+
+    expect(projectFacet('groups', files, filters).get('Code')).toMatchObject({
+      counted: 2,
+      paths: ['src/hidden-viewed.ts', 'src/also-viewed.ts'],
+      viewedCount: 2,
+      viewedState: 'filled',
+      visible: 0,
     });
   });
 });

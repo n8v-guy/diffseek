@@ -283,17 +283,17 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
     );
   }
   const onViewed = options.onViewed;
-  const escapeViewed = options.hiddenViewedPaths.length > 0;
-  const actionPaths = escapeViewed
-    ? options.hiddenViewedPaths
-    : options.paths;
-  if (actionPaths.length > 0 && onViewed) {
+  if (options.paths.length > 0 && onViewed) {
     const actionOptions = {
-      ...options,
-      onViewed,
-      paths: actionPaths,
-      viewed: escapeViewed || options.viewed,
+      counted: options.counted,
       disabled: options.disabled === true,
+      facet: options.facet,
+      onViewed,
+      paths: options.paths,
+      total: options.total,
+      value: options.value,
+      viewedCount: options.viewedCount,
+      visible: options.visible,
     };
     row.append(menuViewedCounter(actionOptions));
     row.append(menuViewedOverlay(actionOptions));

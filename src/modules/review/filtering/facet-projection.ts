@@ -2,12 +2,22 @@ import type { LabelFacet } from '../classification/labels';
 import type { FileRecord, FilterState } from '../model/file';
 
 import { matchesFilters } from './filters';
+import {
+  addCountedFile,
+  bucketActionPaths,
+  emptyCountBucket,
+  includeCountedFiles,
+  viewedMark,
+  type CountBucket,
+  type ViewedMark,
+} from './viewed-scope';
 
 export type FacetProjection = {
-  hiddenViewedPaths: string[];
+  counted: number;
   paths: string[];
   total: number;
-  viewed: boolean;
+  viewedCount: number;
+  viewedState: ViewedMark;
   visible: number;
 };
 
@@ -16,14 +26,10 @@ export function projectFacet(
   files: readonly FileRecord[],
   filters: FilterState,
 ): Map<string, FacetProjection> {
-  const viewedHidden =
-    facet !== 'viewed' && filters.get('viewed')?.has('true') === true;
-  const filtersWithoutViewed = viewedHidden
-    ? withoutViewedExclusion(filters)
-    : filters;
-  const projections = new Map<
+  const counts = includeCountedFiles(filters);
+  const rows = new Map<
     string,
-    Omit<FacetProjection, 'viewed'>
+    { total: number; visible: number; bucket: CountBucket }
   >();
   for (const file of files) {
     const values = new Set(
@@ -32,52 +38,31 @@ export function projectFacet(
         .map((label) => label.value),
     );
     const visible = matchesFilters(file, filters);
+    const counted = counts(file);
     for (const value of values) {
-      const projection = projections.get(value) ?? {
-        hiddenViewedPaths: [],
-        paths: [],
+      const row = rows.get(value) ?? {
         total: 0,
         visible: 0,
+        bucket: emptyCountBucket(),
       };
-      projection.total += 1;
-      if (visible) {
-        projection.visible += 1;
-        if (file.capabilities.viewed) projection.paths.push(file.path);
-      }
-      if (
-        viewedHidden &&
-        !visible &&
-        file.viewed &&
-        file.capabilities.viewed &&
-        matchesFilters(file, filtersWithoutViewed)
-      ) {
-        projection.hiddenViewedPaths.push(file.path);
-      }
-      projections.set(value, projection);
+      row.total += 1;
+      if (visible) row.visible += 1;
+      if (counted) addCountedFile(row.bucket, file);
+      rows.set(value, row);
     }
   }
 
-  const filesByPath = new Map(files.map((file) => [file.path, file]));
   return new Map(
-    [...projections].map(([value, projection]) => [
+    [...rows].map(([value, row]) => [
       value,
       {
-        ...projection,
-        viewed:
-          projection.paths.length > 0 &&
-          projection.paths.every((path) => filesByPath.get(path)?.viewed),
+        counted: row.bucket.counted,
+        paths: bucketActionPaths(row.bucket),
+        total: row.total,
+        viewedCount: row.bucket.viewed,
+        viewedState: viewedMark(row.bucket.viewed, row.bucket.counted),
+        visible: row.visible,
       },
-    ]),
-  );
-}
-
-function withoutViewedExclusion(filters: FilterState): FilterState {
-  return new Map(
-    [...filters].map(([facet, values]) => [
-      facet,
-      facet === 'viewed'
-        ? new Set([...values].filter((value) => value !== 'true'))
-        : values,
     ]),
   );
 }

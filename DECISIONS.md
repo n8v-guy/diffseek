@@ -111,15 +111,22 @@ with exclusions. Each shortcut modifies only its own facet.
 existing OR-within, AND-across filter model. **Cost:** Hover-only presentation
 needs explicit keyboard focus behavior and permanent accessible names.
 
-## D009 — Hidden viewed files have a contextual category escape
+## D009 — Viewed circles follow counted files
 
-**Decision:** Category viewed actions normally target visible files. If the
-Viewed files filter hides matching viewed files that pass every other active
-facet, both row actions instead mark only those hidden files not viewed.
+**Decision:** A menu row or folder counts files that pass every active filter
+except the Viewed filter's hiding. Generated files count only when that filter
+shows them. Files hidden by an owner, group, or format filter do not count.
+The circle is empty when none of those files are viewed, half filled (a fixed
+left half, not a pie) when some are, and filled when all are. Nothing counted
+means no circle. Clicking empty or partial marks only the visible unread files
+viewed. Clicking filled marks every counted file not viewed. A folder sums the
+files under it. Individual files stay empty or filled.
 
-**Why:** Reviewers can restore a category without revealing or mutating
-unrelated files. **Cost:** Action scope exceptionally extends beyond visible
-`X`, but only for the reversible state that would otherwise be unreachable.
+**Why:** The indicator matches the slice the reviewer can still finish, including
+viewed files the Viewed filter is hiding, without painting a partial slice as
+done. **Cost:** The old click that unmarked hidden viewed files on any category
+row is gone. Only a filled circle clears viewed state, and it clears the whole
+counted set.
 
 ## D010 — Fallback labels remain data but not menu noise
 

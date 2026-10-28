@@ -293,6 +293,7 @@ export class ReviewSession {
           catalogSnapshot,
           (viewed, paths) => this.batch(viewed, paths),
           index,
+          this.filters,
         );
       }
       if (projectionChanged) {

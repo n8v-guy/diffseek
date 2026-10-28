@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { emptyFacetExclusions, ReviewIndex } from '@diffseek/review';
+
 import fixture from './fixtures/github-pr.html?raw';
 import { scanPage } from './page-adapter';
 import {
@@ -165,6 +167,11 @@ describe('viewed actions', () => {
     expect(fileAction?.firstElementChild).toMatchObject({ tagName: 'svg' });
     expect(fileAction?.childElementCount).toBe(1);
     expect(fileAction?.classList).toContain('diffseek-viewed-icon-anchor');
+    const folder = document.querySelector<HTMLElement>(
+      '#src [data-diffseek-viewed-action="true"]',
+    );
+    expect(folder?.title).toBe('Mark 3 remaining as viewed (0 of 3 viewed)');
+    expect(folder?.getAttribute('aria-pressed')).toBe('false');
     expect(onAction).toHaveBeenCalledWith(true, [
       'src/app.ts',
       'src/new.ts',
@@ -178,6 +185,77 @@ describe('viewed actions', () => {
     expect(viewedFile?.getAttribute('aria-pressed')).toBe('true');
     viewedFile?.click();
     expect(onAction).toHaveBeenLastCalledWith(false, ['docs/readme.md']);
+  });
+
+  it('uses a half circle for a partly viewed folder and skips hidden files', () => {
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+    document.querySelector('[role="tree"]')?.insertAdjacentHTML(
+      'afterbegin',
+      '<li id="src" role="treeitem" aria-label="src">' +
+        '<div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-directory-fill"></svg></div></li>',
+    );
+    const app = snapshot.files.find((file) => file.path === 'src/app.ts');
+    const created = snapshot.files.find((file) => file.path === 'src/new.ts');
+    const generated = snapshot.files.find((file) => file.path === 'src/generated.ts');
+    if (!app || !created || !generated) throw new Error('Missing fixture file');
+    app.viewed = true;
+    app.labels = [{ facet: 'viewed', value: 'true' }, { facet: 'generated', value: 'false' }];
+    created.labels = [{ facet: 'generated', value: 'false' }];
+    generated.labels = [{ facet: 'generated', value: 'true' }];
+    const filters = emptyFacetExclusions();
+    filters.get('viewed')?.add('true');
+    filters.get('generated')?.add('true');
+    const onAction = vi.fn();
+
+    mountViewedActions(snapshot, onAction, new ReviewIndex(snapshot.files), filters);
+    const folder = document.querySelector<HTMLElement>(
+      '#src [data-diffseek-viewed-action="true"]',
+    );
+    folder?.click();
+
+    expect(folder?.getAttribute('aria-pressed')).toBe('mixed');
+    expect(folder?.classList.contains('diffseek-viewed-partial')).toBe(true);
+    expect(folder?.getAttribute('aria-label')).toBe(
+      'Mark 1 remaining as viewed (1 of 2 viewed)',
+    );
+    expect(onAction).toHaveBeenCalledWith(true, ['src/new.ts']);
+    expect(
+      document.querySelector('#src\\/generated\\.ts [data-diffseek-viewed-action]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('#src\\/app\\.ts [data-diffseek-viewed-action]')
+        ?.getAttribute('aria-label'),
+    ).toBe('Mark as not viewed');
+  });
+
+  it('clears viewed state for a filled folder', () => {
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+    document.querySelector('[role="tree"]')?.insertAdjacentHTML(
+      'afterbegin',
+      '<li id="src" role="treeitem" aria-label="src">' +
+        '<div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-directory-fill"></svg></div></li>',
+    );
+    for (const path of ['src/app.ts', 'src/new.ts', 'src/generated.ts']) {
+      const file = snapshot.files.find((candidate) => candidate.path === path);
+      if (!file) throw new Error(`Missing ${path}`);
+      file.viewed = true;
+    }
+    const onAction = vi.fn();
+
+    mountViewedActions(snapshot, onAction);
+    const folder = document.querySelector<HTMLElement>(
+      '#src [data-diffseek-viewed-action="true"]',
+    );
+    expect(folder?.classList.contains('diffseek-viewed-partial')).toBe(false);
+    folder?.click();
+
+    expect(onAction).toHaveBeenCalledWith(false, [
+      'src/app.ts',
+      'src/new.ts',
+      'src/generated.ts',
+    ]);
   });
 
   it('updates existing overlays in place during reconciliation', () => {
