@@ -22,7 +22,7 @@ import {
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
-export async function replaceReviewMetadata(options: {
+async function replaceReviewMetadata(options: {
   readPull: () => Promise<RepositoryMetadata>;
   refreshDefault: () => Promise<{
     metadata: RepositoryMetadata;
@@ -110,7 +110,7 @@ export function loadReviewMetadata(
   beginMetadataRefresh(state, () => replaceReviewMetadata(options));
 }
 
-export function beginMetadataRefresh(
+function beginMetadataRefresh(
   state: MetadataRefresh,
   start: () => Promise<boolean>,
 ): void {
