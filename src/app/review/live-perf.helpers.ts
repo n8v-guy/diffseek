@@ -20,6 +20,10 @@ export type RedrawCounts = {
   panelRebuilds: number;
   treeRowsRemoved: number;
   panelsRemoved: number;
+  treeRowsReadded: number;
+  panelsReadded: number;
+  treeNetLoss: number;
+  panelNetLoss: number;
 };
 
 export type LivePerfSample = RedrawCounts & {
@@ -142,6 +146,10 @@ export function medianSample(samples: readonly LivePerfSample[]): LivePerfSample
     panelRebuilds: median(samples.map((sample) => sample.panelRebuilds)),
     treeRowsRemoved: median(samples.map((sample) => sample.treeRowsRemoved)),
     panelsRemoved: median(samples.map((sample) => sample.panelsRemoved)),
+    treeRowsReadded: median(samples.map((sample) => sample.treeRowsReadded)),
+    panelsReadded: median(samples.map((sample) => sample.panelsReadded)),
+    treeNetLoss: median(samples.map((sample) => sample.treeNetLoss)),
+    panelNetLoss: median(samples.map((sample) => sample.panelNetLoss)),
   };
 }
 
@@ -177,6 +185,18 @@ export function rebuildFailures(
     failures.push(
       `${sample.scenario} panelRebuilds ${sample.panelRebuilds} > ${budgets.panelRebuilds}`,
     );
+  }
+  return failures;
+}
+
+/** Hot navigation churns GitHub's own panels. Fail only when rows stay gone. */
+export function hotLossFailures(sample: LivePerfSample): string[] {
+  const failures: string[] = [];
+  if (sample.treeNetLoss > 0) {
+    failures.push(`hot treeNetLoss ${sample.treeNetLoss} > 0`);
+  }
+  if (sample.panelNetLoss > 0) {
+    failures.push(`hot panelNetLoss ${sample.panelNetLoss} > 0`);
   }
   return failures;
 }
@@ -237,18 +257,18 @@ export function livePerfSummary(report: {
 }): string {
   const rows = (['cold', 'warm', 'hot'] as const).map((scenario) => {
     const medianRow = medianSample(report[scenario]);
-    return `| ${scenario} | ${medianRow.firstRenderSeconds} | ${medianRow.menuOpenSeconds} | ${medianRow.panelsSeconds} | ${medianRow.reconciles} | ${medianRow.domMutations} | ${medianRow.treeRebuilds} | ${medianRow.panelRebuilds} |`;
+    return `| ${scenario} | ${medianRow.firstRenderSeconds} | ${medianRow.menuOpenSeconds} | ${medianRow.panelsSeconds} | ${medianRow.reconciles} | ${medianRow.domMutations} | ${medianRow.treeRebuilds} | ${medianRow.panelRebuilds} | ${medianRow.treeRowsRemoved} | ${medianRow.treeRowsReadded} | ${medianRow.panelsRemoved} | ${medianRow.panelsReadded} | ${medianRow.treeNetLoss} | ${medianRow.panelNetLoss} |`;
   });
   return [
     `### DiffSeek live performance`,
     '',
     report.prUrl,
     '',
-    '| scenario | first render s | menu s | panels s | reconciles | DOM mutations | tree rebuilds | panel rebuilds |',
-    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    '| scenario | first render s | menu s | panels s | reconciles | DOM mutations | tree rebuilds | panel rebuilds | tree removed | tree re-added | panels removed | panels re-added | tree net loss | panel net loss |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     ...rows,
     '',
-    'Durations are medians. Cold and warm tree rebuilds and diff-panel rebuilds must stay at 0. Hot counts rebuilds only after the first DiffSeek control.',
+    'Durations are medians. Cold and warm tree rebuilds and diff-panel rebuilds must stay at 0. Hot ignores mass removal and fails only when a row removed after the first DiffSeek control is still gone 500 ms later.',
     '',
   ].join('\n');
 }

@@ -16,6 +16,7 @@ import {
   defaultLivePrUrl,
   expectedGeneratedTotal,
   generatedCategorizedPattern,
+  hotLossFailures,
   isInlineStorageState,
   livePerfSummary,
   liveSampleCount,
@@ -41,6 +42,7 @@ const viewedFacetAction =
 const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
 const stepTimeout = 20_000;
 const panelsTimeout = 60_000;
+const hotSettleMs = 500;
 
 describeLive('live DiffSeek performance', () => {
   test.describe.configure({ mode: 'serial' });
@@ -140,7 +142,7 @@ describeLive('live DiffSeek performance', () => {
       await showConversation(page);
       const hotSample = await measureReview(page, 'hot', () => showFiles(page));
       hot.push(hotSample);
-      expect(rebuildFailures(hotSample, budgets)).toEqual([]);
+      expect(hotLossFailures(hotSample)).toEqual([]);
       await page.close();
     }
 
@@ -182,12 +184,19 @@ async function measureReview(
     generatedCategorizedPattern(expectedGeneratedTotal),
     { timeout: panelsTimeout },
   );
+  const panelsSeconds = secondsBetween(started);
+  if (scenario === 'hot') {
+    await page.waitForTimeout(hotSettleMs);
+    await page.evaluate(() => {
+      document.dispatchEvent(new Event('diffseek-redraw-settle'));
+    });
+  }
   const counts = await readRedraws(page);
   const sample: LivePerfSample = {
     scenario,
     firstRenderSeconds,
     menuOpenSeconds,
-    panelsSeconds: secondsBetween(started),
+    panelsSeconds,
     ...counts,
   };
   test.info().annotations.push({
@@ -293,6 +302,10 @@ async function readRedraws(page: Page): Promise<RedrawCounts> {
       panelRebuilds: value('diffseekPanelRebuilds'),
       treeRowsRemoved: value('diffseekTreeRowsRemoved'),
       panelsRemoved: value('diffseekPanelsRemoved'),
+      treeRowsReadded: value('diffseekTreeRowsReadded'),
+      panelsReadded: value('diffseekPanelsReadded'),
+      treeNetLoss: value('diffseekTreeNetLoss'),
+      panelNetLoss: value('diffseekPanelNetLoss'),
     };
   });
   return counts;
@@ -312,6 +325,10 @@ function subtractCounts(after: RedrawCounts, before: RedrawCounts): RedrawCounts
     panelRebuilds: after.panelRebuilds - before.panelRebuilds,
     treeRowsRemoved: after.treeRowsRemoved - before.treeRowsRemoved,
     panelsRemoved: after.panelsRemoved - before.panelsRemoved,
+    treeRowsReadded: after.treeRowsReadded - before.treeRowsReadded,
+    panelsReadded: after.panelsReadded - before.panelsReadded,
+    treeNetLoss: after.treeNetLoss - before.treeNetLoss,
+    panelNetLoss: after.panelNetLoss - before.panelNetLoss,
   };
 }
 

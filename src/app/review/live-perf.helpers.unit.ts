@@ -9,6 +9,7 @@ import {
   isInlineStorageState,
   livePerfSummary,
   median,
+  hotLossFailures,
   medianBudgetFailures,
   medianSample,
   parseInlineStorageState,
@@ -64,6 +65,10 @@ describe('live-perf helpers', () => {
       panelRebuilds: 0,
       treeRowsRemoved: 284,
       panelsRemoved: 0,
+      treeRowsReadded: 0,
+      panelsReadded: 0,
+      treeNetLoss: 0,
+      panelNetLoss: 0,
     };
     const fast: LivePerfSample = {
       ...slow,
@@ -78,6 +83,10 @@ describe('live-perf helpers', () => {
     expect(medianSample([slow, fast, fast]).firstRenderSeconds).toBe(4);
     expect(rebuildFailures(slow, defaultLivePerfBudgets({}))).toEqual([
       'cold treeRebuilds 1 > 0',
+    ]);
+    expect(hotLossFailures({ ...slow, scenario: 'hot' })).toEqual([]);
+    expect(hotLossFailures({ ...slow, scenario: 'hot', panelNetLoss: 4 })).toEqual([
+      'hot panelNetLoss 4 > 0',
     ]);
     expect(medianBudgetFailures([], defaultLivePerfBudgets({}))).toEqual([
       'no samples',

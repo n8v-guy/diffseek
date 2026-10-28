@@ -114,8 +114,9 @@ DiffSeek control, time from the Filter click until the DiffSeek menu is
 visible, and time until the generated-facet denominator shows the full
 classified total. It also records reconcile passes, DiffSeek DOM mutations, and
 GitHub file-tree or diff-panel rebuilds (removed rows that come back). Cold
-and warm must stay at 0. Hot counts rebuilds only after the first DiffSeek
-control, because opening Files changed rebuilds panels with no extension.
+and warm must stay at 0. Hot ignores that mass-removal rule and fails only when
+a tree row or diff panel removed after the first DiffSeek control is still
+gone 500 ms later. The job summary includes raw removed and re-added counts.
 The cold sample also toggles the viewed filter and marks one file row viewed.
 An empty sample set fails. Duration ceilings are about three times a measured
 local median (first render 12s/10s/8s, menu 6s, panels 27s/24s/22s) with
