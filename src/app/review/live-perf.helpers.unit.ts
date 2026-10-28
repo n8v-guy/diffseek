@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  assertWithinBudgets,
   defaultLivePerfBudgets,
   generatedCategorizedPattern,
   generatedIndexedText,
   isExtensionMetadataRequest,
   isGeneratedCategorized,
   isInlineStorageState,
+  livePerfSummary,
+  median,
+  hotLossFailures,
+  medianBudgetFailures,
+  medianSample,
   parseInlineStorageState,
   parseStorageCookies,
-  type LivePerfMetrics,
+  rebuildFailures,
+  type LivePerfSample,
 } from './live-perf.helpers';
 
 describe('live-perf helpers', () => {
@@ -46,28 +51,56 @@ describe('live-perf helpers', () => {
     expect(isGeneratedCategorized('86/87', 86)).toBe(false);
   });
 
-  it('builds indexed counter text and budget failures', () => {
-    expect(generatedIndexedText(86)).toBe('86/86');
-    const metrics: LivePerfMetrics = {
-      indexingSeconds: 200,
-      menuOpenSeconds: 20,
-      networkRequests: 50,
-      networkUrls: [],
-      redraws: 3_000,
+  it('budgets median durations and rejects any tree rebuild', () => {
+    expect(median([3, 1, 2])).toBe(2);
+    expect(median([1, 4])).toBe(2.5);
+    const slow: LivePerfSample = {
       scenario: 'cold',
+      firstRenderSeconds: 50,
+      menuOpenSeconds: 20,
+      panelsSeconds: 100,
+      reconciles: 800,
+      domMutations: 20_000,
+      treeRebuilds: 1,
+      panelRebuilds: 0,
+      treeRowsRemoved: 284,
+      panelsRemoved: 0,
+      treeRowsReadded: 0,
+      panelsReadded: 0,
+      treeNetLoss: 0,
+      panelNetLoss: 0,
     };
-    expect(assertWithinBudgets(metrics, defaultLivePerfBudgets({}))).toEqual([
-      'menuOpenSeconds 20 > 15',
-      'indexingSeconds 200 > 120',
-      'redraws 3000 > 2000',
-      'networkRequests 50 > 40',
+    const fast: LivePerfSample = {
+      ...slow,
+      firstRenderSeconds: 4,
+      menuOpenSeconds: 1,
+      panelsSeconds: 8,
+      reconciles: 12,
+      domMutations: 400,
+      treeRebuilds: 0,
+      treeRowsRemoved: 0,
+    };
+    expect(medianSample([slow, fast, fast]).firstRenderSeconds).toBe(4);
+    expect(rebuildFailures(slow, defaultLivePerfBudgets({}))).toEqual([
+      'cold treeRebuilds 1 > 0',
     ]);
-    expect(
-      assertWithinBudgets(
-        { ...metrics, scenario: 'warm', networkRequests: 0 },
-        defaultLivePerfBudgets({}),
-      ).some((failure) => failure.includes('networkRequests')),
-    ).toBe(false);
+    expect(hotLossFailures({ ...slow, scenario: 'hot' })).toEqual([]);
+    expect(hotLossFailures({ ...slow, scenario: 'hot', panelNetLoss: 4 })).toEqual([
+      'hot panelNetLoss 4 > 0',
+    ]);
+    expect(medianBudgetFailures([], defaultLivePerfBudgets({}))).toEqual([
+      'no samples',
+    ]);
+    expect(medianBudgetFailures([slow, slow, slow], defaultLivePerfBudgets({}))).toEqual([
+      'cold firstRenderSeconds 50 > 12',
+      'cold menuOpenSeconds 20 > 6',
+      'cold panelsSeconds 100 > 27',
+      'cold reconciles 800 > 500',
+      'cold domMutations 20000 > 12000',
+    ]);
+    expect(livePerfSummary({ prUrl: 'https://example.test', cold: [fast], warm: [fast], hot: [fast] })).toContain(
+      'tree rebuilds',
+    );
   });
 
   it('parses storageState cookies and inline JSON secrets', () => {

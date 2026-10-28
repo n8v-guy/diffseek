@@ -37,9 +37,9 @@ Performance guards already in the review session:
   already-queued immediate flush.
 - `ReviewIndex` construction is covered for large file lists without quadratic
   growth.
-- Live e2e checks menu-open seconds, primary-action seconds, redraws, and
-  extension metadata requests against optional `DIFFSEEK_LIVE_BUDGET_*`
-  budgets.
+- Live e2e checks cold, warm, and hot durations, reconcile passes, DOM
+  mutations, and file-tree or diff-panel rebuilds against optional
+  `DIFFSEEK_LIVE_BUDGET_*` budgets.
 
 ### Runtime invariants
 
@@ -200,14 +200,23 @@ pnpm exec playwright open https://github.com/login --save-storage=.cache/github-
 DIFFSEEK_GITHUB_STORAGE_STATE=.cache/github-storage.json pnpm test:e2e:live
 ```
 
-It runs three serial scenarios against `sha-tm/diffseek-test-data#1` by default:
-cold clean-store index, warm cached reopen, and mark-all-generated-viewed. Cold
-and warm primary-action time stops when the generated facet denominator shows
-the full classified total (file list known and categorized by every factor
-except viewed); viewed-state settle is not part of that measurement. Each
-scenario reports menu-open seconds, primary-action seconds, DiffSeek redraws,
-and extension metadata network requests, checked against optional
-`DIFFSEEK_LIVE_BUDGET_*` env budgets, and writes `.cache/live-perf-latest.json`.
+It runs repeated cold, warm, and hot samples against `sha-tm/diffseek-test-data#1`
+by default (`DIFFSEEK_LIVE_SAMPLES`, default 3). Cold clears extension storage,
+then writes an explicit shown filter preference so a fresh-install hide default
+does not collapse the file list, and loads the PR. Warm is a reload. Hot clicks
+Conversation, then Files changed. Each sample records time to the first
+DiffSeek control, time from the Filter click until the DiffSeek menu is
+visible, and time until the generated-facet denominator shows the full
+classified total. It also records reconcile passes, DiffSeek DOM mutations, and
+GitHub file-tree or diff-panel rebuilds (removed rows that come back). Cold
+and warm must stay at 0. Hot ignores that mass-removal rule and fails only when
+a tree row or diff panel removed after the first DiffSeek control is still
+gone 500 ms later. The job summary includes raw removed and re-added counts.
+The cold sample also toggles the viewed filter and marks one file row viewed.
+An empty sample set fails. Duration ceilings are about three times a measured
+local median (first render 12s/10s/8s, menu 6s, panels 27s/24s/22s) with
+optional `DIFFSEEK_LIVE_BUDGET_*` overrides. Results are written to
+`.cache/live-perf-latest.json`, the job summary, and a `live-perf` artifact.
 Override the target with `DIFFSEEK_LIVE_PR_URL`.
 
 `pnpm check:ci` runs the quality checks and the production build together.

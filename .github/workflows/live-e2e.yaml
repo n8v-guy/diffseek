@@ -57,3 +57,10 @@ jobs:
         env:
           DIFFSEEK_GITHUB_STORAGE_STATE: ${{ runner.temp }}/github-storage.json
         run: pnpm test:e2e:live
+      - name: Upload live performance numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-perf
+          path: .cache/live-perf-latest.json
+          if-no-files-found: ignore
