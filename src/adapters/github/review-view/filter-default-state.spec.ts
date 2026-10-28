@@ -12,11 +12,14 @@ describe('filter default state', () => {
 
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('false');
+    expect(item.title).toBe('Now: Hide now. Next: Always hide. Show → Hide now → Always hide');
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('mixed');
+    expect(item.title).toBe('Now: Always hide. Next: Show. Show → Hide now → Always hide');
     expect(options.filterDefaults?.hidden).toEqual(new Set(['viewed']));
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('true');
+    expect(item.title).toBe('Now: Show. Next: Hide now. Show → Hide now → Always hide');
     expect(options.filterDefaults?.hidden).toEqual(new Set());
   });
 

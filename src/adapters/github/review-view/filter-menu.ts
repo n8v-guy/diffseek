@@ -37,6 +37,7 @@ import {
   menuViewedCounter,
   menuViewedOverlay,
 } from './menu-viewed-action';
+import { showHideNow } from './review-ui';
 
 export type { FilterMenuOptions } from './filter-menu-model';
 
@@ -237,6 +238,9 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
     if (item.disabled) return;
     if (cycleFilterDefault(options)) {
       applyCheckedState(item, options);
+      if (item.getAttribute('aria-checked') === 'false') {
+        showHideNow(item.ownerDocument);
+      }
       options.onChange();
       return;
     }

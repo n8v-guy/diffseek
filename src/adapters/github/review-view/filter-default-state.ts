@@ -23,12 +23,11 @@ export function applyCheckedState(
   const remembered =
     isRememberedFilterFacet(options.facet) &&
     options.filterDefaults?.hidden.has(options.facet);
-  item.setAttribute(
-    'aria-checked',
-    remembered
-      ? 'mixed'
-      : String(!options.excluded.has(options.value)),
-  );
+  const checked = remembered
+    ? 'mixed'
+    : String(!options.excluded.has(options.value));
+  item.setAttribute('aria-checked', checked);
+  if (isRememberedFilterFacet(options.facet)) item.title = cycleTitle(checked);
 }
 
 export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
@@ -47,6 +46,13 @@ export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
   }
   options.excluded.add(options.value);
   return true;
+}
+
+function cycleTitle(checked: string): string {
+  const cycle = 'Show → Hide now → Always hide';
+  if (checked === 'false') return `Now: Hide now. Next: Always hide. ${cycle}`;
+  if (checked === 'mixed') return `Now: Always hide. Next: Show. ${cycle}`;
+  return `Now: Show. Next: Hide now. ${cycle}`;
 }
 
 function isRememberedFilterFacet(

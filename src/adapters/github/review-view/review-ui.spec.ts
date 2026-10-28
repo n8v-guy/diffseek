@@ -5,6 +5,7 @@ import {
   showAlwaysRead,
   showBatchResult,
   showBatchStarted,
+  showHideNow,
   showRememberedFilterDefault,
 } from './review-ui';
 
@@ -84,6 +85,7 @@ describe('review status UI', () => {
 
     showRememberedFilterDefault(document, 'viewed', 'hidden');
     showRememberedFilterDefault(document, 'generated', 'shown');
+    showHideNow(document);
     showAlwaysRead(document, true);
     showAlwaysRead(document, false);
 
@@ -94,8 +96,9 @@ describe('review status UI', () => {
         ),
       ].map((item) => item.textContent),
     ).toEqual([
-      'Hide viewed files by default',
-      'Show generated files by default',
+      'Always hide',
+      'Show now',
+      'Hide now',
       'Always mark generated files viewed',
       'Stop marking generated files viewed',
     ]);
