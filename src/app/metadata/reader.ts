@@ -50,9 +50,7 @@ export async function refreshDefaultMetadata(
   if (cached != null) return { metadata: cached, changed: false };
   try {
     return {
-      metadata: await retry(() =>
-        readSettled(repository, 'HEAD', bundledMetadata, request),
-      ),
+      metadata: await readSettled(repository, 'HEAD', bundledMetadata, request),
       changed: true,
     };
   } catch {
@@ -66,30 +64,26 @@ export async function readPullMetadata(
   request: ReadRawFile = readRawFile,
   resolveHead: ResolvePullHead = resolvePullHead,
 ): Promise<RepositoryMetadata> {
-  return retry(async () => {
-    const ref = await resolveHead({
-      repo: `${review.owner}/${review.repo}`,
-      pull: review.pull,
-    });
-    const cached = await readPullCache(review).catch(() => null);
-    if (cached?.sha === ref) {
-      const { sha, ...metadata } = cached;
-      await writePullCache(review, sha, metadata).catch(() => undefined);
-      return metadata;
-    }
-    const metadata = await readSettled(
-      review,
-      ref,
-      fallback,
-      request,
-      (await readCache(review).catch(() => null))?.codeownersPath,
-    );
-    await writePullCache(review, ref, metadata).catch(() => undefined);
-    return metadata;
+  const ref = await resolveHead({
+    repo: `${review.owner}/${review.repo}`,
+    pull: review.pull,
   });
+  const cached = await readPullCache(review).catch(() => null);
+  if (cached?.sha === ref) {
+    const { sha, ...metadata } = cached;
+    await writePullCache(review, sha, metadata).catch(() => undefined);
+    return metadata;
+  }
+  const metadata = await readSettled(
+    review,
+    ref,
+    fallback,
+    request,
+    (await readCache(review).catch(() => null))?.codeownersPath,
+  );
+  await writePullCache(review, ref, metadata).catch(() => undefined);
+  return metadata;
 }
-
-const metadataRetryDelaysMs = [1_000, 2_000, 4_000];
 
 type TextRead =
   | { status: 'found'; text: string }
@@ -100,22 +94,6 @@ type CodeownersRead =
   | { status: 'found'; path: string; text: string }
   | { status: 'missing' }
   | { status: 'failed' };
-
-async function retry<T>(read: () => Promise<T>): Promise<T> {
-  let error: unknown;
-  for (let attempt = 0; attempt <= metadataRetryDelaysMs.length; attempt += 1) {
-    const delay = metadataRetryDelaysMs[attempt - 1];
-    if (delay != null) {
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-    try {
-      return await read();
-    } catch (caught) {
-      error = caught;
-    }
-  }
-  throw error;
-}
 
 async function readSettled(
   repository: RepositoryRef,

@@ -455,6 +455,125 @@ describe('review app lifecycle', () => {
   });
 });
 
+describe('metadata refresh', () => {
+  const immediate = { codeowners: '', attributes: 'docs/** group=Docs' };
+  const loaded = { codeowners: '', attributes: 'src/generated.ts linguist-generated' };
+
+  it('retries a failed read when the filter menu opens and then applies it', async () => {
+    await fakeBrowser.storage.local.clear();
+    const failed = Promise.reject(new Error('offline'));
+    void failed.catch(() => undefined);
+    const readPull = vi.fn()
+      .mockReturnValueOnce(failed)
+      .mockResolvedValueOnce(loaded);
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => immediate,
+      refreshDefault: async () => ({ metadata: immediate, changed: false }),
+      readPull,
+    });
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledOnce());
+    await failed.catch(() => undefined);
+    expect(document.querySelector('[data-filter-kind="generated"]')).toBeNull();
+
+    openMenu();
+    app.reconcile();
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector('[data-filter-kind="generated"][data-filter-value="true"]')?.getAttribute('aria-checked'),
+      ).toBe('mixed'),
+    );
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    app.stop();
+  });
+
+  it('retries a failed read when the file tree changes', async () => {
+    const failed = Promise.reject(new Error('offline'));
+    void failed.catch(() => undefined);
+    const readPull = vi.fn()
+      .mockReturnValueOnce(failed)
+      .mockResolvedValueOnce(loaded);
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => immediate,
+      refreshDefault: async () => ({ metadata: immediate, changed: false }),
+      readPull,
+    });
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledOnce());
+    await failed.catch(() => undefined);
+
+    await nextReconcile(() => {
+      const item = document.createElement('li');
+      item.id = 'src/extra.ts';
+      item.setAttribute('role', 'treeitem');
+      item.setAttribute('aria-label', 'extra.ts');
+      document.querySelector('[role="tree"]')?.append(item);
+    });
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledTimes(2));
+    openMenu();
+    app.reconcile();
+    expect(readPull).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(),
+    );
+    app.stop();
+  });
+
+  it('does not start another metadata read while one is in flight', async () => {
+    let resolvePull: (value: typeof loaded) => void = () => undefined;
+    const readPull = vi.fn(
+      () => new Promise<typeof loaded>((resolve) => { resolvePull = resolve; }),
+    );
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => immediate,
+      refreshDefault: async () => ({ metadata: immediate, changed: false }),
+      readPull,
+    });
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledOnce());
+    openMenu();
+    app.reconcile();
+    document.querySelector('[role="tree"]')?.append(document.createElement('li'));
+    app.reconcile();
+    expect(readPull).toHaveBeenCalledOnce();
+
+    resolvePull(loaded);
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(),
+    );
+    expect(readPull).toHaveBeenCalledOnce();
+    app.stop();
+  });
+
+  it('keeps cached metadata when the pull-head read fails', async () => {
+    openMenu();
+    const readPull = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => ({ codeowners: '', attributes: 'src/** group=FromCache' }),
+      refreshDefault: async () => ({
+        metadata: { codeowners: '', attributes: 'src/** group=FromCache' },
+        changed: false,
+      }),
+      readPull,
+    });
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-filter-value="FromCache"]')).not.toBeNull(),
+    );
+    expect(readPull).toHaveBeenCalledOnce();
+    app.reconcile();
+    expect(readPull).toHaveBeenCalledOnce();
+    app.stop();
+  });
+});
+
 describe('review app reuse invariants', () => {
   it('keeps classifications after a structure-key rescan', async () => {
     openMenu();

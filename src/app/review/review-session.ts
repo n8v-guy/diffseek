@@ -47,13 +47,16 @@ import {
   cancelPanelReconcile,
   classifyKeyFor,
   classifySnapshot,
+  consumeMetadataOpportunity,
   discoverySchedule,
+  loadReviewMetadata,
+  metadataRefreshState,
+  metadataWatch,
   type PanelReconcileSchedule,
   type PanelScheduleOptions,
   projectionKeyFor,
   queuePanelReconcile,
   refreshViewedState,
-  replaceReviewMetadata,
   retainNativeOwners,
   syncViewedLabels,
   watchObservationRoots,
@@ -100,6 +103,8 @@ export class ReviewSession {
   private reconciling = false;
   private dirty = false;
   private defaultViewedInFlight = 0;
+  private readonly metadataWatch = metadataWatch();
+  private readonly metadataRefresh = metadataRefreshState();
   private projectionFingerprint = '';
   private treeKey: string | null = null;
   private regionKey = '';
@@ -191,6 +196,7 @@ export class ReviewSession {
   }
 
   private reconcileOnce(): void {
+    if (consumeMetadataOpportunity(this.metadataWatch, this.options.root)) this.refreshMetadata();
     // Disconnect while writing so our own hidden/dataset toggles do not
     // immediately re-schedule another full reconcile during panel storms.
     this.observer.disconnect();
@@ -387,19 +393,15 @@ export class ReviewSession {
     });
   }
 
-  private refreshMetadata(): Promise<void> {
-    const fallback = this.metadata;
-    return replaceReviewMetadata({
-      readPull: () => this.options.readPull(this.options.review, fallback),
+  private refreshMetadata(): void {
+    loadReviewMetadata(this.metadataRefresh, {
+      readPull: () => this.options.readPull(this.options.review, this.metadata),
       refreshDefault: () => this.options.refreshDefault(this.options.review),
-      commit: (metadata) =>
-        this.options.metadataCommits.commit(this.options.review, this.metadataRevision, metadata),
+      commit: (metadata) => this.options.metadataCommits.commit(this.options.review, this.metadataRevision, metadata),
       aborted: () => this.lifecycle.signal.aborted,
       apply: (metadata) => {
         if (JSON.stringify(this.metadata) === JSON.stringify(metadata)) return;
-        this.metadata = metadata;
-        this.classifyKey = '';
-        this.reconcile();
+        this.metadata = metadata; this.classifyKey = ''; this.reconcile();
       },
     });
   }

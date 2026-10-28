@@ -89,7 +89,12 @@ known PR cache (last 10 pull requests)
 A default-branch `HEAD` refresh runs afterward only when that repo has no
 default-branch cache yet; it is an isolated prefetch for later unknown PRs
 and does not replace the current review. A known PR with the same head SHA
-does not reload `CODEOWNERS` or `.gitattributes`.
+does not reload `CODEOWNERS` or `.gitattributes`. A failed read is not cached
+and is not retried on a timer. It is attempted again, one request at a time,
+when the filter menu opens or the file tree is updated. Until a read settles,
+the review uses cached metadata or bundled assumptions, so generated files,
+groups, and formats may be absent. A settled read redraws those sections and
+applies the current hide settings without a reload.
 
 `CODEOWNERS` supplies owners. DiffSeek follows GitHub's order
 (`.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`). On a pull-request

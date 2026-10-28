@@ -1,6 +1,8 @@
 import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
 import {
+  fileTreeElement,
   type PageSnapshot,
+  treeStructureKey,
   viewedControlState,
 } from '@diffseek/github/review-page/page-adapter';
 import {
@@ -29,7 +31,7 @@ export async function replaceReviewMetadata(options: {
   commit: (metadata: RepositoryMetadata) => Promise<boolean>;
   aborted: () => boolean;
   apply: (metadata: RepositoryMetadata) => void;
-}): Promise<void> {
+}): Promise<boolean> {
   let pullApplied = false;
   await Promise.all([
     options
@@ -48,6 +50,89 @@ export async function replaceReviewMetadata(options: {
       })
       .catch(() => undefined),
   ]);
+  return pullApplied && !options.aborted();
+}
+
+export type MetadataWatch = {
+  ready: boolean;
+  treeKey: string | null;
+  tree: Element | null;
+  menuOpen: boolean;
+};
+
+export type MetadataRefresh = {
+  settled: boolean;
+  flight: Promise<void> | null;
+  pending: boolean;
+};
+
+/** First observation records the baseline and does not count as a retry. */
+export function consumeMetadataOpportunity(
+  watch: MetadataWatch,
+  root: Document,
+): boolean {
+  const treeKey = treeStructureKey(root);
+  const tree = fileTreeElement(root);
+  const menuOpen = filterMenus(root).length > 0;
+  const changed =
+    watch.ready &&
+    (treeKey !== watch.treeKey ||
+      (tree != null && tree !== watch.tree) ||
+      (menuOpen && !watch.menuOpen));
+  watch.ready = true;
+  watch.treeKey = treeKey;
+  watch.tree = tree;
+  watch.menuOpen = menuOpen;
+  return changed;
+}
+
+export function metadataWatch(): MetadataWatch {
+  return { ready: false, treeKey: null, tree: null, menuOpen: false };
+}
+
+export function metadataRefreshState(): MetadataRefresh {
+  return { settled: false, flight: null, pending: false };
+}
+
+export function loadReviewMetadata(
+  state: MetadataRefresh,
+  options: {
+    readPull: () => Promise<RepositoryMetadata>;
+    refreshDefault: () => Promise<{
+      metadata: RepositoryMetadata;
+      changed: boolean;
+    }>;
+    commit: (metadata: RepositoryMetadata) => Promise<boolean>;
+    aborted: () => boolean;
+    apply: (metadata: RepositoryMetadata) => void;
+  },
+): void {
+  beginMetadataRefresh(state, () => replaceReviewMetadata(options));
+}
+
+export function beginMetadataRefresh(
+  state: MetadataRefresh,
+  start: () => Promise<boolean>,
+): void {
+  if (state.settled) return;
+  if (state.flight) {
+    state.pending = true;
+    return;
+  }
+  state.pending = false;
+  const flight = start()
+    .catch(() => false)
+    .then((settled) => {
+      if (settled) state.settled = true;
+    })
+    .finally(() => {
+      if (state.flight !== flight) return;
+      state.flight = null;
+      if (!state.pending || state.settled) return;
+      state.pending = false;
+      beginMetadataRefresh(state, start);
+    });
+  state.flight = flight;
 }
 
 export function classifyKeyFor(

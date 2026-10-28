@@ -316,69 +316,33 @@ describe('repository metadata', () => {
     ]);
   });
 
-  it('retries a failed gitattributes read and then stores the pull', async () => {
-    vi.useFakeTimers();
-    try {
-      let attempts = 0;
-      const request = vi.fn(async (input: RawFileRequest) => {
-        if (input.path !== '.gitattributes') return missing;
-        attempts += 1;
-        if (attempts === 1) throw new Error('Raw file request failed with 429');
-        return found('src/generated.ts linguist-generated');
-      });
-      const pending = readPullMetadata(
-        review,
-        { codeowners: '', attributes: bundledGitAttributes },
-        request,
-        async () => sha,
-      );
-      await vi.advanceTimersByTimeAsync(1_000);
-      await expect(pending).resolves.toEqual({
-        codeowners: '',
-        attributes: 'src/generated.ts linguist-generated',
-      });
-      expect(attempts).toBe(2);
-      expect(await readPullCache(review)).toMatchObject({
-        sha,
-        attributes: 'src/generated.ts linguist-generated',
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+  it('does not retry or store a failed gitattributes read', async () => {
+    let attempts = 0;
+    const request = vi.fn(async (input: RawFileRequest) => {
+      if (input.path !== '.gitattributes') return missing;
+      attempts += 1;
+      throw new Error('Raw file request failed with 429');
+    });
 
-  it('does not store a pull or default cache when every metadata read fails', async () => {
-    vi.useFakeTimers();
-    try {
-      const request = vi.fn(async () => {
-        throw new Error('Raw file request failed with 503');
-      });
-      const pull = readPullMetadata(
+    await expect(
+      readPullMetadata(
         review,
         { codeowners: '', attributes: bundledGitAttributes },
         request,
         async () => sha,
-      );
-      const pullError = pull.catch((error: unknown) => error);
-      const defaults = refreshDefaultMetadata(repository, request);
-      await vi.advanceTimersByTimeAsync(7_000);
-      await expect(pullError).resolves.toSatisfy(
-        (error) =>
-          error instanceof Error &&
-          error.message === 'Repository metadata request failed',
-      );
-      await expect(defaults).resolves.toEqual({
-        metadata: {
-          codeowners: '',
-          attributes: bundledGitAttributes,
-        },
-        changed: false,
-      });
-      expect(await readPullCache(review)).toBeNull();
-      expect(await readCache(repository)).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+      ),
+    ).rejects.toThrow('Repository metadata request failed');
+    expect(attempts).toBe(1);
+    expect(await readPullCache(review)).toBeNull();
+
+    await expect(refreshDefaultMetadata(repository, request)).resolves.toEqual({
+      metadata: {
+        codeowners: '',
+        attributes: bundledGitAttributes,
+      },
+      changed: false,
+    });
+    expect(await readCache(repository)).toBeNull();
   });
 
   it('probes CODEOWNERS in GitHub order on HEAD', async () => {
