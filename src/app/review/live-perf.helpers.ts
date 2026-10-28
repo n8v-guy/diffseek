@@ -62,9 +62,9 @@ export function defaultLivePerfBudgets(
     coldFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S, 12),
     warmFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S, 10),
     hotFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S, 8),
-    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, 45),
-    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, 36),
-    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, 24),
+    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, 27),
+    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, 24),
+    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, 22),
     menuOpenSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MENU_S, 6),
     reconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_RECONCILES, 500),
     domMutations: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MUTATIONS, 12_000),
@@ -248,7 +248,7 @@ export function livePerfSummary(report: {
     '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     ...rows,
     '',
-    'Durations are medians. Tree and diff-panel rebuilds must stay at 0 on every run.',
+    'Durations are medians. Cold and warm tree rebuilds and diff-panel rebuilds must stay at 0. Hot counts rebuilds only after the first DiffSeek control.',
     '',
   ].join('\n');
 }

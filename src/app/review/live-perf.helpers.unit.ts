@@ -85,7 +85,7 @@ describe('live-perf helpers', () => {
     expect(medianBudgetFailures([slow, slow, slow], defaultLivePerfBudgets({}))).toEqual([
       'cold firstRenderSeconds 50 > 12',
       'cold menuOpenSeconds 20 > 6',
-      'cold panelsSeconds 100 > 45',
+      'cold panelsSeconds 100 > 27',
       'cold reconciles 800 > 500',
       'cold domMutations 20000 > 12000',
     ]);

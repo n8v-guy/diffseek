@@ -138,10 +138,7 @@ describeLive('live DiffSeek performance', () => {
       expect(rebuildFailures(warmSample, budgets)).toEqual([]);
 
       await showConversation(page);
-      const hotSample = await measureReview(page, 'hot', async () => {
-        await resetRedraws(page);
-        await showFiles(page);
-      });
+      const hotSample = await measureReview(page, 'hot', () => showFiles(page));
       hot.push(hotSample);
       expect(rebuildFailures(hotSample, budgets)).toEqual([]);
       await page.close();
@@ -177,6 +174,9 @@ async function measureReview(
     timeout: panelsTimeout,
   });
   const firstRenderSeconds = await renderSeconds(page, started);
+  // Conversation → Files changed rebuilds panels with no extension. Count
+  // hot rebuilds only after DiffSeek has painted, and keep cold/warm at 0.
+  if (scenario === 'hot') await resetRedraws(page);
   const menuOpenSeconds = await openFilterMenu(page);
   await expect(page.locator(generatedCounter)).toHaveText(
     generatedCategorizedPattern(expectedGeneratedTotal),
@@ -213,21 +213,32 @@ async function runToggle(page: Page): Promise<RedrawCounts> {
 async function runMark(page: Page): Promise<RedrawCounts> {
   await resetRedraws(page);
   const before = await readRedraws(page);
+  // Folders are treeitems too and contain their files' links. aria-expanded
+  // is the folder control; the action must be this row's own icon, not a
+  // descendant file, or the id selector matches every row in the folder.
   const row = page
-    .locator('[role="treeitem"]:has(a[href^="#diff-"])')
+    .locator('[role="treeitem"]:not([aria-expanded])')
     .filter({
       has: page.locator('[data-diffseek-viewed-action][aria-pressed="false"]'),
     })
     .first();
   await expect(row).toBeVisible({ timeout: stepTimeout });
-  const selector = await row.evaluate((element) => {
-    if (!element.id) return '';
-    return `#${CSS.escape(element.id)} [data-diffseek-viewed-action]`;
+  const action = await row.evaluateHandle((element) => {
+    return (
+      [...element.querySelectorAll<HTMLElement>('[data-diffseek-viewed-action]')].find(
+        (node) =>
+          node.closest('[role="treeitem"]') === element &&
+          node.getAttribute('aria-pressed') === 'false',
+      ) ?? null
+    );
   });
-  if (!selector) throw new Error('No unviewed file row to mark');
-  const action = page.locator(selector);
-  await action.click({ timeout: stepTimeout });
-  await expect(action).toHaveAttribute('aria-pressed', 'true', { timeout: stepTimeout });
+  const target = action.asElement();
+  if (!target) throw new Error('No unviewed file row to mark');
+  await target.click({ timeout: stepTimeout });
+  await expect
+    .poll(() => target.getAttribute('aria-pressed'), { timeout: stepTimeout })
+    .toBe('true');
+  await action.dispose();
   return subtractCounts(await readRedraws(page), before);
 }
 

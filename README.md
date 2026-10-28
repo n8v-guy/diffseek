@@ -113,11 +113,13 @@ Conversation, then Files changed. Each sample records time to the first
 DiffSeek control, time from the Filter click until the DiffSeek menu is
 visible, and time until the generated-facet denominator shows the full
 classified total. It also records reconcile passes, DiffSeek DOM mutations, and
-GitHub file-tree or diff-panel rebuilds (removed rows that come back, which
-must stay 0 on every run). The cold sample also toggles the viewed filter and
-marks one file row viewed. An empty sample set fails. Duration ceilings are
-about three times a local median (first render 12s/10s/8s, menu 6s, panels
-45s/36s/24s) with optional `DIFFSEEK_LIVE_BUDGET_*` overrides. Results are
+GitHub file-tree or diff-panel rebuilds (removed rows that come back). Cold
+and warm must stay at 0. Hot counts rebuilds only after the first DiffSeek
+control, because opening Files changed rebuilds panels with no extension.
+The cold sample also toggles the viewed filter and marks one file row viewed.
+An empty sample set fails. Duration ceilings are about three times a measured
+local median (first render 12s/10s/8s, menu 6s, panels 27s/24s/22s) with
+optional `DIFFSEEK_LIVE_BUDGET_*` overrides. Results are
 written to `.cache/live-perf-latest.json`, the job summary, and a `live-perf`
 artifact.
 Override the target with `DIFFSEEK_LIVE_PR_URL`. The Live E2E workflow is

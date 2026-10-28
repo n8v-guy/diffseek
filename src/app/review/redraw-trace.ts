@@ -165,6 +165,10 @@ function countRebuilt(
 
 function collectIds(node: Node, selector: string, into: Set<string>): void {
   if (!(node instanceof Element)) return;
+  // The filter menu is not a file tree. Walking it on every open showed up as
+  // longer long tasks and cannot be a tree or diff-panel rebuild.
+  const role = node.getAttribute('role');
+  if (role === 'menu' || role === 'menuitem' || role === 'menuitemcheckbox') return;
   const rows = [
     ...(node.matches(selector) ? [node] : []),
     ...node.querySelectorAll<HTMLElement>(selector),
