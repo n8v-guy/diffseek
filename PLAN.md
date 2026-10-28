@@ -188,8 +188,8 @@ filtering without adding another filter model.
   (`−`). "auto-view" is a separate Generated-row pill, off by default.
 - [x] While "auto-view" is on, enqueue native viewed actions for generated
   files once per file. Let normal reconciliation update menu/tree badges.
-- [x] Use the setting snackbars: `Show … by default`, `Hide … by default`,
-  `Always mark generated files viewed`, and `Stop marking generated files viewed`.
+- [x] Use the cycle snackbars `Show now`, `Hide now`, and `Always hide`, plus
+  `Always mark generated files viewed` and `Stop marking generated files viewed`.
 - [x] Add a row-hover `only` pill to each item in multi-item sections; it
   excludes every sibling value without changing other facets.
 - [x] Add a title-row-hover `all` pill when a section has exclusions; it clears

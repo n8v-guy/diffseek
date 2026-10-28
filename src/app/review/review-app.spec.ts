@@ -1020,7 +1020,7 @@ describe('review app interactions', () => {
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
         ?.textContent,
-    ).toBe('Show viewed files by default');
+    ).toBe('Show now');
 
     document
       .querySelector<HTMLButtonElement>(
@@ -1050,7 +1050,7 @@ describe('review app interactions', () => {
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
         ?.textContent,
-    ).toBe('Hide viewed files by default');
+    ).toBe('Always hide');
     app.stop();
   });
 

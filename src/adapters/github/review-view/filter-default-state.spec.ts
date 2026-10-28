@@ -12,11 +12,23 @@ describe('filter default state', () => {
 
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('false');
+    expect(item.title).toBe('○ Show now\n● Hide now\n○ Always hide');
+    expect(item.getAttribute('aria-label')).toBe(
+      'Viewed: Hide now, click for Always hide',
+    );
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('mixed');
+    expect(item.title).toBe('○ Show now\n○ Hide now\n● Always hide');
+    expect(item.getAttribute('aria-label')).toBe(
+      'Viewed: Always hide, click for Show now',
+    );
     expect(options.filterDefaults?.hidden).toEqual(new Set(['viewed']));
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('true');
+    expect(item.title).toBe('● Show now\n○ Hide now\n○ Always hide');
+    expect(item.getAttribute('aria-label')).toBe(
+      'Viewed: Show now, click for Hide now',
+    );
     expect(options.filterDefaults?.hidden).toEqual(new Set());
   });
 
@@ -26,6 +38,10 @@ describe('filter default state', () => {
 
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('false');
+    expect(item.title).toBe('○ Show now\n● Hide now\n○ Always hide');
+    expect(item.getAttribute('aria-label')).toBe(
+      'Generated: Hide now, click for Always hide',
+    );
     expect(onFilterDefaultChange).not.toHaveBeenCalled();
 
     cycle(item, options);

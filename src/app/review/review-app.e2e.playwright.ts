@@ -518,16 +518,27 @@ test('clears native filters before taking over the menu', async () => {
   await expect(alwaysRead).toHaveAttribute('aria-pressed', 'false');
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'false');
+  await expect(generated).toHaveAttribute(
+    'title',
+    '○ Show now\n● Hide now\n○ Always hide',
+  );
+  await expect(generated).toHaveAttribute(
+    'aria-label',
+    'Generated: Hide now, click for Always hide',
+  );
+  await expect(
+    page.locator('[data-diffseek="snackbar"]').last(),
+  ).toContainText('Hide now');
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'mixed');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toContainText('Hide generated files by default');
+  ).toContainText('Always hide');
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'true');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toContainText('Show generated files by default');
+  ).toContainText('Show now');
   await expect(
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'false');
@@ -551,7 +562,7 @@ test('clears native filters before taking over the menu', async () => {
   await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toContainText('Hide viewed files by default');
+  ).toContainText('Always hide');
   const reset = page.locator('[data-reset-filters]');
   await expect(reset).toHaveCount(0);
   await ownerRow.hover();

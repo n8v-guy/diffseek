@@ -110,16 +110,14 @@ export function showBatchResult(
 
 export function showRememberedFilterDefault(
   root: Document,
-  facet: RememberedFilterFacet,
+  _facet: RememberedFilterFacet,
   state: FilterDefaultState,
 ): void {
-  const label = facet === 'viewed' ? 'viewed files' : 'generated files';
-  showSnackbar(
-    root,
-    state === 'hidden'
-      ? `Hide ${label} by default`
-      : `Show ${label} by default`,
-  );
+  showSnackbar(root, state === 'hidden' ? 'Always hide' : 'Show now');
+}
+
+export function showHideNow(root: Document): void {
+  showSnackbar(root, 'Hide now');
 }
 
 export function showAlwaysRead(root: Document, enabled: boolean): void {
