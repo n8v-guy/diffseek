@@ -44,6 +44,9 @@ request reviews. GitHub remains the review system and visual authority.
   hides matching viewed files, they target those files as a reversible escape.
 - Remembered viewed/generated defaults are extension-wide; other exclusions are
   review-scoped.
+- No saved filter-default record hides viewed and generated files. A stored
+  record wins, including an empty one, and is not rewritten until a remembered
+  row changes.
 - Menu reset is visible only for review-scoped exclusions and never changes
   remembered defaults.
 - A generated default-viewed action follows GitHub's rendered controls once per

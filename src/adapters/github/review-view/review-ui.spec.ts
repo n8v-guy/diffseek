@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   removeInjected,
+  showAlwaysRead,
   showBatchResult,
   showBatchStarted,
   showRememberedFilterDefault,
@@ -83,11 +84,8 @@ describe('review status UI', () => {
 
     showRememberedFilterDefault(document, 'viewed', 'hidden');
     showRememberedFilterDefault(document, 'generated', 'shown');
-    showRememberedFilterDefault(
-      document,
-      'generated',
-      'hidden-viewed',
-    );
+    showAlwaysRead(document, true);
+    showAlwaysRead(document, false);
 
     expect(
       [
@@ -98,7 +96,8 @@ describe('review status UI', () => {
     ).toEqual([
       'Hide viewed files by default',
       'Show generated files by default',
-      'Hide and mark viewed generated files by default',
+      'Always mark generated files viewed',
+      'Stop marking generated files viewed',
     ]);
   });
 });

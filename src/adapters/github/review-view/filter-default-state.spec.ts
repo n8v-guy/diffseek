@@ -20,23 +20,51 @@ describe('filter default state', () => {
     expect(options.filterDefaults?.hidden).toEqual(new Set());
   });
 
-  it('adds default viewed to the generated four-state cycle', () => {
+  it('cycles generated files through show, hide, and always hide without marking them read', () => {
     const { item, options, onFilterDefaultChange } = setup('generated');
+    options.filterDefaults?.viewed.add('generated');
 
     cycle(item, options);
+    expect(item.getAttribute('aria-checked')).toBe('false');
+    expect(onFilterDefaultChange).not.toHaveBeenCalled();
+
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('mixed');
-    expect(item.dataset.defaultViewed).toBeUndefined();
-    cycle(item, options);
-    expect(item.dataset.defaultViewed).toBe('true');
-    expect(options.filterDefaults?.viewed).toEqual(new Set(['generated']));
+    expect(options.filterDefaults?.hidden).toEqual(new Set(['generated']));
     expect(onFilterDefaultChange).toHaveBeenLastCalledWith(
       'generated',
-      'hidden-viewed',
+      'hidden',
     );
+
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('true');
+    expect(options.filterDefaults?.hidden).toEqual(new Set());
+    expect(options.excluded.has('true')).toBe(false);
+    expect(onFilterDefaultChange).toHaveBeenLastCalledWith(
+      'generated',
+      'shown',
+    );
+    expect(options.filterDefaults?.viewed).toEqual(new Set(['generated']));
     expect(item.dataset.defaultViewed).toBeUndefined();
+  });
+
+  it('shows generated files on the first click from the fresh always-hide default', () => {
+    const { item, options, onFilterDefaultChange } = setup('generated');
+    options.filterDefaults = {
+      hidden: new Set(['generated']),
+      viewed: new Set(),
+    };
+    options.excluded.add('true');
+    applyCheckedState(item, options);
+
+    cycle(item, options);
+    expect(item.getAttribute('aria-checked')).toBe('true');
+    expect(options.filterDefaults.viewed).toEqual(new Set());
+    expect(options.filterDefaults.hidden).toEqual(new Set());
+    expect(onFilterDefaultChange).toHaveBeenCalledExactlyOnceWith(
+      'generated',
+      'shown',
+    );
   });
 });
 

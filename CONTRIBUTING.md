@@ -63,8 +63,11 @@ Classic `/pull/:number/files` review URLs are replaced with GitHub's modern
 DiffSeek replaces the contents of GitHub's **Filter options** menu with viewed,
 generated-file, owner, type, language, and change-status filters. It retains the
 native menu container and interaction model. Viewed and generated filters cycle
-through shown, hidden, and extension-wide default-hidden states; generated files
-also support default-hidden-and-viewed. Multi-item sections expose row-hover
+show, hide, and always hide. With no saved filter defaults, both start on
+always hide and the first click shows them. The Generated row has an
+"auto-view" pill that marks generated files viewed while it is on, and is off
+for a fresh install. A saved always-hide-and-mark-read record is read as always
+hide with auto-view on. Multi-item sections expose row-hover
 `only` and title-hover `all` shortcuts. Non-matches are hidden in the file tree
 and collapsed/muted in place in the diff. File, folder, counter-pill, and
 counter-overlay actions mark their current visible scope viewed through
@@ -86,7 +89,12 @@ known PR cache (last 10 pull requests)
 A default-branch `HEAD` refresh runs afterward only when that repo has no
 default-branch cache yet; it is an isolated prefetch for later unknown PRs
 and does not replace the current review. A known PR with the same head SHA
-does not reload `CODEOWNERS` or `.gitattributes`.
+does not reload `CODEOWNERS` or `.gitattributes`. A failed read is not cached
+and is not retried on a timer. It is attempted again, one request at a time,
+when the filter menu opens or the file tree is updated. Until a read settles,
+the review uses cached metadata or bundled assumptions, so generated files,
+groups, and formats may be absent. A settled read redraws those sections and
+applies the current hide settings without a reload.
 
 `CODEOWNERS` supplies owners. DiffSeek follows GitHub's order
 (`.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`). On a pull-request

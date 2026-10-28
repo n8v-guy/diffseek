@@ -28,7 +28,7 @@ describe('raw repository files', () => {
   });
 
   it('returns text and response metadata', async () => {
-    const request = vi.fn(async () =>
+    const request = vi.fn<typeof fetch>(async () =>
       new Response('*.ts group=code', {
         headers: { 'content-type': 'text/plain' },
       }),
@@ -47,8 +47,12 @@ describe('raw repository files', () => {
     });
     expect(request).toHaveBeenCalledWith(
       'https://github.com/owner/repo/raw/HEAD/.gitattributes',
-      { credentials: 'include', redirect: 'follow' },
+      expect.objectContaining({
+        credentials: 'include',
+        redirect: 'follow',
+      }),
     );
+    expect(request.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('distinguishes missing files and rejects other failures', async () => {

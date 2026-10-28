@@ -4,6 +4,10 @@ import { extensionOf } from '@diffseek/review';
 const headerButtonSelector = '[data-diff-header-wrapper="true"] button';
 const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
 
+export function fileTreeElement(root: ParentNode): HTMLElement | null {
+  return root.querySelector<HTMLElement>(fileTreeSelector);
+}
+
 export type PageSnapshot =
   | {
       supported: true;

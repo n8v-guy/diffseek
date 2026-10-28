@@ -16,6 +16,7 @@ import {
   defaultLivePrUrl,
   expectedGeneratedTotal,
   generatedCategorizedPattern,
+  generatedIndexedText,
   hotLossFailures,
   isInlineStorageState,
   livePerfSummary,
@@ -152,6 +153,45 @@ describeLive('live DiffSeek performance', () => {
     expect(medianBudgetFailures(cold, budgets)).toEqual([]);
     expect(medianBudgetFailures(warm, budgets)).toEqual([]);
     expect(medianBudgetFailures(hot, budgets)).toEqual([]);
+  });
+
+  test('fresh defaults hide generated and viewed files until shown', async () => {
+    await clearExtensionStore(context);
+    const page = await context.newPage();
+    await page.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByLabel('Filter options')).toBeVisible({
+      timeout: panelsTimeout,
+    });
+    await openFilterMenu(page);
+    const viewed = page.locator(viewedToggle);
+    const generated = page.locator(
+      '[data-filter-kind="generated"][data-filter-value="true"]',
+    );
+    const generatedCount = page.locator(
+      '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
+    );
+    await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
+    await expect(generated).toHaveAttribute('aria-checked', 'mixed', {
+      timeout: panelsTimeout,
+    });
+    await expect(generatedCount).toHaveText(
+      new RegExp(`^0/${expectedGeneratedTotal}$`),
+      { timeout: panelsTimeout },
+    );
+    await expect(page.locator('[data-diffseek-always-read]')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+
+    await viewed.click();
+    await expect(viewed).toHaveAttribute('aria-checked', 'true');
+    await generated.click();
+    await expect(generated).toHaveAttribute('aria-checked', 'true');
+    await expect(generatedCount).toHaveText(
+      generatedIndexedText(expectedGeneratedTotal),
+      { timeout: panelsTimeout },
+    );
+    await page.close();
   });
 });
 

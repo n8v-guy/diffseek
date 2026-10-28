@@ -23,13 +23,20 @@ adapter is a high-value integration seam and therefore needs broader fixtures.
 cached default-branch, else bundled assumptions. Uncached pull-head content
 replaces the open review and is stored in that LRU. A default-branch `HEAD`
 refresh is an isolated cache prefetch only when the repo has no default-branch
-cache yet; it does not replace the open review. Failures retain the preceding
-level.
+cache yet; it does not replace a settled pull-head result. If that pull-head
+read fails, the open review adopts the settled default-branch result. A
+transport failure is not stored. Each read is one attempt. A later success
+replaces the open review. Until that success, the review keeps cached metadata
+or bundled assumptions. A failed read is attempted again when the filter menu
+opens or the file tree changes, and only one read runs at a time. A missing
+file retains the preceding level.
 
 **Why:** Warm revisits skip `CODEOWNERS` / `.gitattributes` reloads while unknown
-PRs still start from HEAD. **Cost:** a PR-head file at a GitHub-higher path than
-the last default-branch hit is not seen until that cached path 404s or the PR
-head SHA changes.
+PRs still start from HEAD. A cold review still picks up generated and owner
+rules when a later menu open or file-list update succeeds. **Cost:** a PR-head
+file at a GitHub-higher path than the last default-branch hit is not seen until
+that cached path 404s or the PR head SHA changes. A hung raw fetch is abandoned
+after 20s.
 
 ## D004 — Label sources compose through one interface
 
@@ -123,3 +130,18 @@ fallback.
 **Why:** Every file remains classifiable when mixed values make a facet useful,
 without presenting a universal non-choice. **Cost:** A fallback-only facet
 cannot be toggled until repository metadata introduces another value.
+
+## D011 — Missing filter defaults are not an empty preference
+
+**Decision:** Absence of `diffseek:filter-defaults` hides viewed and generated
+files. A present record is parsed as saved, even when both lists are empty.
+Reading defaults does not write the implicit state.
+
+**Why:** New installs reduce review noise without a migration that overwrites
+people who already saved a preference, including show-all. **Cost:** The
+implicit default is reapplied on every session until a remembered row changes.
+Viewed and generated clicks both run show, hide, always hide. The fresh
+always-hide state returns to show on the first click and does not mark files
+viewed. Marking generated files viewed is a separate persisted "auto-view"
+control, off until the user turns it on. A stored record that hid generated
+files and marked them viewed is read as always hide plus auto-view.

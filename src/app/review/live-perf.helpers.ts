@@ -108,8 +108,8 @@ export function generatedIndexedText(total: number): string {
 }
 
 /**
- * Denominator-ready generated counter: total is known even if viewed hiding
- * shrinks the visible numerator.
+ * Denominator-ready generated counter: total is known even when fresh-install
+ * hiding leaves the visible numerator at 0.
  */
 export function generatedCategorizedPattern(total: number): RegExp {
   return new RegExp(`^\\d+/${total}$`);

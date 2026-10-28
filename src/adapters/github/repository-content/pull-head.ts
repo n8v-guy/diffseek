@@ -39,6 +39,7 @@ export async function fetchPullHead(
   const response = await request(pullCommitsUrl(input), {
     credentials: 'include',
     redirect: 'follow',
+    signal: AbortSignal.timeout(20_000),
   });
   if (!response.ok) {
     throw new Error(`Pull head request failed with ${response.status}`);

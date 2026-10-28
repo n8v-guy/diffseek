@@ -53,8 +53,11 @@ async function nextReconcile(action: () => void): Promise<void> {
   await ready;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   fakeBrowser.reset();
+  await fakeBrowser.storage.local.set({
+    'diffseek:filter-defaults': { hidden: [], viewed: [] },
+  });
   document.documentElement.innerHTML = fixture;
   installNativeBehavior();
 });
@@ -118,7 +121,7 @@ describe('review app lifecycle', () => {
 
     expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull();
     expect(readPull).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ pull: 1 }), { codeowners: '', attributes: 'src/** group=cached' });
-    expect(refreshDefault).not.toHaveBeenCalled();
+    expect(refreshDefault).toHaveBeenCalledOnce();
     resolvePull?.({
       codeowners: '',
       attributes: 'src/** group=pull',
@@ -213,6 +216,41 @@ describe('review app lifecycle', () => {
     );
     expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
     setSpy.mockRestore();
+    app.stop();
+  });
+
+  it('adopts default-branch attributes when the pull-head read keeps failing', async () => {
+    await fakeBrowser.storage.local.clear();
+    openMenu();
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => ({
+        codeowners: '',
+        attributes: 'docs/** group=Docs',
+      }),
+      readPull: async () => {
+        throw new Error('offline');
+      },
+      refreshDefault: async () => ({
+        metadata: {
+          codeowners: '',
+          attributes: 'src/generated.ts linguist-generated',
+        },
+        changed: true,
+      }),
+    });
+
+    await vi.waitFor(() =>
+      expect(
+        document
+          .querySelector(
+            '[data-filter-kind="generated"][data-filter-value="true"]',
+          )
+          ?.getAttribute('aria-checked'),
+      ).toBe('mixed'),
+    );
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
     app.stop();
   });
 
@@ -449,6 +487,125 @@ describe('review app lifecycle', () => {
   });
 });
 
+describe('metadata refresh', () => {
+  const immediate = { codeowners: '', attributes: 'docs/** group=Docs' };
+  const loaded = { codeowners: '', attributes: 'src/generated.ts linguist-generated' };
+
+  it('retries a failed read when the filter menu opens and then applies it', async () => {
+    await fakeBrowser.storage.local.clear();
+    const failed = Promise.reject(new Error('offline'));
+    void failed.catch(() => undefined);
+    const readPull = vi.fn()
+      .mockReturnValueOnce(failed)
+      .mockResolvedValueOnce(loaded);
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => immediate,
+      refreshDefault: async () => ({ metadata: immediate, changed: false }),
+      readPull,
+    });
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledOnce());
+    await failed.catch(() => undefined);
+    expect(document.querySelector('[data-filter-kind="generated"]')).toBeNull();
+
+    openMenu();
+    app.reconcile();
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector('[data-filter-kind="generated"][data-filter-value="true"]')?.getAttribute('aria-checked'),
+      ).toBe('mixed'),
+    );
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    app.stop();
+  });
+
+  it('retries a failed read when the file tree changes', async () => {
+    const failed = Promise.reject(new Error('offline'));
+    void failed.catch(() => undefined);
+    const readPull = vi.fn()
+      .mockReturnValueOnce(failed)
+      .mockResolvedValueOnce(loaded);
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => immediate,
+      refreshDefault: async () => ({ metadata: immediate, changed: false }),
+      readPull,
+    });
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledOnce());
+    await failed.catch(() => undefined);
+
+    await nextReconcile(() => {
+      const item = document.createElement('li');
+      item.id = 'src/extra.ts';
+      item.setAttribute('role', 'treeitem');
+      item.setAttribute('aria-label', 'extra.ts');
+      document.querySelector('[role="tree"]')?.append(item);
+    });
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledTimes(2));
+    openMenu();
+    app.reconcile();
+    expect(readPull).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(),
+    );
+    app.stop();
+  });
+
+  it('does not start another metadata read while one is in flight', async () => {
+    let resolvePull: (value: typeof loaded) => void = () => undefined;
+    const readPull = vi.fn(
+      () => new Promise<typeof loaded>((resolve) => { resolvePull = resolve; }),
+    );
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => immediate,
+      refreshDefault: async () => ({ metadata: immediate, changed: false }),
+      readPull,
+    });
+    await vi.waitFor(() => expect(readPull).toHaveBeenCalledOnce());
+    openMenu();
+    app.reconcile();
+    document.querySelector('[role="tree"]')?.append(document.createElement('li'));
+    app.reconcile();
+    expect(readPull).toHaveBeenCalledOnce();
+
+    resolvePull(loaded);
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(),
+    );
+    expect(readPull).toHaveBeenCalledOnce();
+    app.stop();
+  });
+
+  it('keeps cached metadata when the pull-head read fails', async () => {
+    openMenu();
+    const readPull = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => ({ codeowners: '', attributes: 'src/** group=FromCache' }),
+      refreshDefault: async () => ({
+        metadata: { codeowners: '', attributes: 'src/** group=FromCache' },
+        changed: false,
+      }),
+      readPull,
+    });
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-filter-value="FromCache"]')).not.toBeNull(),
+    );
+    expect(readPull).toHaveBeenCalledOnce();
+    app.reconcile();
+    expect(readPull).toHaveBeenCalledOnce();
+    app.stop();
+  });
+});
+
 describe('review app reuse invariants', () => {
   it('keeps classifications after a structure-key rescan', async () => {
     openMenu();
@@ -578,6 +735,128 @@ describe('review app reuse invariants', () => {
   });
 });
 
+describe('fresh filter defaults', () => {
+  it('hides generated and viewed files until they are shown again', async () => {
+    await fakeBrowser.storage.local.clear();
+    openMenu();
+    const markFiles = vi.fn(async () => ({
+      requested: 1,
+      completed: ['src/generated.ts'],
+      failed: [],
+    }));
+    const app = await startReviewApp({
+      ...inertMetadata,
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      markFiles,
+      readImmediate: async () => ({
+        codeowners: '',
+        attributes: 'src/generated.ts linguist-generated',
+      }),
+    });
+
+    const viewed = () =>
+      document.querySelector<HTMLButtonElement>(
+        '[data-filter-kind="viewed"][data-filter-value="true"]',
+      );
+    const generated = () =>
+      document.querySelector<HTMLButtonElement>(
+        '[data-filter-kind="generated"][data-filter-value="true"]',
+      );
+    const count = (facet: string) =>
+      document.querySelector(
+        `.diffseek-menu-row:has([data-filter-kind="${facet}"][data-filter-value="true"]) .diffseek-menu-count`,
+      )?.textContent;
+
+    await vi.waitFor(() =>
+      expect(generated()?.getAttribute('aria-checked')).toBe('mixed'),
+    );
+    expect(viewed()?.getAttribute('aria-checked')).toBe('mixed');
+    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
+    expect(count('viewed')).toBe('0/1');
+    expect(count('generated')).toBe('0/1');
+    expect(
+      (await fakeBrowser.storage.local.get('diffseek:filter-defaults'))[
+        'diffseek:filter-defaults'
+      ],
+    ).toBeUndefined();
+
+    viewed()?.click();
+    await vi.waitFor(() =>
+      expect(document.getElementById('docs/readme.md')?.hidden).toBe(false),
+    );
+    expect(viewed()?.getAttribute('aria-checked')).toBe('true');
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+
+    generated()?.click();
+    await vi.waitFor(() => {
+      expect(generated()?.getAttribute('aria-checked')).toBe('true');
+      expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
+    });
+    expect(
+      document
+        .querySelector('[data-diffseek-always-read]')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('false');
+    expect(markFiles).not.toHaveBeenCalled();
+
+    generated()?.click();
+    generated()?.click();
+    generated()?.click();
+    await vi.waitFor(() =>
+      expect(generated()?.getAttribute('aria-checked')).toBe('true'),
+    );
+    expect(markFiles).not.toHaveBeenCalled();
+    await vi.waitFor(async () =>
+      expect(
+        await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
+      ).toEqual({
+        'diffseek:filter-defaults': { hidden: [], viewed: [] },
+      }),
+    );
+    app.stop();
+  });
+
+  it('respects a saved preference that hides only viewed files', async () => {
+    await fakeBrowser.storage.local.set({
+      'diffseek:filter-defaults': { hidden: ['viewed'], viewed: [] },
+    });
+    openMenu();
+    const app = await startReviewApp({
+      ...inertMetadata,
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => ({
+        codeowners: '',
+        attributes: 'src/generated.ts linguist-generated',
+      }),
+    });
+
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector(
+          '[data-filter-kind="generated"][data-filter-value="true"]',
+        )?.getAttribute('aria-checked'),
+      ).toBe('true'),
+    );
+    expect(
+      document.querySelector(
+        '[data-filter-kind="viewed"][data-filter-value="true"]',
+      )?.getAttribute('aria-checked'),
+    ).toBe('mixed');
+    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
+    expect(
+      document.querySelector(
+        '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
+      )?.textContent,
+    ).toBe('1/1');
+    app.stop();
+  });
+});
+
 describe('review app interactions', () => {
   it('hides and marks generated files viewed from the persisted default', async () => {
     await fakeBrowser.storage.local.set({
@@ -624,9 +903,9 @@ describe('review app interactions', () => {
     );
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
     expect(
-      document.querySelector<HTMLButtonElement>(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      )?.dataset.defaultViewed,
+      document
+        .querySelector('[data-diffseek-always-read]')
+        ?.getAttribute('aria-pressed'),
     ).toBe('true');
     await vi.waitFor(() =>
       expect(markFiles).toHaveBeenCalledWith(
@@ -641,7 +920,11 @@ describe('review app interactions', () => {
       '[data-filter-kind="generated"][data-filter-value="true"]',
     );
     generated?.click();
-    expect(generated?.dataset.defaultViewed).toBe('true');
+    expect(
+      document
+        .querySelector('[data-diffseek-always-read]')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true');
 
     releaseMark();
     await vi.waitFor(() =>
@@ -671,6 +954,40 @@ describe('review app interactions', () => {
         )?.getAttribute('aria-pressed'),
       ).toBe('true'),
     );
+    app.stop();
+  });
+
+  it('marks generated files when auto-view turns on and stops when it turns off', async () => {
+    const markFiles = vi.fn(async (snapshot: SupportedSnapshot, paths: string[], viewed: boolean) => {
+      for (const path of paths) {
+        snapshot.viewedControl(path)?.setAttribute('aria-label', viewed ? 'Viewed' : 'Not Viewed');
+        snapshot.viewedControl(path)?.setAttribute('aria-pressed', String(viewed));
+      }
+      return { requested: paths.length, completed: paths, failed: [] };
+    });
+    openMenu();
+    const app = await startReviewApp({
+      ...inertMetadata,
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      markFiles,
+      readImmediate: async () => ({ codeowners: '', attributes: 'src/generated.ts linguist-generated' }),
+    });
+    const alwaysRead = () => document.querySelector<HTMLButtonElement>('[data-diffseek-always-read]');
+    await vi.waitFor(() => expect(alwaysRead()).not.toBeNull());
+    alwaysRead()?.click();
+    await vi.waitFor(() => expect(markFiles).toHaveBeenCalledWith(expect.anything(), ['src/generated.ts'], true, expect.anything()));
+    expect(alwaysRead()?.getAttribute('aria-pressed')).toBe('true');
+    alwaysRead()?.click();
+    await vi.waitFor(async () => expect(await fakeBrowser.storage.local.get('diffseek:filter-defaults')).toEqual({
+      'diffseek:filter-defaults': { hidden: [], viewed: [] },
+    }));
+    const control = document.querySelector('#diff-generated button');
+    control?.setAttribute('aria-label', 'Not Viewed');
+    control?.setAttribute('aria-pressed', 'false');
+    app.reconcile();
+    expect(control?.getAttribute('aria-label')).toBe('Not Viewed');
+    expect(markFiles).toHaveBeenCalledTimes(1);
     app.stop();
   });
 

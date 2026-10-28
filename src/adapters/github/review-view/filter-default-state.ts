@@ -1,7 +1,7 @@
-import type {
-  FilterDefaults,
-  FilterDefaultState,
-  RememberedFilterFacet,
+import {
+  type FilterDefaults,
+  type FilterDefaultState,
+  type RememberedFilterFacet,
 } from '@diffseek/browser/filter-defaults';
 import type { LabelFacet } from '@diffseek/review';
 
@@ -29,47 +29,23 @@ export function applyCheckedState(
       ? 'mixed'
       : String(!options.excluded.has(options.value)),
   );
-  if (
-    options.facet === 'generated' &&
-    options.filterDefaults?.viewed.has('generated')
-  ) {
-    item.dataset.defaultViewed = 'true';
-  } else {
-    delete item.dataset.defaultViewed;
-  }
 }
 
 export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
-  if (
-    !isRememberedFilterFacet(options.facet) ||
-    !options.filterDefaults
-  ) {
-    return false;
-  }
   const defaults = options.filterDefaults;
-  if (
-    options.facet === 'generated' &&
-    defaults.viewed.has('generated')
-  ) {
-    defaults.viewed.delete('generated');
-    defaults.hidden.delete('generated');
+  if (!isRememberedFilterFacet(options.facet) || !defaults) return false;
+  if (defaults.hidden.has(options.facet)) {
+    defaults.hidden.delete(options.facet);
     options.excluded.delete(options.value);
-    options.onFilterDefaultChange?.('generated', 'shown');
-  } else if (defaults.hidden.has(options.facet)) {
-    if (options.facet === 'generated') {
-      defaults.viewed.add('generated');
-      options.onFilterDefaultChange?.('generated', 'hidden-viewed');
-    } else {
-      defaults.hidden.delete(options.facet);
-      options.excluded.delete(options.value);
-      options.onFilterDefaultChange?.(options.facet, 'shown');
-    }
-  } else if (options.excluded.has(options.value)) {
+    options.onFilterDefaultChange?.(options.facet, 'shown');
+    return true;
+  }
+  if (options.excluded.has(options.value)) {
     defaults.hidden.add(options.facet);
     options.onFilterDefaultChange?.(options.facet, 'hidden');
-  } else {
-    options.excluded.add(options.value);
+    return true;
   }
+  options.excluded.add(options.value);
   return true;
 }
 

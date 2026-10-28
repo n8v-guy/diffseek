@@ -19,6 +19,7 @@ export function moveFocus(event: KeyboardEvent): void {
 
 export function itemKey(button: HTMLButtonElement): string {
   if (button.dataset.resetFilters) return 'reset-filters';
+  if (button.dataset.diffseekAlwaysRead) return 'always-read';
   if (button.dataset.filterOnly) {
     return rowActionKey('only', button);
   }

@@ -53,15 +53,14 @@ test.beforeAll(async () => {
 });
 
 test.beforeEach(async () => {
-  const worker =
-    context.serviceWorkers()[0] ??
-    (await context.waitForEvent('serviceworker'));
+  const worker = await extensionWorker();
   await worker.evaluate(() => {
     const extension = globalThis as unknown as {
       chrome: { storage: { local: { clear: () => Promise<void> } } };
     };
     return extension.chrome.storage.local.clear();
   });
+  await writeFilterDefaults({ hidden: [], viewed: [] });
 });
 
 test.afterEach(async () => {
@@ -515,32 +514,35 @@ test('clears native filters before taking over the menu', async () => {
     page.locator('[data-filter-kind="owners"][aria-checked="false"]'),
   ).toHaveCount(0);
 
+  const alwaysRead = page.locator('[data-diffseek-always-read]');
+  await expect(alwaysRead).toHaveAttribute('aria-pressed', 'false');
   await generated.click();
+  await expect(generated).toHaveAttribute('aria-checked', 'false');
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'mixed');
-  await expect(generated).not.toHaveAttribute('data-default-viewed', 'true');
+  await expect(
+    page.locator('[data-diffseek="snackbar"]').last(),
+  ).toContainText('Hide generated files by default');
   await generated.click();
-  await expect(generated).toHaveAttribute('aria-checked', 'mixed');
-  await expect(generated).toHaveAttribute('data-default-viewed', 'true');
-  await expect(
-    page
-      .locator('[data-diffseek="snackbar"]')
-      .filter({
-        hasText: 'Hide and mark viewed generated files by default',
-      }),
-  ).toBeVisible();
-  await expect(
-    page.locator('#diff-generated button[aria-label="Viewed"]'),
-  ).toHaveAttribute('aria-pressed', 'true');
-  await generated.click();
-  await expect(
-    page.locator(
-      '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]',
-    ),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(generated).toHaveAttribute('aria-checked', 'true');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Show generated files by default');
+  await expect(
+    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'false');
+  await generated.locator('xpath=..').hover();
+  await alwaysRead.click();
+  await expect(alwaysRead).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.locator('#diff-generated button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await alwaysRead.click();
+  await expect(alwaysRead).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#diff-generated button[aria-label="Viewed"]').click();
+  await expect(
+    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'false');
 
   await viewed.click();
   await expect(menu).toBeVisible();
@@ -767,6 +769,186 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   await expect(codeCounter).toHaveText('2/3');
   await expect(codeViewed).toHaveAttribute('aria-label', 'Mark as viewed');
 });
+
+test('hides generated and viewed files for a fresh install and honors saved preferences', async () => {
+  await writeFilterDefaults(null);
+  const page = await context.newPage();
+  const fixture = await readFile(fixturePath, 'utf8');
+  await page.route('https://github.com/octo/repo/pull/9/changes', async (route) => {
+    await route.fulfill({
+      contentType: 'text/html',
+      body: instrument(fixture),
+    });
+  });
+  await page.goto('https://github.com/octo/repo/pull/9/changes');
+  await page.getByLabel('Filter options').click();
+
+  const viewed = page.locator(
+    '[data-filter-kind="viewed"][data-filter-value="true"]',
+  );
+  const generated = page.locator(
+    '[data-filter-kind="generated"][data-filter-value="true"]',
+  );
+  const count = (facet: string) =>
+    page.locator(
+      `.diffseek-menu-row:has([data-filter-kind="${facet}"][data-filter-value="true"]) .diffseek-menu-count`,
+    );
+
+  await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
+  await expect(generated).toHaveAttribute('aria-checked', 'mixed');
+  await expect(page.locator('[role="treeitem"][id="docs/readme.md"]')).toBeHidden();
+  await expect(
+    page.locator('[role="treeitem"][id="src/generated.ts"]'),
+  ).toBeHidden();
+  await expect(page.locator('[role="treeitem"][id="src/app.ts"]')).toBeVisible();
+  await expect(count('viewed')).toHaveText('0/1');
+  await expect(count('generated')).toHaveText('0/1');
+  expect(await readStoredFilterDefaults()).toEqual({});
+
+  await writeFilterDefaults({ hidden: ['viewed'], viewed: [] });
+  await page.reload();
+  await page.getByLabel('Filter options').click();
+  await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
+  await expect(generated).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('[role="treeitem"][id="docs/readme.md"]')).toBeHidden();
+  await expect(
+    page.locator('[role="treeitem"][id="src/generated.ts"]'),
+  ).toBeVisible();
+  await expect(count('generated')).toHaveText('1/1');
+
+  await writeFilterDefaults(null);
+  await page.reload();
+  await page.getByLabel('Filter options').click();
+  await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
+  await viewed.click();
+  await expect(viewed).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('[role="treeitem"][id="docs/readme.md"]')).toBeVisible();
+  await expect(
+    page.locator('[role="treeitem"][id="src/generated.ts"]'),
+  ).toBeHidden();
+
+  await expect(page.locator('[data-diffseek-always-read]')).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await generated.click();
+  await expect(generated).toHaveAttribute('aria-checked', 'true');
+  await expect(
+    page.locator('[role="treeitem"][id="src/generated.ts"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'false');
+  expect(await readStoredFilterDefaults()).toEqual({
+    'diffseek:filter-defaults': { hidden: [], viewed: [] },
+  });
+});
+
+test('applies a late gitattributes fetch on a fresh store', async () => {
+  await writeFilterDefaults(null);
+  let releaseAttributes = () => {};
+  const attributesReady = new Promise<void>((resolve) => {
+    releaseAttributes = resolve;
+  });
+  const attributesRoute = 'https://github.com/octo/repo/raw/**/.gitattributes';
+  await context.route(attributesRoute, async (route) => {
+    await attributesReady;
+    await route.fulfill({
+      contentType: 'text/plain',
+      body: [
+        'src/** group=Code',
+        'docs/** group=Docs',
+        '*.ts linguist-language=TypeScript',
+        'src/generated.ts linguist-generated',
+      ].join('\n'),
+    });
+  });
+  try {
+    const page = await context.newPage();
+    const fixture = await readFile(fixturePath, 'utf8');
+    await page.route(
+      'https://github.com/octo/repo/pull/10/changes',
+      async (route) => {
+        await route.fulfill({
+          contentType: 'text/html',
+          body: instrument(fixture),
+        });
+      },
+    );
+    await page.goto('https://github.com/octo/repo/pull/10/changes');
+    await page.getByLabel('Filter options').click();
+    const generated = page.locator(
+      '[data-filter-kind="generated"][data-filter-value="true"]',
+    );
+    await expect(
+      page.locator('[data-filter-kind="viewed"][data-filter-value="true"]'),
+    ).toHaveAttribute('aria-checked', 'mixed');
+    await expect(generated).toHaveCount(0);
+    await expect(
+      page.locator('[role="treeitem"][id="src/generated.ts"]'),
+    ).toBeVisible();
+
+    releaseAttributes();
+    await expect(generated).toHaveAttribute('aria-checked', 'mixed');
+    await expect(
+      page.locator('[role="treeitem"][id="src/generated.ts"]'),
+    ).toBeHidden();
+    expect(await readStoredFilterDefaults()).toEqual({});
+  } finally {
+    releaseAttributes();
+    await context.unroute(attributesRoute);
+  }
+});
+
+async function extensionWorker() {
+  return (
+    context.serviceWorkers()[0] ??
+    (await context.waitForEvent('serviceworker'))
+  );
+}
+
+async function writeFilterDefaults(
+  defaults: { hidden: string[]; viewed: string[] } | null,
+): Promise<void> {
+  const worker = await extensionWorker();
+  if (defaults == null) {
+    await worker.evaluate(() => {
+      const extension = globalThis as unknown as {
+        chrome: {
+          storage: { local: { remove: (key: string) => Promise<void> } };
+        };
+      };
+      return extension.chrome.storage.local.remove('diffseek:filter-defaults');
+    });
+    return;
+  }
+  await worker.evaluate((value) => {
+    const extension = globalThis as unknown as {
+      chrome: {
+        storage: {
+          local: { set: (items: Record<string, unknown>) => Promise<void> };
+        };
+      };
+    };
+    return extension.chrome.storage.local.set({
+      'diffseek:filter-defaults': value,
+    });
+  }, defaults);
+}
+
+async function readStoredFilterDefaults(): Promise<unknown> {
+  const worker = await extensionWorker();
+  return worker.evaluate(() => {
+    const extension = globalThis as unknown as {
+      chrome: {
+        storage: {
+          local: { get: (key: string) => Promise<Record<string, unknown>> };
+        };
+      };
+    };
+    return extension.chrome.storage.local.get('diffseek:filter-defaults');
+  });
+}
 
 function instrument(source: string, startsWithNativeFilter = false): string {
   return source

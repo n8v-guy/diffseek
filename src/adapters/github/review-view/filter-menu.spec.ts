@@ -728,9 +728,58 @@ describe('generated default busy row', () => {
     expect(viewedAction?.disabled).toBe(true);
     generated?.click();
     viewedAction?.click();
+    element.querySelector<HTMLButtonElement>('[data-diffseek-always-read]')?.click();
     expect(onChange).not.toHaveBeenCalled();
     expect(onFilterDefaultChange).not.toHaveBeenCalled();
     expect(onViewed).not.toHaveBeenCalled();
+    expect(filterDefaults.viewed.has('generated')).toBe(true);
+  });
+});
+
+describe('generated auto-view', () => {
+  it('toggles auto-view without cycling the generated filter', () => {
+    const element = menu();
+    const state = filters();
+    const filterDefaults = {
+      hidden: new Set<'viewed' | 'generated'>(['generated']),
+      viewed: new Set<'generated'>(),
+    };
+    const onChange = vi.fn();
+    const onFilterDefaultChange = vi.fn();
+    const onAlwaysReadChange = vi.fn();
+    mountFilterMenu(element, {
+      files,
+      filters: state,
+      filterDefaults,
+      onChange,
+      onFilterDefaultChange,
+      onAlwaysReadChange,
+    });
+
+    const generated = element.querySelector(
+      '[data-filter-kind="generated"][data-filter-value="true"]',
+    );
+    const alwaysRead = element.querySelector<HTMLButtonElement>(
+      '[data-diffseek-always-read]',
+    );
+    expect(alwaysRead?.textContent).toBe('auto-view');
+    expect(alwaysRead?.title).toBe('Always mark generated files viewed');
+    expect(alwaysRead?.className).toBe('diffseek-menu-always-read');
+    expect(alwaysRead?.getAttribute('aria-pressed')).toBe('false');
+    expect(generated?.getAttribute('aria-checked')).toBe('mixed');
+
+    alwaysRead?.click();
+    expect(alwaysRead?.getAttribute('aria-pressed')).toBe('true');
+    expect(filterDefaults.viewed).toEqual(new Set(['generated']));
+    expect(generated?.getAttribute('aria-checked')).toBe('mixed');
+    expect(onAlwaysReadChange).toHaveBeenCalledExactlyOnceWith(true);
+    expect(onFilterDefaultChange).not.toHaveBeenCalled();
+
+    alwaysRead?.click();
+    expect(alwaysRead?.getAttribute('aria-pressed')).toBe('false');
+    expect(filterDefaults.viewed).toEqual(new Set());
+    expect(onAlwaysReadChange).toHaveBeenLastCalledWith(false);
+    expect(onChange).toHaveBeenCalledTimes(2);
   });
 });
 

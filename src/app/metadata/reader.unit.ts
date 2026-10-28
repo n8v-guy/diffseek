@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
-import { writeCache, writePullCache } from '@diffseek/browser/cache';
+import {
+  readCache,
+  readPullCache,
+  writeCache,
+  writePullCache,
+} from '@diffseek/browser/cache';
 import type {
   RawFileRequest,
   RawFileResult,
@@ -309,6 +314,35 @@ describe('repository metadata', () => {
       'docs/CODEOWNERS',
       '.github/CODEOWNERS',
     ]);
+  });
+
+  it('does not retry or store a failed gitattributes read', async () => {
+    let attempts = 0;
+    const request = vi.fn(async (input: RawFileRequest) => {
+      if (input.path !== '.gitattributes') return missing;
+      attempts += 1;
+      throw new Error('Raw file request failed with 429');
+    });
+
+    await expect(
+      readPullMetadata(
+        review,
+        { codeowners: '', attributes: bundledGitAttributes },
+        request,
+        async () => sha,
+      ),
+    ).rejects.toThrow('Repository metadata request failed');
+    expect(attempts).toBe(1);
+    expect(await readPullCache(review)).toBeNull();
+
+    await expect(refreshDefaultMetadata(repository, request)).resolves.toEqual({
+      metadata: {
+        codeowners: '',
+        attributes: bundledGitAttributes,
+      },
+      changed: false,
+    });
+    expect(await readCache(repository)).toBeNull();
   });
 
   it('probes CODEOWNERS in GitHub order on HEAD', async () => {

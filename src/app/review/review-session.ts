@@ -23,6 +23,7 @@ import {
   menuNeedsRemount,
   removeInjected,
   removeUnavailable,
+  showAlwaysRead,
   showBatchResult,
   showBatchStarted,
   showRememberedFilterDefault,
@@ -42,6 +43,12 @@ import {
 } from '@diffseek/review';
 
 import { ViewedActionExecutor } from './action-executor';
+import {
+  consumeMetadataOpportunity,
+  loadReviewMetadata,
+  metadataRefreshState,
+  metadataWatch,
+} from './metadata-refresh';
 import {
   installRedrawTrace,
   noteReconcile,
@@ -106,6 +113,8 @@ export class ReviewSession {
   private reconciling = false;
   private dirty = false;
   private defaultViewedInFlight = 0;
+  private readonly metadataWatch = metadataWatch();
+  private readonly metadataRefresh = metadataRefreshState();
   private projectionFingerprint = '';
   private treeKey: string | null = null;
   private regionKey = '';
@@ -166,10 +175,7 @@ export class ReviewSession {
     this.refreshObservationRoots();
   }
 
-  start(): void {
-    this.reconcile();
-    void this.refreshMetadata();
-  }
+  start(): void { this.reconcile(); void this.refreshMetadata(); }
 
   reconcile(): void {
     if (this.lifecycle.signal.aborted || this.reconciling) {
@@ -202,6 +208,7 @@ export class ReviewSession {
   }
 
   private reconcileOnce(): void {
+    if (consumeMetadataOpportunity(this.metadataWatch, this.options.root)) this.refreshMetadata();
     // Disconnect while writing so our own hidden/dataset toggles do not
     // immediately re-schedule another full reconcile during panel storms.
     this.observer.disconnect();
@@ -345,9 +352,6 @@ export class ReviewSession {
     facet: RememberedFilterFacet,
     state: FilterDefaultState,
   ): void {
-    if (facet === 'generated' && state !== 'hidden-viewed') {
-      this.defaultViewedAttempts.clear();
-    }
     showRememberedFilterDefault(this.options.root, facet, state);
     void this.options.writeFilterDefaults(this.options.filterDefaults);
   }
@@ -385,31 +389,26 @@ export class ReviewSession {
       onChange: () => this.reconcile(),
       onFilterDefaultChange: (facet, state) =>
         this.rememberFilterDefault(facet, state),
+      onAlwaysReadChange: (enabled) => {
+        if (!enabled) this.defaultViewedAttempts.clear();
+        showAlwaysRead(this.options.root, enabled);
+        void this.options.writeFilterDefaults(this.options.filterDefaults);
+      },
       onViewed: (viewed, paths) => this.batch(viewed, paths),
     });
   }
 
-  private async refreshMetadata(): Promise<void> {
-    const pullMetadata = await this.options
-      .readPull(this.options.review, this.metadata)
-      .catch(() => this.metadata);
-    if (this.lifecycle.signal.aborted) return;
-    if (JSON.stringify(this.metadata) !== JSON.stringify(pullMetadata)) {
-      this.metadata = pullMetadata;
-      this.classifyKey = '';
-      this.reconcile();
-    }
-    const defaultResult = await this.options
-      .refreshDefault(this.options.review)
-      .catch(() => ({ metadata: this.metadata, changed: false }));
-    if (this.lifecycle.signal.aborted || !defaultResult.changed) return;
-    await this.options.metadataCommits
-      .commit(
-        this.options.review,
-        this.metadataRevision,
-        defaultResult.metadata,
-      )
-      .catch(() => false);
+  private refreshMetadata(): void {
+    loadReviewMetadata(this.metadataRefresh, {
+      readPull: () => this.options.readPull(this.options.review, this.metadata),
+      refreshDefault: () => this.options.refreshDefault(this.options.review),
+      commit: (metadata) => this.options.metadataCommits.commit(this.options.review, this.metadataRevision, metadata),
+      aborted: () => this.lifecycle.signal.aborted,
+      apply: (metadata) => {
+        if (JSON.stringify(this.metadata) === JSON.stringify(metadata)) return;
+        this.metadata = metadata; this.classifyKey = ''; this.reconcile();
+      },
+    });
   }
 
   private classifyIfNeeded(snapshot: SupportedSnapshot): void {
