@@ -27,7 +27,16 @@ export function applyCheckedState(
     ? 'mixed'
     : String(!options.excluded.has(options.value));
   item.setAttribute('aria-checked', checked);
-  if (isRememberedFilterFacet(options.facet)) item.title = cycleTitle(checked);
+  if (!isRememberedFilterFacet(options.facet)) return;
+  const current = cycleIndex(checked);
+  item.title = cycleSteps
+    .map((step, index) => `${index === current ? '●' : '○'} ${step}`)
+    .join('\n');
+  const name = options.facet === 'generated' ? 'Generated' : 'Viewed';
+  item.setAttribute(
+    'aria-label',
+    `${name}: ${cycleSteps[current]}, click for ${cycleSteps[(current + 1) % cycleSteps.length]}`,
+  );
 }
 
 export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
@@ -48,11 +57,12 @@ export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
   return true;
 }
 
-function cycleTitle(checked: string): string {
-  const cycle = 'Show → Hide now → Always hide';
-  if (checked === 'false') return `Now: Hide now. Next: Always hide. ${cycle}`;
-  if (checked === 'mixed') return `Now: Always hide. Next: Show. ${cycle}`;
-  return `Now: Show. Next: Hide now. ${cycle}`;
+const cycleSteps = ['Show now', 'Hide now', 'Always hide'] as const;
+
+function cycleIndex(checked: string): number {
+  if (checked === 'false') return 1;
+  if (checked === 'mixed') return 2;
+  return 0;
 }
 
 function isRememberedFilterFacet(

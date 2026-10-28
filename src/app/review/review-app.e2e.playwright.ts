@@ -520,7 +520,11 @@ test('clears native filters before taking over the menu', async () => {
   await expect(generated).toHaveAttribute('aria-checked', 'false');
   await expect(generated).toHaveAttribute(
     'title',
-    'Now: Hide now. Next: Always hide. Show → Hide now → Always hide',
+    '○ Show now\n● Hide now\n○ Always hide',
+  );
+  await expect(generated).toHaveAttribute(
+    'aria-label',
+    'Generated: Hide now, click for Always hide',
   );
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
