@@ -15,7 +15,7 @@ const rebuildRows = 8;
 const massRemoval = 48;
 const readdWindowMs = 100;
 /** Hot loads ignore the mass-removal rule and require each removed row back inside this window. */
-export const hotSettleMs = 500;
+const hotSettleMs = 500;
 const treeSelector = '[role="treeitem"]';
 const panelSelector = '[role="region"][id^="diff-"]';
 
