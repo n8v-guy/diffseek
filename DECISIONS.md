@@ -137,6 +137,8 @@ Reading defaults does not write the implicit state.
 **Why:** New installs reduce review noise without a migration that overwrites
 people who already saved a preference, including show-all. **Cost:** The
 implicit default is reapplied on every session until a remembered row changes.
-Generated clicks run show, hide, always hide and mark as read, always hide, so
-the fresh always-hide state returns to show on the first click and does not
-mark files viewed.
+Viewed and generated clicks both run show, hide, always hide. The fresh
+always-hide state returns to show on the first click and does not mark files
+viewed. Marking generated files viewed is a separate persisted "always read"
+control, off until the user turns it on. A stored record that hid generated
+files and marked them viewed is read as always hide plus always read.

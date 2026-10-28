@@ -9,7 +9,7 @@ export type FilterDefaults = {
   hidden: Set<RememberedFilterFacet>;
   viewed: Set<DefaultViewedFacet>;
 };
-export type FilterDefaultState = 'shown' | 'hidden' | 'hidden-viewed';
+export type FilterDefaultState = 'shown' | 'hidden';
 
 const storageKey = 'diffseek:filter-defaults';
 
@@ -29,11 +29,7 @@ export async function readFilterDefaults(): Promise<FilterDefaults> {
 export async function writeFilterDefaults(
   defaults: FilterDefaults,
 ): Promise<void> {
-  const viewed =
-    defaults.hidden.has('generated') &&
-    defaults.viewed.has('generated')
-      ? ['generated']
-      : [];
+  const viewed = defaults.viewed.has('generated') ? ['generated'] : [];
   await browser.storage.local
     .set({
       [storageKey]: {
@@ -51,10 +47,11 @@ function storedDefaults(value: unknown): FilterDefaults {
       ? value.hidden.filter(isRememberedFilterFacet)
       : [],
   );
+  // Older records stored mark-as-read only beside always-hide. `viewed`
+  // is now the independent "always read" toggle, so that pair is read as
+  // generated always-hide plus always read, without rewriting storage.
   const viewed = new Set<DefaultViewedFacet>(
-    Array.isArray(value.viewed) &&
-      value.viewed.includes('generated') &&
-      hidden.has('generated')
+    Array.isArray(value.viewed) && value.viewed.includes('generated')
       ? ['generated']
       : [],
   );

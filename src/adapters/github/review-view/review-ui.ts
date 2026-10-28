@@ -103,13 +103,21 @@ export function showRememberedFilterDefault(
   state: FilterDefaultState,
 ): void {
   const label = facet === 'viewed' ? 'viewed files' : 'generated files';
-  const message =
-    state === 'hidden-viewed'
-      ? 'Hide and mark viewed generated files by default'
-      : state === 'hidden'
-        ? `Hide ${label} by default`
-        : `Show ${label} by default`;
-  showSnackbar(root, message);
+  showSnackbar(
+    root,
+    state === 'hidden'
+      ? `Hide ${label} by default`
+      : `Show ${label} by default`,
+  );
+}
+
+export function showAlwaysRead(root: Document, enabled: boolean): void {
+  showSnackbar(
+    root,
+    enabled
+      ? 'Always mark generated files viewed'
+      : 'Stop marking generated files viewed',
+  );
 }
 
 function showSnackbar(root: Document, message: string): HTMLElement {

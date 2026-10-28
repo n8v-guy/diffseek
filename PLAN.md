@@ -184,12 +184,12 @@ filtering without adding another filter model.
 
 - [x] Replace the remembered-hidden set with persisted filter defaults:
   `{ hidden, viewed }`, while reading the existing `{ hidden }` shape.
-- [x] Cycle Generated files through shown, hidden, default hidden (`−`), and
-  default hidden-and-viewed (`×`); keep Viewed files three-state.
-- [x] On `×`, hide generated files immediately and enqueue their native viewed
-  actions once per file. Let normal reconciliation update menu/tree badges.
-- [x] Use the exact setting snackbars: `Show … by default`,
-  `Hide … by default`, and `Hide and mark viewed generated files by default`.
+- [x] Cycle Viewed and Generated through shown, hidden, and default hidden
+  (`−`). "always read" is a separate Generated-row pill, off by default.
+- [x] While "always read" is on, enqueue native viewed actions for generated
+  files once per file. Let normal reconciliation update menu/tree badges.
+- [x] Use the setting snackbars: `Show … by default`, `Hide … by default`,
+  `Always mark generated files viewed`, and `Stop marking generated files viewed`.
 - [x] Add a row-hover `only` pill to each item in multi-item sections; it
   excludes every sibling value without changing other facets.
 - [x] Add a title-row-hover `all` pill when a section has exclusions; it clears

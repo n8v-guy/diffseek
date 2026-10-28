@@ -38,7 +38,29 @@ describe('filter defaults', () => {
     });
   });
 
-  it('stores hidden facets and generated viewed behavior together', async () => {
+  it('migrates always hide and mark as read to always hide plus always read', async () => {
+    await fakeBrowser.storage.local.set({
+      'diffseek:filter-defaults': {
+        hidden: ['generated'],
+        viewed: ['generated'],
+      },
+    });
+
+    expect(await readFilterDefaults()).toEqual({
+      hidden: new Set(['generated']),
+      viewed: new Set(['generated']),
+    });
+    expect(
+      await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
+    ).toEqual({
+      'diffseek:filter-defaults': {
+        hidden: ['generated'],
+        viewed: ['generated'],
+      },
+    });
+  });
+
+  it('stores always read independently of always hide', async () => {
     await writeFilterDefaults({
       hidden: new Set(['viewed', 'generated']),
       viewed: new Set(['generated']),
@@ -56,6 +78,15 @@ describe('filter defaults', () => {
         viewed: ['generated'],
       },
     });
+
+    await writeFilterDefaults({
+      hidden: new Set(),
+      viewed: new Set(['generated']),
+    });
+    expect(await readFilterDefaults()).toEqual({
+      hidden: new Set(),
+      viewed: new Set(['generated']),
+    });
   });
 
   it('reads a saved preference and ignores malformed values', async () => {
@@ -67,7 +98,7 @@ describe('filter defaults', () => {
     });
     expect(await readFilterDefaults()).toEqual({
       hidden: new Set(['viewed']),
-      viewed: new Set(),
+      viewed: new Set(['generated']),
     });
 
     await fakeBrowser.storage.local.set({

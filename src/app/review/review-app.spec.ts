@@ -644,7 +644,19 @@ describe('fresh filter defaults', () => {
       expect(generated()?.getAttribute('aria-checked')).toBe('true');
       expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
     });
-    expect(generated()?.dataset.defaultViewed).toBeUndefined();
+    expect(
+      document
+        .querySelector('[data-diffseek-always-read]')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('false');
+    expect(markFiles).not.toHaveBeenCalled();
+
+    generated()?.click();
+    generated()?.click();
+    generated()?.click();
+    await vi.waitFor(() =>
+      expect(generated()?.getAttribute('aria-checked')).toBe('true'),
+    );
     expect(markFiles).not.toHaveBeenCalled();
     await vi.waitFor(async () =>
       expect(
@@ -740,9 +752,9 @@ describe('review app interactions', () => {
     );
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
     expect(
-      document.querySelector<HTMLButtonElement>(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      )?.dataset.defaultViewed,
+      document
+        .querySelector('[data-diffseek-always-read]')
+        ?.getAttribute('aria-pressed'),
     ).toBe('true');
     await vi.waitFor(() =>
       expect(markFiles).toHaveBeenCalledWith(
@@ -757,7 +769,11 @@ describe('review app interactions', () => {
       '[data-filter-kind="generated"][data-filter-value="true"]',
     );
     generated?.click();
-    expect(generated?.dataset.defaultViewed).toBe('true');
+    expect(
+      document
+        .querySelector('[data-diffseek-always-read]')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true');
 
     releaseMark();
     await vi.waitFor(() =>
@@ -782,33 +798,45 @@ describe('review app interactions', () => {
       ?.click();
     await vi.waitFor(() =>
       expect(
-        document.querySelector<HTMLButtonElement>(
-          '[data-filter-kind="generated"][data-filter-value="true"]',
-        )?.dataset.defaultViewed,
-      ).toBeUndefined(),
-    );
-    expect(
-      document
-        .querySelector<HTMLButtonElement>(
-          '[data-filter-kind="generated"][data-filter-value="true"]',
-        )
-        ?.getAttribute('aria-checked'),
-    ).toBe('mixed');
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
-    expect(markFiles).toHaveBeenCalledTimes(1);
-
-    document
-      .querySelector<HTMLButtonElement>(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      )
-      ?.click();
-    await vi.waitFor(() =>
-      expect(
         document.querySelector(
           '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]',
         )?.getAttribute('aria-pressed'),
       ).toBe('true'),
     );
+    app.stop();
+  });
+
+  it('marks generated files when always read turns on and stops when it turns off', async () => {
+    const markFiles = vi.fn(async (snapshot: SupportedSnapshot, paths: string[], viewed: boolean) => {
+      for (const path of paths) {
+        snapshot.viewedControl(path)?.setAttribute('aria-label', viewed ? 'Viewed' : 'Not Viewed');
+        snapshot.viewedControl(path)?.setAttribute('aria-pressed', String(viewed));
+      }
+      return { requested: paths.length, completed: paths, failed: [] };
+    });
+    openMenu();
+    const app = await startReviewApp({
+      ...inertMetadata,
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      markFiles,
+      readImmediate: async () => ({ codeowners: '', attributes: 'src/generated.ts linguist-generated' }),
+    });
+    const alwaysRead = () => document.querySelector<HTMLButtonElement>('[data-diffseek-always-read]');
+    await vi.waitFor(() => expect(alwaysRead()).not.toBeNull());
+    alwaysRead()?.click();
+    await vi.waitFor(() => expect(markFiles).toHaveBeenCalledWith(expect.anything(), ['src/generated.ts'], true, expect.anything()));
+    expect(alwaysRead()?.getAttribute('aria-pressed')).toBe('true');
+    alwaysRead()?.click();
+    await vi.waitFor(async () => expect(await fakeBrowser.storage.local.get('diffseek:filter-defaults')).toEqual({
+      'diffseek:filter-defaults': { hidden: [], viewed: [] },
+    }));
+    const control = document.querySelector('#diff-generated button');
+    control?.setAttribute('aria-label', 'Not Viewed');
+    control?.setAttribute('aria-pressed', 'false');
+    app.reconcile();
+    expect(control?.getAttribute('aria-label')).toBe('Not Viewed');
+    expect(markFiles).toHaveBeenCalledTimes(1);
     app.stop();
   });
 

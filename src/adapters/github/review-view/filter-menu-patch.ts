@@ -53,6 +53,28 @@ export function patchFilterMenu(
   return true;
 }
 
+function patchAlwaysRead(
+  rowElement: HTMLElement,
+  row: ReturnType<typeof menuRowModels>[number],
+): boolean {
+  const alwaysRead = rowElement.querySelector<HTMLButtonElement>(
+    '[data-diffseek-always-read]',
+  );
+  const defaults = row.filterDefaults;
+  if (row.facet !== 'generated' || !defaults) return alwaysRead == null;
+  if (!alwaysRead) return false;
+  const enabled = defaults.viewed.has('generated');
+  alwaysRead.disabled = row.disabled === true;
+  alwaysRead.setAttribute('aria-pressed', String(enabled));
+  alwaysRead.setAttribute(
+    'aria-label',
+    enabled
+      ? 'Stop always marking generated files viewed'
+      : 'Always mark generated files viewed',
+  );
+  return true;
+}
+
 function patchRow(
   button: HTMLButtonElement | undefined,
   row: ReturnType<typeof menuRowModels>[number],
@@ -61,6 +83,7 @@ function patchRow(
   const rowElement = button.closest('.diffseek-menu-row');
   if (!(rowElement instanceof HTMLElement)) return false;
   applyCheckedState(button, row);
+  if (!patchAlwaysRead(rowElement, row)) return false;
   button.disabled = row.disabled === true;
   if (row.disabled) {
     button.setAttribute('aria-disabled', 'true');

@@ -15,7 +15,7 @@ Every file and folder in GitHub's file tree gets a viewed badge, so you see at a
 - Formats, from extensions to aliases (e.g. ts/tsx, cpp/hpp)
 - Viewed, Generated and change status
 
-Every row shows a live count. Hover a row and click "only" to focus.
+Every row shows a live count. Hover a row and click "only" to focus. Hover Generated and turn on "always read" to mark those files viewed.
 
 ## Setup (optional)
 

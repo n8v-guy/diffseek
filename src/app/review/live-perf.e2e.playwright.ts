@@ -243,9 +243,12 @@ describeLive('live DiffSeek performance', () => {
 
     await viewed.click();
     await expect(viewed).toHaveAttribute('aria-checked', 'true');
+    await expect(sharedPage.locator('[data-diffseek-always-read]')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
     await generated.click();
     await expect(generated).toHaveAttribute('aria-checked', 'true');
-    await expect(generated).not.toHaveAttribute('data-default-viewed', 'true');
     await expect(sharedPage.locator(generatedCounter)).toHaveText(
       generatedIndexedText(expectedGeneratedTotal),
       { timeout: 120_000 },

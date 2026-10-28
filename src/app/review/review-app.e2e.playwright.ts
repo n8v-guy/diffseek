@@ -514,36 +514,35 @@ test('clears native filters before taking over the menu', async () => {
     page.locator('[data-filter-kind="owners"][aria-checked="false"]'),
   ).toHaveCount(0);
 
+  const alwaysRead = page.locator('[data-diffseek-always-read]');
+  await expect(alwaysRead).toHaveAttribute('aria-pressed', 'false');
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'false');
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'mixed');
-  await expect(generated).toHaveAttribute('data-default-viewed', 'true');
-  await expect(
-    page
-      .locator('[data-diffseek="snackbar"]')
-      .filter({
-        hasText: 'Hide and mark viewed generated files by default',
-      }),
-  ).toBeVisible();
-  await expect(
-    page.locator('#diff-generated button[aria-label="Viewed"]'),
-  ).toHaveAttribute('aria-pressed', 'true');
-  await generated.click();
-  await expect(generated).toHaveAttribute('aria-checked', 'mixed');
-  await expect(generated).not.toHaveAttribute('data-default-viewed', 'true');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Hide generated files by default');
   await generated.click();
-  await expect(
-    page.locator(
-      '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]',
-    ),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(generated).toHaveAttribute('aria-checked', 'true');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Show generated files by default');
+  await expect(
+    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'false');
+  await generated.locator('xpath=..').hover();
+  await alwaysRead.click();
+  await expect(alwaysRead).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.locator('#diff-generated button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await alwaysRead.click();
+  await expect(alwaysRead).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#diff-generated button[aria-label="Viewed"]').click();
+  await expect(
+    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'false');
 
   await viewed.click();
   await expect(menu).toBeVisible();
@@ -828,9 +827,12 @@ test('hides generated and viewed files for a fresh install and honors saved pref
     page.locator('[role="treeitem"][id="src/generated.ts"]'),
   ).toBeHidden();
 
+  await expect(page.locator('[data-diffseek-always-read]')).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'true');
-  await expect(generated).not.toHaveAttribute('data-default-viewed', 'true');
   await expect(
     page.locator('[role="treeitem"][id="src/generated.ts"]'),
   ).toBeVisible();

@@ -29,64 +29,24 @@ export function applyCheckedState(
       ? 'mixed'
       : String(!options.excluded.has(options.value)),
   );
-  if (
-    options.facet === 'generated' &&
-    options.filterDefaults?.viewed.has('generated')
-  ) {
-    item.dataset.defaultViewed = 'true';
-  } else {
-    delete item.dataset.defaultViewed;
-  }
 }
 
 export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
   const defaults = options.filterDefaults;
   if (!isRememberedFilterFacet(options.facet) || !defaults) return false;
-  if (options.facet === 'generated') cycleGenerated(options, defaults);
-  else cycleViewed(options, defaults);
+  if (defaults.hidden.has(options.facet)) {
+    defaults.hidden.delete(options.facet);
+    options.excluded.delete(options.value);
+    options.onFilterDefaultChange?.(options.facet, 'shown');
+    return true;
+  }
+  if (options.excluded.has(options.value)) {
+    defaults.hidden.add(options.facet);
+    options.onFilterDefaultChange?.(options.facet, 'hidden');
+    return true;
+  }
+  options.excluded.add(options.value);
   return true;
-}
-
-function cycleGenerated(
-  options: FilterDefaultOptions,
-  defaults: FilterDefaults,
-): void {
-  if (defaults.viewed.has('generated')) {
-    defaults.viewed.delete('generated');
-    options.onFilterDefaultChange?.('generated', 'hidden');
-    return;
-  }
-  if (defaults.hidden.has('generated')) {
-    defaults.hidden.delete('generated');
-    options.excluded.delete(options.value);
-    options.onFilterDefaultChange?.('generated', 'shown');
-    return;
-  }
-  if (options.excluded.has(options.value)) {
-    defaults.hidden.add('generated');
-    defaults.viewed.add('generated');
-    options.onFilterDefaultChange?.('generated', 'hidden-viewed');
-    return;
-  }
-  options.excluded.add(options.value);
-}
-
-function cycleViewed(
-  options: FilterDefaultOptions,
-  defaults: FilterDefaults,
-): void {
-  if (defaults.hidden.has('viewed')) {
-    defaults.hidden.delete('viewed');
-    options.excluded.delete(options.value);
-    options.onFilterDefaultChange?.('viewed', 'shown');
-    return;
-  }
-  if (options.excluded.has(options.value)) {
-    defaults.hidden.add('viewed');
-    options.onFilterDefaultChange?.('viewed', 'hidden');
-    return;
-  }
-  options.excluded.add(options.value);
 }
 
 function isRememberedFilterFacet(

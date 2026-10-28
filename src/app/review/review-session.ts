@@ -23,6 +23,7 @@ import {
   isNativeMutation,
   removeInjected,
   removeUnavailable,
+  showAlwaysRead,
   showBatchResult,
   showBatchStarted,
   showRememberedFilterDefault,
@@ -327,9 +328,6 @@ export class ReviewSession {
     facet: RememberedFilterFacet,
     state: FilterDefaultState,
   ): void {
-    if (facet === 'generated' && state !== 'hidden-viewed') {
-      this.defaultViewedAttempts.clear();
-    }
     showRememberedFilterDefault(this.options.root, facet, state);
     void this.options.writeFilterDefaults(this.options.filterDefaults);
   }
@@ -380,6 +378,11 @@ export class ReviewSession {
       onChange: () => this.reconcile(),
       onFilterDefaultChange: (facet, state) =>
         this.rememberFilterDefault(facet, state),
+      onAlwaysReadChange: (enabled) => {
+        if (!enabled) this.defaultViewedAttempts.clear();
+        showAlwaysRead(this.options.root, enabled);
+        void this.options.writeFilterDefaults(this.options.filterDefaults);
+      },
       onViewed: (viewed, paths) => this.batch(viewed, paths),
     });
   }
@@ -390,11 +393,7 @@ export class ReviewSession {
       readPull: () => this.options.readPull(this.options.review, fallback),
       refreshDefault: () => this.options.refreshDefault(this.options.review),
       commit: (metadata) =>
-        this.options.metadataCommits.commit(
-          this.options.review,
-          this.metadataRevision,
-          metadata,
-        ),
+        this.options.metadataCommits.commit(this.options.review, this.metadataRevision, metadata),
       aborted: () => this.lifecycle.signal.aborted,
       apply: (metadata) => {
         if (JSON.stringify(this.metadata) === JSON.stringify(metadata)) return;

@@ -23,6 +23,7 @@ export type FilterMenuOptions = {
     facet: RememberedFilterFacet,
     state: FilterDefaultState,
   ) => void;
+  onAlwaysReadChange?: (enabled: boolean) => void;
   onViewed?: (viewed: boolean, paths: string[]) => void;
 };
 
@@ -44,6 +45,7 @@ export type MenuRowModel = {
     facet: RememberedFilterFacet,
     state: FilterDefaultState,
   ) => void;
+  onAlwaysReadChange?: (enabled: boolean) => void;
   onViewed?: (viewed: boolean, paths: string[]) => void;
 };
 
@@ -60,6 +62,7 @@ export function menuRowModels(options: FilterMenuOptions): MenuRowModel[] {
       filterDefaults: options.filterDefaults,
       onChange: options.onChange,
       onFilterDefaultChange: options.onFilterDefaultChange,
+      onAlwaysReadChange: options.onAlwaysReadChange,
       onViewed: options.onViewed,
     },
   ];
@@ -79,6 +82,7 @@ export function menuRowModels(options: FilterMenuOptions): MenuRowModel[] {
       disabled: options.generatedDefaultBusy === true,
       onChange: options.onChange,
       onFilterDefaultChange: options.onFilterDefaultChange,
+      onAlwaysReadChange: options.onAlwaysReadChange,
       onViewed: options.onViewed,
     });
   }

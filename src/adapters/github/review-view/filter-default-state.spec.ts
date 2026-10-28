@@ -20,8 +20,9 @@ describe('filter default state', () => {
     expect(options.filterDefaults?.hidden).toEqual(new Set());
   });
 
-  it('cycles generated files through show, hide, always hide and mark read, always hide', () => {
+  it('cycles generated files through show, hide, and always hide without marking them read', () => {
     const { item, options, onFilterDefaultChange } = setup('generated');
+    options.filterDefaults?.viewed.add('generated');
 
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('false');
@@ -29,20 +30,7 @@ describe('filter default state', () => {
 
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('mixed');
-    expect(item.dataset.defaultViewed).toBe('true');
     expect(options.filterDefaults?.hidden).toEqual(new Set(['generated']));
-    expect(options.filterDefaults?.viewed).toEqual(new Set(['generated']));
-    expect(onFilterDefaultChange).toHaveBeenLastCalledWith(
-      'generated',
-      'hidden-viewed',
-    );
-
-    cycle(item, options);
-    expect(item.getAttribute('aria-checked')).toBe('mixed');
-    expect(item.dataset.defaultViewed).toBeUndefined();
-    expect(options.filterDefaults?.hidden).toEqual(new Set(['generated']));
-    expect(options.filterDefaults?.viewed).toEqual(new Set());
-    expect(options.excluded.has('true')).toBe(true);
     expect(onFilterDefaultChange).toHaveBeenLastCalledWith(
       'generated',
       'hidden',
@@ -56,6 +44,8 @@ describe('filter default state', () => {
       'generated',
       'shown',
     );
+    expect(options.filterDefaults?.viewed).toEqual(new Set(['generated']));
+    expect(item.dataset.defaultViewed).toBeUndefined();
   });
 
   it('shows generated files on the first click from the fresh always-hide default', () => {
@@ -69,7 +59,6 @@ describe('filter default state', () => {
 
     cycle(item, options);
     expect(item.getAttribute('aria-checked')).toBe('true');
-    expect(item.dataset.defaultViewed).toBeUndefined();
     expect(options.filterDefaults.viewed).toEqual(new Set());
     expect(options.filterDefaults.hidden).toEqual(new Set());
     expect(onFilterDefaultChange).toHaveBeenCalledExactlyOnceWith(

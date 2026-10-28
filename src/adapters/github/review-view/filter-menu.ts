@@ -29,6 +29,7 @@ import {
   resetTransientExclusions,
 } from './filter-reset';
 import {
+  alwaysReadAction,
   itemOnlyAction,
   sectionAllAction,
 } from './filter-shortcuts';
@@ -103,6 +104,7 @@ export function mountFilterMenu(
       disabled: options.generatedDefaultBusy === true,
       onChange: options.onChange,
       onFilterDefaultChange: options.onFilterDefaultChange,
+      onAlwaysReadChange: options.onAlwaysReadChange,
       onViewed: options.onViewed,
     });
   }
@@ -250,6 +252,21 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
     options.onChange();
   });
   row.append(item);
+  const defaults = options.filterDefaults;
+  if (options.facet === 'generated' && defaults) {
+    row.append(
+      alwaysReadAction({
+        enabled: defaults.viewed.has('generated'),
+        disabled: options.disabled === true,
+        onToggle: (enabled) => {
+          if (enabled) defaults.viewed.add('generated');
+          else defaults.viewed.delete('generated');
+          options.onAlwaysReadChange?.(enabled);
+          options.onChange();
+        },
+      }),
+    );
+  }
   if (options.onlyValues) {
     row.append(
       itemOnlyAction({
