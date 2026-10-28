@@ -176,8 +176,8 @@ async function measureReview(
     timeout: panelsTimeout,
   });
   const firstRenderSeconds = await renderSeconds(page, started);
-  // Conversation → Files changed rebuilds panels with no extension. Count
-  // hot rebuilds only after DiffSeek has painted, and keep cold/warm at 0.
+  // GitHub removes and restores panels on this navigation. Hot starts
+  // counting here and later fails only on rows still missing after 500 ms.
   if (scenario === 'hot') await resetRedraws(page);
   const menuOpenSeconds = await openFilterMenu(page);
   await expect(page.locator(generatedCounter)).toHaveText(
