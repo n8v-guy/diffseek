@@ -35,7 +35,8 @@ export function alwaysReadAction(options: {
   action.type = 'button';
   action.className = 'diffseek-menu-always-read';
   action.dataset.diffseekAlwaysRead = 'true';
-  action.textContent = 'always read';
+  action.textContent = 'auto-view';
+  action.title = 'Always mark generated files viewed';
   setAlwaysRead(action, options.enabled);
   if (options.disabled) action.disabled = true;
   action.addEventListener('click', () => {
@@ -52,7 +53,7 @@ function setAlwaysRead(action: HTMLButtonElement, enabled: boolean): void {
   action.setAttribute(
     'aria-label',
     enabled
-      ? 'Stop always marking generated files viewed'
+      ? 'Stop marking generated files viewed'
       : 'Always mark generated files viewed',
   );
 }

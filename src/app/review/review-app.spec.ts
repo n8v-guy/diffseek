@@ -806,7 +806,7 @@ describe('review app interactions', () => {
     app.stop();
   });
 
-  it('marks generated files when always read turns on and stops when it turns off', async () => {
+  it('marks generated files when auto-view turns on and stops when it turns off', async () => {
     const markFiles = vi.fn(async (snapshot: SupportedSnapshot, paths: string[], viewed: boolean) => {
       for (const path of paths) {
         snapshot.viewedControl(path)?.setAttribute('aria-label', viewed ? 'Viewed' : 'Not Viewed');

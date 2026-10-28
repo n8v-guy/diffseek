@@ -65,11 +65,12 @@ function patchAlwaysRead(
   if (!alwaysRead) return false;
   const enabled = defaults.viewed.has('generated');
   alwaysRead.disabled = row.disabled === true;
+  alwaysRead.title = 'Always mark generated files viewed';
   alwaysRead.setAttribute('aria-pressed', String(enabled));
   alwaysRead.setAttribute(
     'aria-label',
     enabled
-      ? 'Stop always marking generated files viewed'
+      ? 'Stop marking generated files viewed'
       : 'Always mark generated files viewed',
   );
   return true;

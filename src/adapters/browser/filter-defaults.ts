@@ -48,8 +48,8 @@ function storedDefaults(value: unknown): FilterDefaults {
       : [],
   );
   // Older records stored mark-as-read only beside always-hide. `viewed`
-  // is now the independent "always read" toggle, so that pair is read as
-  // generated always-hide plus always read, without rewriting storage.
+  // is now the independent auto-view toggle, so that pair is read as
+  // generated always-hide plus auto-view, without rewriting storage.
   const viewed = new Set<DefaultViewedFacet>(
     Array.isArray(value.viewed) && value.viewed.includes('generated')
       ? ['generated']

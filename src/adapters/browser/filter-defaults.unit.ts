@@ -38,7 +38,7 @@ describe('filter defaults', () => {
     });
   });
 
-  it('migrates always hide and mark as read to always hide plus always read', async () => {
+  it('migrates always hide and mark as read to always hide plus auto-view', async () => {
     await fakeBrowser.storage.local.set({
       'diffseek:filter-defaults': {
         hidden: ['generated'],
@@ -60,7 +60,7 @@ describe('filter defaults', () => {
     });
   });
 
-  it('stores always read independently of always hide', async () => {
+  it('stores auto-view independently of always hide', async () => {
     await writeFilterDefaults({
       hidden: new Set(['viewed', 'generated']),
       viewed: new Set(['generated']),

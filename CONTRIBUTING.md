@@ -65,9 +65,9 @@ generated-file, owner, type, language, and change-status filters. It retains the
 native menu container and interaction model. Viewed and generated filters cycle
 show, hide, and always hide. With no saved filter defaults, both start on
 always hide and the first click shows them. The Generated row has an
-"always read" pill that marks generated files viewed while it is on, and is off
+"auto-view" pill that marks generated files viewed while it is on, and is off
 for a fresh install. A saved always-hide-and-mark-read record is read as always
-hide with always read on. Multi-item sections expose row-hover
+hide with auto-view on. Multi-item sections expose row-hover
 `only` and title-hover `all` shortcuts. Non-matches are hidden in the file tree
 and collapsed/muted in place in the diff. File, folder, counter-pill, and
 counter-overlay actions mark their current visible scope viewed through

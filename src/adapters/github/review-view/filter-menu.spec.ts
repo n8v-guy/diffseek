@@ -736,8 +736,8 @@ describe('generated default busy row', () => {
   });
 });
 
-describe('generated always read', () => {
-  it('toggles always read without cycling the generated filter', () => {
+describe('generated auto-view', () => {
+  it('toggles auto-view without cycling the generated filter', () => {
     const element = menu();
     const state = filters();
     const filterDefaults = {
@@ -762,7 +762,8 @@ describe('generated always read', () => {
     const alwaysRead = element.querySelector<HTMLButtonElement>(
       '[data-diffseek-always-read]',
     );
-    expect(alwaysRead?.textContent).toBe('always read');
+    expect(alwaysRead?.textContent).toBe('auto-view');
+    expect(alwaysRead?.title).toBe('Always mark generated files viewed');
     expect(alwaysRead?.className).toBe('diffseek-menu-always-read');
     expect(alwaysRead?.getAttribute('aria-pressed')).toBe('false');
     expect(generated?.getAttribute('aria-checked')).toBe('mixed');

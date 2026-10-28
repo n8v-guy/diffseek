@@ -185,8 +185,8 @@ filtering without adding another filter model.
 - [x] Replace the remembered-hidden set with persisted filter defaults:
   `{ hidden, viewed }`, while reading the existing `{ hidden }` shape.
 - [x] Cycle Viewed and Generated through shown, hidden, and default hidden
-  (`−`). "always read" is a separate Generated-row pill, off by default.
-- [x] While "always read" is on, enqueue native viewed actions for generated
+  (`−`). "auto-view" is a separate Generated-row pill, off by default.
+- [x] While "auto-view" is on, enqueue native viewed actions for generated
   files once per file. Let normal reconciliation update menu/tree badges.
 - [x] Use the setting snackbars: `Show … by default`, `Hide … by default`,
   `Always mark generated files viewed`, and `Stop marking generated files viewed`.

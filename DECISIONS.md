@@ -139,6 +139,6 @@ people who already saved a preference, including show-all. **Cost:** The
 implicit default is reapplied on every session until a remembered row changes.
 Viewed and generated clicks both run show, hide, always hide. The fresh
 always-hide state returns to show on the first click and does not mark files
-viewed. Marking generated files viewed is a separate persisted "always read"
+viewed. Marking generated files viewed is a separate persisted "auto-view"
 control, off until the user turns it on. A stored record that hid generated
-files and marked them viewed is read as always hide plus always read.
+files and marked them viewed is read as always hide plus auto-view.
