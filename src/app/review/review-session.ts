@@ -20,7 +20,7 @@ import { ReviewPresenter } from '@diffseek/github/review-view/presenter';
 import {
   afterNextPaint,
   filterMenus,
-  isNativeMutation,
+  menuNeedsRemount,
   removeInjected,
   removeUnavailable,
   showAlwaysRead,
@@ -44,20 +44,30 @@ import {
 
 import { ViewedActionExecutor } from './action-executor';
 import {
-  cancelPanelReconcile,
-  classifyKeyFor,
-  classifySnapshot,
   consumeMetadataOpportunity,
-  discoverySchedule,
   loadReviewMetadata,
   metadataRefreshState,
   metadataWatch,
+} from './metadata-refresh';
+import {
+  installRedrawTrace,
+  noteReconcile,
+  trackDiffseekWrites,
+} from './redraw-trace';
+import {
+  cancelPanelReconcile,
+  classifyKeyFor,
+  classifySnapshot,
+  filteredFileExpanded,
+  pageNodesChanged,
   type PanelReconcileSchedule,
   type PanelScheduleOptions,
+  pendingDefaultViewed,
   projectionKeyFor,
   queuePanelReconcile,
   refreshViewedState,
   retainNativeOwners,
+  scheduleForMutations,
   syncViewedLabels,
   watchObservationRoots,
 } from './session-observation';
@@ -108,6 +118,8 @@ export class ReviewSession {
   private projectionFingerprint = '';
   private treeKey: string | null = null;
   private regionKey = '';
+  private treeNode: Element | null = null;
+  private regionNodes: Element[] = [];
   private classifyKey = '';
   private unavailable = new Map<string, string>();
   private metadata: RepositoryMetadata;
@@ -144,11 +156,14 @@ export class ReviewSession {
       if (path) this.actionExecutor.invalidate(path);
     };
     options.root.addEventListener('click', this.onNativeClick, true);
+    installRedrawTrace(options.root);
+    delete options.root.documentElement.dataset.diffseekFirstRenderEpoch;
     this.observer = new MutationObserver((records) => {
-      if (records.some(isNativeMutation)) this.schedule({ immediate: true });
+      const mode = scheduleForMutations(records);
+      if (mode) this.schedule(mode);
     });
     this.discoveryObserver = new MutationObserver((records) => {
-      const mode = discoverySchedule(records);
+      const mode = scheduleForMutations(records);
       if (!mode) return;
       this.refreshObservationRoots();
       this.schedule(mode);
@@ -160,10 +175,7 @@ export class ReviewSession {
     this.refreshObservationRoots();
   }
 
-  start(): void {
-    this.reconcile();
-    void this.refreshMetadata();
-  }
+  start(): void { this.reconcile(); void this.refreshMetadata(); }
 
   reconcile(): void {
     if (this.lifecycle.signal.aborted || this.reconciling) {
@@ -202,37 +214,37 @@ export class ReviewSession {
     this.observer.disconnect();
     this.discoveryObserver.disconnect();
     this.observedRoots.clear();
-    const treeKey = treeStructureKey(this.options.root);
-    const regionKey = regionStructureKey(this.options.root);
+    const root = this.options.root;
+    const treeKey = treeStructureKey(root);
+    const regionKey = regionStructureKey(root);
+    const tree = root.querySelector('[role="tree"][aria-label="File Tree"]');
+    const regions = [...root.querySelectorAll<HTMLElement>('[role="region"][id^="diff-"]')];
+    const structureChanged =
+      treeKey !== this.treeKey ||
+      regionKey !== this.regionKey ||
+      pageNodesChanged(this.treeNode, tree, this.regionNodes, regions);
     let next: PageSnapshot;
-    if (treeKey != null && treeKey === this.treeKey && this.snapshot) {
-      if (regionKey === this.regionKey) {
-        // Attribute-only churn: refresh viewed/capabilities on the catalog.
-        refreshObservedFiles(this.options.root, this.catalog.files());
-        next = bindSnapshot(
-          this.options.root,
-          this.catalog.files(),
-          this.unavailable,
-        );
-      } else {
-        // Region mount/dup churn: rescan membership without dropping labels.
-        next = scanPage(this.options.root);
-        this.regionKey = regionKey;
-      }
+    if (treeKey != null && treeKey === this.treeKey && regionKey === this.regionKey && this.snapshot) {
+      refreshObservedFiles(root, this.catalog.files());
+      next = bindSnapshot(root, this.catalog.files(), this.unavailable);
     } else {
-      next = scanPage(this.options.root);
+      next = scanPage(root);
+      if (treeKey !== this.treeKey) this.classifyKey = '';
       this.treeKey = treeKey;
       this.regionKey = regionKey;
-      this.classifyKey = '';
     }
+    this.treeNode = tree;
+    this.regionNodes = regions;
     if (!next.supported) {
       this.projectionFingerprint = '';
       this.treeKey = null;
       this.regionKey = '';
       this.classifyKey = '';
+      this.treeNode = null;
+      this.regionNodes = [];
       this.clearInjected();
       if (excludedFacetCount(this.filters) > 0) {
-        showUnavailable(this.options.root, next.reason);
+        showUnavailable(root, next.reason);
       }
       this.reattachObservers();
       this.emitReconciled();
@@ -250,7 +262,7 @@ export class ReviewSession {
     this.snapshot = catalogSnapshot;
     removeUnavailable(this.options.root);
     this.classifyIfNeeded(catalogSnapshot);
-    const defaultViewedPaths = this.defaultViewedPaths(catalogSnapshot);
+    const defaultViewedPaths = pendingDefaultViewed(catalogSnapshot.files, this.options.filterDefaults, this.defaultViewedAttempts);
     const generatedDefaultBusy =
       this.defaultViewedInFlight > 0 || defaultViewedPaths.length > 0;
     const menus = filterMenus(this.options.root);
@@ -263,30 +275,36 @@ export class ReviewSession {
       menuCount: menus.length,
       files: catalogSnapshot.files,
     });
-    const index = new ReviewIndex(catalogSnapshot.files);
-    this.presenter.apply(catalogSnapshot, this.filters, index);
-    mountViewedActions(
-      catalogSnapshot,
-      (viewed, paths) => this.batch(viewed, paths),
-      index,
-    );
-    if (fingerprint === this.projectionFingerprint) {
-      for (const menu of menus) {
-        if (menuNeedsRemount(menu)) {
-          this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
-        }
+    const projectionChanged = fingerprint !== this.projectionFingerprint;
+    const staleMenus = menus.filter(menuNeedsRemount);
+    if (!structureChanged && !projectionChanged && staleMenus.length === 0) {
+      // GitHub expanding a filtered file changes neither key. Re-collapse it.
+      if (filteredFileExpanded(root)) {
+        this.presenter.apply(catalogSnapshot, this.filters);
       }
       this.reattachObservers();
-      this.emitReconciled();
       return;
     }
-    this.projectionFingerprint = fingerprint;
-    if (defaultViewedPaths.length > 0) {
-      this.enqueueDefaultViewed(defaultViewedPaths);
-    }
-    for (const menu of menus) {
-      this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
-    }
+    trackDiffseekWrites(root, () => {
+      if (structureChanged || projectionChanged) {
+        const index = new ReviewIndex(catalogSnapshot.files);
+        this.presenter.apply(catalogSnapshot, this.filters, index);
+        mountViewedActions(
+          catalogSnapshot,
+          (viewed, paths) => this.batch(viewed, paths),
+          index,
+        );
+      }
+      if (projectionChanged) {
+        this.projectionFingerprint = fingerprint;
+        if (defaultViewedPaths.length > 0) {
+          this.enqueueDefaultViewed(defaultViewedPaths);
+        }
+      }
+      for (const menu of projectionChanged ? menus : staleMenus) {
+        this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
+      }
+    });
     this.reattachObservers();
     this.emitReconciled();
   }
@@ -336,19 +354,6 @@ export class ReviewSession {
   ): void {
     showRememberedFilterDefault(this.options.root, facet, state);
     void this.options.writeFilterDefaults(this.options.filterDefaults);
-  }
-
-  private defaultViewedPaths(snapshot: SupportedSnapshot): string[] {
-    if (!this.options.filterDefaults.viewed.has('generated')) return [];
-    return snapshot.files
-      .filter(
-        (file) =>
-          file.generated &&
-          !file.viewed &&
-          file.capabilities.viewed &&
-          !this.defaultViewedAttempts.has(file.path),
-      )
-      .map((file) => file.path);
   }
 
   private enqueueDefaultViewed(paths: string[]): void {
@@ -431,17 +436,7 @@ export class ReviewSession {
   }
 
   private emitReconciled(): void {
+    noteReconcile(this.options.root);
     this.options.root.dispatchEvent(new CustomEvent('diffseek-reconciled'));
   }
-}
-
-function menuNeedsRemount(menu: HTMLElement): boolean {
-  if (menu.dataset.diffseekMenuOwned !== 'true') return true;
-  if (!menu.querySelector(':scope > [data-diffseek="filters"]')) return true;
-  return [...menu.children].some(
-    (child) =>
-      child instanceof HTMLElement &&
-      child.dataset.diffseek !== 'filters' &&
-      !child.hidden,
-  );
 }
