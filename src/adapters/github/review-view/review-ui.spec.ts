@@ -7,9 +7,22 @@ import {
   showBatchStarted,
   showHideNow,
   showRememberedFilterDefault,
+  showViewedScope,
 } from './review-ui';
 
 describe('review status UI', () => {
+  it('announces a viewed-scope snackbar in the live region', () => {
+    document.body.innerHTML = '<main></main>';
+    showViewedScope(document, 'Marked 8 visible files in checkout viewed');
+    const stack = document.querySelector('[data-diffseek="snackbars"]');
+    const snackbar = document.querySelector('[data-diffseek="snackbar"]');
+    expect(stack?.getAttribute('aria-live')).toBe('polite');
+    expect(snackbar?.getAttribute('role')).toBe('status');
+    expect(snackbar?.textContent).toBe(
+      'Marked 8 visible files in checkout viewed',
+    );
+  });
+
   afterEach(() => vi.useRealTimers());
 
   it('stacks older snackbars above newer ones and expires each after seven seconds', () => {

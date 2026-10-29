@@ -434,19 +434,32 @@ describe('mountFilterMenu', () => {
     const counter = element.querySelector<HTMLButtonElement>(
       '[data-diffseek-menu-count-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
     );
-    expect(
-      element.querySelector(
-        '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Tests"]',
-      ),
-    ).toBeNull();
-    expect(action?.title).toBe('Mark 1 remaining as viewed (0 of 1 viewed)');
-    expect(counter?.title).toBe('Mark 1 remaining as viewed (0 of 1 viewed)');
+    expect(action?.title).toBe(
+      'Mark 2 remaining in Modified as viewed (0 of 2 viewed)',
+    );
+    expect(counter?.title).toBe(
+      'Mark 2 remaining in Modified as viewed (0 of 2 viewed)',
+    );
     expect(action?.getAttribute('aria-pressed')).toBe('false');
+    const tests = element.querySelector<HTMLButtonElement>(
+      '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Tests"]',
+    );
+    expect(tests?.title).toBe(
+      'Mark 1 remaining in Tests as viewed (0 of 1 viewed)',
+    );
     counter?.click();
-    expect(onViewed).toHaveBeenCalledWith(true, ['unmapped.txt']);
+    expect(onViewed).toHaveBeenCalledWith(
+      true,
+      ['src/app.test.ts', 'unmapped.txt'],
+      'Marked all 2 Modified files viewed (1 hidden)',
+    );
     onViewed.mockClear();
     action?.click();
-    expect(onViewed).toHaveBeenCalledWith(true, ['unmapped.txt']);
+    expect(onViewed).toHaveBeenCalledWith(
+      true,
+      ['src/app.test.ts', 'unmapped.txt'],
+      'Marked all 2 Modified files viewed (1 hidden)',
+    );
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -470,10 +483,18 @@ describe('mountFilterMenu', () => {
     expect(action?.title).toBe('Mark as not viewed');
     expect(counter?.title).toBe('Mark as not viewed');
     counter?.click();
-    expect(onViewed).toHaveBeenCalledWith(false, ['docs/guide.md']);
+    expect(onViewed).toHaveBeenCalledWith(
+      false,
+      ['docs/guide.md'],
+      'Unmarked all 1 Generated file',
+    );
     onViewed.mockClear();
     action?.click();
-    expect(onViewed).toHaveBeenCalledWith(false, ['docs/guide.md']);
+    expect(onViewed).toHaveBeenCalledWith(
+      false,
+      ['docs/guide.md'],
+      'Unmarked all 1 Generated file',
+    );
   });
 
   it('marks visible unread files when some counted files are hidden as viewed', () => {
@@ -511,19 +532,34 @@ describe('mountFilterMenu', () => {
       '[data-diffseek-menu-count-action]',
     );
     expect(counter?.textContent).toBe('1/2');
-    expect(action?.title).toBe('Mark 1 remaining as viewed (1 of 2 viewed)');
-    expect(counter?.title).toBe('Mark 1 remaining as viewed (1 of 2 viewed)');
+    expect(action?.title).toBe(
+      'Mark 1 remaining in @owner as viewed (1 of 2 viewed)',
+    );
+    expect(counter?.title).toBe(
+      'Mark 1 remaining in @owner as viewed (1 of 2 viewed)',
+    );
     expect(action?.getAttribute('aria-pressed')).toBe('mixed');
     expect(action?.classList.contains('diffseek-viewed-partial')).toBe(true);
     expect(counter?.classList.contains('diffseek-viewed-partial')).toBe(false);
     expect(counter?.getAttribute('aria-pressed')).toBe('mixed');
     counter?.click();
-    expect(onViewed).toHaveBeenCalledWith(true, ['src/app.test.ts']);
+    expect(onViewed).toHaveBeenCalledWith(
+      true,
+      ['src/app.test.ts'],
+      'Marked all 1 @owner file viewed',
+    );
     onViewed.mockClear();
     action?.click();
-    expect(onViewed).toHaveBeenCalledWith(true, ['src/app.test.ts']);
+    expect(onViewed).toHaveBeenCalledWith(
+      true,
+      ['src/app.test.ts'],
+      'Marked all 1 @owner file viewed',
+    );
   });
 
+});
+
+describe('mountFilterMenu focus', () => {
   it('keeps a selected value available when it is not currently observed', () => {
     const element = menu();
     const state = filters();
@@ -648,7 +684,11 @@ describe('filter menu in-place patch', () => {
     expect(pill).not.toBeNull();
     expect(action).not.toBe(pill);
     action?.click();
-    expect(onViewed).toHaveBeenCalledWith(false, ['docs/guide.md']);
+    expect(onViewed).toHaveBeenCalledWith(
+      false,
+      ['docs/guide.md'],
+      'Unmarked all 1 Generated file (1 hidden)',
+    );
   });
 
   it('rebuilds when section all shortcuts appear or disappear', () => {

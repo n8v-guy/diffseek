@@ -69,24 +69,23 @@ always hide and the first click shows them. The Generated row has an
 for a fresh install. A saved always-hide-and-mark-read record is read as always
 hide with auto-view on. Multi-item sections expose row-hover
 `only` and title-hover `all` shortcuts. Non-matches are hidden in the file tree
-and collapsed/muted in place in the diff. File actions mark that file viewed or not viewed. Folder badges, counter
-pills, and corner circles share one counted set: files that pass every active
-filter except the Viewed filter's hiding. Generated files count only while the
-Generated filter shows them. Files hidden by an owner, group, or format filter
-do not count. The circle is empty, an eclipse, or filled as none, some, or all
-of that set are viewed. The eclipse is a fixed off-center disc in a thin ring.
-An empty or eclipse circle marks the visible unread files viewed and never
-hidden files. A filled circle marks the counted files not viewed. Its tooltip
-says how many remain, for example "Mark 8 remaining as viewed (12 of 20
-viewed)"; a filled circle says "Mark as not viewed". Partial uses
-`aria-pressed="mixed"`. The Generated row uses the same circle and counts
-generated files that pass every other filter. It ignores the Viewed filter and
-its own show, hide, or always-hide state, so the mark stays while those files
-are hidden. Clicking it marks or clears that counted set, including files
-hidden only by the Generated filter. The auto-view pill is a separate control.
-A folder sums the files under it, so a fully viewed folder still disappears
-while viewed files are hidden. The counter badge stays visible/total. Reset
-clears review-local
+and collapsed/muted in place in the diff. File actions mark that file viewed or not viewed. Menu rows for owners,
+groups, formats, change status, and generated files count and mark the whole
+category, including files hidden by any other filter. The counter badge stays
+visible/total. The circle is empty, an eclipse, or filled for that whole
+category, so it describes the click. The eclipse is a fixed off-center disc in
+a thin ring. A menu tooltip says, for example, "Mark 26 remaining in payments
+as viewed (12 of 38 viewed)"; a filled circle says "Mark as not viewed".
+Partial uses `aria-pressed="mixed"`. Clicking a menu circle announces the
+category, for example "Marked all 26 payments files viewed" or "Unmarked all
+38 payments files", and adds "(4 hidden)" when the action includes hidden
+files. The auto-view pill stays a separate control. A folder sums only the
+files under it that pass the active filters, except the Viewed filter's
+hiding, and its click marks only those visible files. Its tooltip omits the
+category name, and its snackbar says "Marked 8 visible files in checkout
+viewed" or "Unmarked 8 visible files in checkout". A fully viewed folder still
+disappears while viewed files are hidden. Files GitHub cannot mark stay out of
+both circles. Reset clears review-local
 filters without changing viewed/generated defaults. Started and completed
 actions appear in a short-lived top-right notification stack.
 

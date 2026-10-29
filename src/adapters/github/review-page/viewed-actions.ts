@@ -2,6 +2,7 @@ import {
   bucketActionPaths,
   emptyFacetExclusions,
   fileViewedLabel,
+  folderViewedNotice,
   includeCountedFiles,
   scopeAriaPressed,
   scopeViewedLabel,
@@ -99,7 +100,7 @@ const hitSlopPx = 4;
 
 export function mountViewedActions(
   snapshot: SupportedSnapshot,
-  onAction: (viewed: boolean, paths: string[]) => void,
+  onAction: (viewed: boolean, paths: string[], notice?: string) => void,
   index = new ReviewIndex(snapshot.files),
   filters: FilterState = emptyFacetExclusions(),
 ): void {
@@ -120,7 +121,7 @@ export function mountViewedActions(
     const anchor = iconAnchor(item);
     if (!anchor) continue;
     stale.delete(anchor);
-    bindViewedAnchor(anchor, bucket, file != null, onAction);
+    bindViewedAnchor(anchor, bucket, file != null, item.id, onAction);
   }
 
   for (const anchor of stale) clearViewedAction(anchor);
@@ -156,7 +157,8 @@ function bindViewedAnchor(
   anchor: HTMLElement,
   bucket: CountBucket,
   file: boolean,
-  onAction: (viewed: boolean, paths: string[]) => void,
+  itemId: string,
+  onAction: (viewed: boolean, paths: string[], notice?: string) => void,
 ): void {
   if (!anchor.classList.contains(viewedActionClass)) {
     anchor.classList.add(viewedActionClass);
@@ -176,7 +178,16 @@ function bindViewedAnchor(
   anchor.classList.toggle(viewedPartialClass, pressed === 'mixed');
   const paths = bucketActionPaths(bucket);
   const markViewed = pressed !== 'true';
-  actionHandlers.set(anchor, () => onAction(markViewed, paths));
+  const notice = file
+    ? undefined
+    : folderViewedNotice(
+        itemId.split('/').at(-1) ?? itemId,
+        markViewed,
+        paths.length,
+      );
+  actionHandlers.set(anchor, () =>
+    notice ? onAction(markViewed, paths, notice) : onAction(markViewed, paths),
+  );
 }
 
 export function clearViewedAction(anchor: Element): void {

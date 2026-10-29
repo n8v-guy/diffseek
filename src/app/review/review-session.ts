@@ -28,6 +28,7 @@ import {
   showBatchStarted,
   showRememberedFilterDefault,
   showUnavailable,
+  showViewedScope,
 } from '@diffseek/github/review-view/review-ui';
 import type { ReviewRef } from '@diffseek/github/routing/page-route';
 import {
@@ -291,7 +292,7 @@ export class ReviewSession {
         this.presenter.apply(catalogSnapshot, this.filters, index);
         mountViewedActions(
           catalogSnapshot,
-          (viewed, paths) => this.batch(viewed, paths),
+          (viewed, paths, notice) => this.batch(viewed, paths, notice),
           index,
           this.filters,
         );
@@ -332,9 +333,9 @@ export class ReviewSession {
     );
   }
 
-  private batch(viewed: boolean, paths: string[]): void {
+  private batch(viewed: boolean, paths: string[], notice?: string): void {
     if (!this.snapshot) return;
-    showBatchStarted(this.options.root, viewed, paths.length);
+    if (notice) showViewedScope(this.options.root, notice); else showBatchStarted(this.options.root, viewed, paths.length);
     void this.actionExecutor
       .enqueue({
         reviewKey: this.options.review.key,
@@ -395,7 +396,7 @@ export class ReviewSession {
         showAlwaysRead(this.options.root, enabled);
         void this.options.writeFilterDefaults(this.options.filterDefaults);
       },
-      onViewed: (viewed, paths) => this.batch(viewed, paths),
+      onViewed: (viewed, paths, notice) => this.batch(viewed, paths, notice),
     });
   }
 

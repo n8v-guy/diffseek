@@ -113,23 +113,21 @@ needs explicit keyboard focus behavior and permanent accessible names.
 
 ## D009 — Viewed circles follow counted files
 
-**Decision:** A menu row or folder counts files that pass every active filter
-except the Viewed filter's hiding. Generated files count only when that filter
-shows them. Files hidden by an owner, group, or format filter do not count.
-The circle is empty when none of those files are viewed, an eclipse (a fixed
-off-center disc inside a thin ring, not a pie) when some are, and filled when
-all are. Nothing counted means no circle. Clicking empty or partial marks only
-the visible unread files viewed. Clicking filled marks every counted file not
-viewed. The Generated row counts generated files that pass every other filter
-and ignores that row's own hide, so its circle and click still reach those
-files while they are hidden. A folder sums the files under it. Individual
-files stay empty or filled.
+**Decision:** Menu rows for owners, groups, formats, change status, and
+generated files count and mark every markable file in that category, ignoring
+every filter. The badge stays visible/total. The circle is empty, an eclipse
+(a fixed off-center disc inside a thin ring), or filled for that same set.
+Clicking empty or partial marks the category's remaining files viewed,
+including hidden ones. Clicking filled unmarks the whole category. A snackbar
+names the scope: "Marked all 26 payments files viewed" or "Unmarked all 38
+payments files", plus "(4 hidden)" when hidden files were included. Folders
+still count and mark only files that pass the active filters except the
+Viewed filter's hiding, and say "Marked 8 visible files in checkout viewed".
+Individual files stay empty or filled. Files GitHub cannot mark are excluded.
 
-**Why:** The indicator matches the slice the reviewer can still finish, including
-viewed files the Viewed filter is hiding, without painting a partial slice as
-done. **Cost:** The old click that unmarked hidden viewed files on any category
-row is gone. Only a filled circle clears viewed state, and it clears the whole
-counted set.
+**Why:** The menu icon and the click agree, including files the current
+filters have hidden. The tree stays limited to what is on screen. **Cost:** A
+menu click can change files the reviewer is not currently looking at.
 
 ## D010 — Fallback labels remain data but not menu noise
 

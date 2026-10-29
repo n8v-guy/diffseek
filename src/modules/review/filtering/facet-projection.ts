@@ -6,7 +6,6 @@ import {
   addCountedFile,
   bucketActionPaths,
   emptyCountBucket,
-  includeCountedFiles,
   viewedMark,
   type CountBucket,
   type ViewedMark,
@@ -14,6 +13,7 @@ import {
 
 export type FacetProjection = {
   counted: number;
+  hidden: number;
   paths: string[];
   total: number;
   viewedCount: number;
@@ -26,13 +26,15 @@ export function projectFacet(
   files: readonly FileRecord[],
   filters: FilterState,
 ): Map<string, FacetProjection> {
-  const counts = includeCountedFiles(
-    filters,
-    facet === 'generated' ? ['generated'] : [],
-  );
   const rows = new Map<
     string,
-    { total: number; visible: number; bucket: CountBucket }
+    {
+      total: number;
+      visible: number;
+      bucket: CountBucket;
+      hiddenUnread: number;
+      hiddenCounted: number;
+    }
   >();
   for (const file of files) {
     const values = new Set(
@@ -41,31 +43,41 @@ export function projectFacet(
         .map((label) => label.value),
     );
     const visible = matchesFilters(file, filters);
-    const counted = counts(file);
+    const counted = file.capabilities.viewed;
     for (const value of values) {
       const row = rows.get(value) ?? {
         total: 0,
         visible: 0,
         bucket: emptyCountBucket(),
+        hiddenUnread: 0,
+        hiddenCounted: 0,
       };
       row.total += 1;
       if (visible) row.visible += 1;
       if (counted) addCountedFile(row.bucket, file);
+      if (counted && !visible) {
+        row.hiddenCounted += 1;
+        row.hiddenUnread += file.viewed ? 0 : 1;
+      }
       rows.set(value, row);
     }
   }
 
   return new Map(
-    [...rows].map(([value, row]) => [
-      value,
-      {
-        counted: row.bucket.counted,
-        paths: bucketActionPaths(row.bucket),
-        total: row.total,
-        viewedCount: row.bucket.viewed,
-        viewedState: viewedMark(row.bucket.viewed, row.bucket.counted),
-        visible: row.visible,
-      },
-    ]),
+    [...rows].map(([value, row]) => {
+      const viewedState = viewedMark(row.bucket.viewed, row.bucket.counted);
+      return [
+        value,
+        {
+          counted: row.bucket.counted,
+          hidden: viewedState === 'filled' ? row.hiddenCounted : row.hiddenUnread,
+          paths: bucketActionPaths(row.bucket),
+          total: row.total,
+          viewedCount: row.bucket.viewed,
+          viewedState,
+          visible: row.visible,
+        },
+      ];
+    }),
   );
 }

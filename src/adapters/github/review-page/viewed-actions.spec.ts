@@ -172,11 +172,11 @@ describe('viewed actions', () => {
     );
     expect(folder?.title).toBe('Mark 3 remaining as viewed (0 of 3 viewed)');
     expect(folder?.getAttribute('aria-pressed')).toBe('false');
-    expect(onAction).toHaveBeenCalledWith(true, [
-      'src/app.ts',
-      'src/new.ts',
-      'src/generated.ts',
-    ]);
+    expect(onAction).toHaveBeenCalledWith(
+      true,
+      ['src/app.ts', 'src/new.ts', 'src/generated.ts'],
+      'Marked 3 visible files in src viewed',
+    );
 
     const viewedFile = document.querySelector<HTMLButtonElement>(
       '#docs\\/readme\\.md [data-diffseek-viewed-action="true"]',
@@ -219,7 +219,11 @@ describe('viewed actions', () => {
     expect(folder?.getAttribute('aria-label')).toBe(
       'Mark 1 remaining as viewed (1 of 2 viewed)',
     );
-    expect(onAction).toHaveBeenCalledWith(true, ['src/new.ts']);
+    expect(onAction).toHaveBeenCalledWith(
+      true,
+      ['src/new.ts'],
+      'Marked 1 visible file in src viewed',
+    );
     expect(
       document.querySelector('#src\\/generated\\.ts [data-diffseek-viewed-action]'),
     ).toBeNull();
@@ -251,11 +255,11 @@ describe('viewed actions', () => {
     expect(folder?.classList.contains('diffseek-viewed-partial')).toBe(false);
     folder?.click();
 
-    expect(onAction).toHaveBeenCalledWith(false, [
-      'src/app.ts',
-      'src/new.ts',
-      'src/generated.ts',
-    ]);
+    expect(onAction).toHaveBeenCalledWith(
+      false,
+      ['src/app.ts', 'src/new.ts', 'src/generated.ts'],
+      'Unmarked 3 visible files in src',
+    );
   });
 
   it('updates existing overlays in place during reconciliation', () => {

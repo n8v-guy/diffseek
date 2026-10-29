@@ -49,7 +49,7 @@ type FilterSectionOptions = {
   choices: Array<FacetProjection & { label: string; value: string }>;
   excluded: Set<string>;
   onChange: () => void;
-  onViewed?: (viewed: boolean, paths: string[]) => void;
+  onViewed?: (viewed: boolean, paths: string[], notice?: string) => void;
 };
 
 export function mountFilterMenu(
@@ -288,8 +288,10 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
       counted: options.counted,
       disabled: options.disabled === true,
       facet: options.facet,
+      hidden: options.hidden,
       onViewed,
       paths: options.paths,
+      scope: options.label,
       total: options.total,
       value: options.value,
       viewedCount: options.viewedCount,

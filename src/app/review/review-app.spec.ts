@@ -437,7 +437,7 @@ describe('review app lifecycle', () => {
           '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
         )
         ?.getAttribute('aria-label'),
-    ).toBe('Mark 1 remaining as viewed (2 of 3 viewed)');
+    ).toBe('Mark 1 remaining in Code as viewed (2 of 3 viewed)');
     expect(
       document
         .querySelector(

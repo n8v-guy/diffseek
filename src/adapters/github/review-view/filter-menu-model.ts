@@ -24,7 +24,7 @@ export type FilterMenuOptions = {
     state: FilterDefaultState,
   ) => void;
   onAlwaysReadChange?: (enabled: boolean) => void;
-  onViewed?: (viewed: boolean, paths: string[]) => void;
+  onViewed?: (viewed: boolean, paths: string[], notice?: string) => void;
 };
 
 export type MenuRowModel = {
@@ -34,6 +34,7 @@ export type MenuRowModel = {
   total: number;
   value: string;
   counted: number;
+  hidden: number;
   viewedCount: number;
   visible: number;
   excluded: Set<string>;
@@ -46,7 +47,7 @@ export type MenuRowModel = {
     state: FilterDefaultState,
   ) => void;
   onAlwaysReadChange?: (enabled: boolean) => void;
-  onViewed?: (viewed: boolean, paths: string[]) => void;
+  onViewed?: (viewed: boolean, paths: string[], notice?: string) => void;
 };
 
 export function menuRowModels(options: FilterMenuOptions): MenuRowModel[] {
@@ -140,6 +141,7 @@ export function selection(filters: FilterState, facet: LabelFacet): Set<string> 
 export function emptyProjection() {
   return {
     counted: 0,
+    hidden: 0,
     paths: [] as string[],
     total: 0,
     viewedCount: 0,

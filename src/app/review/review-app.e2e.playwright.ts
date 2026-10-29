@@ -9,8 +9,8 @@ const fixturePath = resolve(
 );
 const srcUnread = 'Mark 3 remaining as viewed (0 of 3 viewed)';
 const srcPartial = 'Mark 1 remaining as viewed (2 of 3 viewed)';
-const codeUnread = 'Mark 2 remaining as viewed (0 of 2 viewed)';
-const codePartial = 'Mark 1 remaining as viewed (1 of 2 viewed)';
+const codeUnread = 'Mark 3 remaining in Code as viewed (0 of 3 viewed)';
+const codePartial = 'Mark 1 remaining in Code as viewed (2 of 3 viewed)';
 
 test.beforeAll(async () => {
   const extension = resolve('.output/chrome-mv3');
@@ -266,6 +266,15 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
   ).toBeVisible();
 
   await page.locator(`#src [aria-label="${srcUnread}"]`).click();
+  await expect(page.locator('[data-diffseek="snackbars"]')).toHaveAttribute(
+    'aria-live',
+    'polite',
+  );
+  await expect(
+    page.locator('[data-diffseek="snackbar"]', {
+      hasText: 'Marked 3 visible files in src viewed',
+    }),
+  ).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute(
     'data-native-click-after-snackbar-paint',
     'true',
@@ -753,11 +762,16 @@ test('retains collapsed folders and marks only visible facet files', async () =>
     page.locator('#diff-new button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(
-    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
-  ).toHaveAttribute('aria-pressed', 'false');
+    page.locator('#diff-generated button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.locator('[data-diffseek="snackbar"]', {
+      hasText: 'Marked all 3 Code files viewed (1 hidden)',
+    }),
+  ).toBeVisible();
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toContainText('Marked 2 files as viewed');
+  ).toContainText('Marked 3 files as viewed');
 
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
   await expect(codeViewed).toHaveAttribute('aria-label', codePartial);
@@ -812,7 +826,7 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   );
   await expect(generatedCircle).toHaveAttribute(
     'aria-label',
-    'Mark 1 remaining as viewed (0 of 1 viewed)',
+    'Mark 1 remaining in Generated files as viewed (0 of 1 viewed)',
   );
   const separated = await generatedCircle.evaluate((circle) => {
     const pill = document.querySelector('[data-diffseek-always-read]');

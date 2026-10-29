@@ -43,19 +43,21 @@ describe('projectFacet', () => {
     filters.get('groups')?.add('Tests');
 
     expect(projectFacet('owners', files, filters).get('@org/backend')).toEqual({
-      counted: 1,
+      counted: 2,
+      hidden: 0,
       paths: ['src/app.ts'],
       total: 2,
-      viewedCount: 0,
-      viewedState: 'empty',
+      viewedCount: 1,
+      viewedState: 'partial',
       visible: 1,
     });
     expect(projectFacet('groups', files, filters).get('Tests')).toEqual({
-      counted: 0,
-      paths: [],
+      counted: 1,
+      hidden: 1,
+      paths: ['src/app.test.ts'],
       total: 1,
-      viewedCount: 0,
-      viewedState: 'empty',
+      viewedCount: 1,
+      viewedState: 'filled',
       visible: 0,
     });
   });
@@ -128,10 +130,11 @@ describe('projectFacet', () => {
     filters.get('statuses')?.add('added');
 
     expect(projectFacet('groups', files, filters).get('Code')).toEqual({
-      counted: 2,
+      counted: 3,
+      hidden: 0,
       paths: ['src/visible.ts'],
       total: 3,
-      viewedCount: 1,
+      viewedCount: 2,
       viewedState: 'partial',
       visible: 1,
     });
@@ -161,6 +164,7 @@ describe('projectFacet', () => {
 
     expect(projectFacet('groups', files, filters).get('Code')).toMatchObject({
       counted: 2,
+      hidden: 2,
       paths: ['src/hidden-viewed.ts', 'src/also-viewed.ts'],
       viewedCount: 2,
       viewedState: 'filled',
@@ -194,16 +198,20 @@ describe('projectFacet', () => {
     filters.get('owners')?.add('@other');
 
     expect(projectFacet('generated', files, filters).get('true')).toEqual({
-      counted: 2,
-      paths: ['src/gen-unread.ts'],
+      counted: 3,
+      hidden: 2,
+      paths: ['src/gen-unread.ts', 'src/gen-other.ts'],
       total: 3,
       viewedCount: 1,
       viewedState: 'partial',
       visible: 0,
     });
     expect(projectFacet('owners', files, filters).get('@org')).toMatchObject({
-      counted: 0,
-      paths: [],
+      counted: 2,
+      hidden: 1,
+      paths: ['src/gen-unread.ts'],
+      viewedCount: 1,
+      viewedState: 'partial',
       visible: 0,
     });
   });

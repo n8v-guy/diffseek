@@ -40,11 +40,11 @@ export function bucketActionPaths(bucket: CountBucket): string[] {
  * Files that pass every active filter except the Viewed filter's hiding.
  * A file GitHub cannot mark is omitted so the circle matches the click.
  */
+/** Tree folders: markable files that pass every filter except Viewed's hiding. */
 export function includeCountedFiles(
   filters: FilterState,
-  alsoIgnore: readonly LabelFacet[] = [],
 ): (file: FileRecord) => boolean {
-  const counted = filtersIgnoringHides(filters, ['viewed', ...alsoIgnore]);
+  const counted = filtersIgnoringHides(filters, ['viewed']);
   return (file) =>
     file.capabilities.viewed && matchesFilters(file, counted);
 }
@@ -53,10 +53,44 @@ export function fileViewedLabel(viewed: boolean): string {
   return viewed ? 'Mark as not viewed' : 'Mark as viewed';
 }
 
-export function scopeViewedLabel(viewed: number, counted: number): string {
+export function scopeViewedLabel(
+  viewed: number,
+  counted: number,
+  name?: string,
+): string {
   if (viewedMark(viewed, counted) === 'filled') return fileViewedLabel(true);
   const remaining = counted - viewed;
-  return `Mark ${remaining} remaining as viewed (${viewed} of ${counted} viewed)`;
+  const where = name ? ` in ${name}` : '';
+  return `Mark ${remaining} remaining${where} as viewed (${viewed} of ${counted} viewed)`;
+}
+
+export function folderViewedNotice(
+  name: string,
+  markViewed: boolean,
+  count: number,
+): string {
+  const files = count === 1 ? 'file' : 'files';
+  return markViewed
+    ? `Marked ${count} visible ${files} in ${name} viewed`
+    : `Unmarked ${count} visible ${files} in ${name}`;
+}
+
+export function categoryViewedNotice(
+  name: string,
+  markViewed: boolean,
+  count: number,
+  hidden = 0,
+): string {
+  const noun = categoryNoun(name, count);
+  const suffix = hidden > 0 ? ` (${hidden} hidden)` : '';
+  return markViewed
+    ? `Marked all ${count} ${noun} viewed${suffix}`
+    : `Unmarked all ${count} ${noun}${suffix}`;
+}
+
+function categoryNoun(name: string, count: number): string {
+  const base = name.endsWith(' files') ? name.slice(0, -' files'.length) : name;
+  return `${base} ${count === 1 ? 'file' : 'files'}`;
 }
 
 export function scopeAriaPressed(
