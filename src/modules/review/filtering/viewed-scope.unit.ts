@@ -114,4 +114,40 @@ describe('viewed scope', () => {
     expect(include(tests)).toBe(false);
     expect(include(stub)).toBe(false);
   });
+
+  it('lets the generated row count files its own filter is hiding', () => {
+    const filters = emptyFacetExclusions();
+    filters.get('generated')?.add('true');
+    filters.get('viewed')?.add('true');
+    filters.get('owners')?.add('@other');
+    const include = includeCountedFiles(filters, ['generated']);
+    const hiddenGenerated = file('src/generated.ts', {
+      generated: true,
+      labels: [
+        { facet: 'generated', value: 'true' },
+        { facet: 'owners', value: '@acme/web-platform' },
+      ],
+    });
+    const viewedGenerated = file('src/generated-viewed.ts', {
+      generated: true,
+      viewed: true,
+      labels: [
+        { facet: 'generated', value: 'true' },
+        { facet: 'viewed', value: 'true' },
+        { facet: 'owners', value: '@acme/web-platform' },
+      ],
+    });
+    const otherOwner = file('src/other-generated.ts', {
+      generated: true,
+      labels: [
+        { facet: 'generated', value: 'true' },
+        { facet: 'owners', value: '@other' },
+      ],
+    });
+
+    expect(include(hiddenGenerated)).toBe(true);
+    expect(include(viewedGenerated)).toBe(true);
+    expect(include(otherOwner)).toBe(false);
+    expect(includeCountedFiles(filters)(hiddenGenerated)).toBe(false);
+  });
 });

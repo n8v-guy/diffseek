@@ -187,7 +187,7 @@ describe('viewed actions', () => {
     expect(onAction).toHaveBeenLastCalledWith(false, ['docs/readme.md']);
   });
 
-  it('uses a half circle for a partly viewed folder and skips hidden files', () => {
+  it('uses an eclipse for a partly viewed folder and skips hidden files', () => {
     const snapshot = scanPage(document);
     if (!snapshot.supported) throw new Error(snapshot.reason);
     document.querySelector('[role="tree"]')?.insertAdjacentHTML(

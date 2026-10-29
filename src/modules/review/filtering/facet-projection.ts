@@ -26,7 +26,10 @@ export function projectFacet(
   files: readonly FileRecord[],
   filters: FilterState,
 ): Map<string, FacetProjection> {
-  const counts = includeCountedFiles(filters);
+  const counts = includeCountedFiles(
+    filters,
+    facet === 'generated' ? ['generated'] : [],
+  );
   const rows = new Map<
     string,
     { total: number; visible: number; bucket: CountBucket }

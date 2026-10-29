@@ -549,11 +549,18 @@ test('clears native filters before taking over the menu', async () => {
   await generated.locator('xpath=..').hover();
   await alwaysRead.click();
   await expect(alwaysRead).toHaveAttribute('aria-pressed', 'true');
+  const pressedBackground = await alwaysRead.evaluate(
+    (pill) => getComputedStyle(pill).backgroundColor,
+  );
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await alwaysRead.click();
   await expect(alwaysRead).toHaveAttribute('aria-pressed', 'false');
+  const hoveredBackground = await alwaysRead.evaluate(
+    (pill) => getComputedStyle(pill).backgroundColor,
+  );
+  expect(hoveredBackground).not.toBe(pressedBackground);
   await page.locator('#diff-generated button[aria-label="Viewed"]').click();
   await expect(
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
@@ -757,11 +764,18 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   await expect(codeCounter).toHaveAttribute('aria-label', codePartial);
   await expect(codeViewed).toHaveAttribute('aria-pressed', 'mixed');
   await expect(codeViewed).toHaveClass(/diffseek-viewed-partial/);
-  expect(
-    await codeViewed.evaluate(
-      (action) => getComputedStyle(action, '::before').backgroundImage,
-    ),
-  ).toContain('linear-gradient');
+  const eclipse = await codeViewed.evaluate((action) => {
+    const before = getComputedStyle(action, '::before');
+    const after = getComputedStyle(action, '::after');
+    return {
+      backgroundImage: before.backgroundImage,
+      afterContent: after.content,
+    };
+  });
+  expect(eclipse.backgroundImage).toContain('radial-gradient');
+  expect(eclipse.backgroundImage).toContain('36%');
+  expect(eclipse.backgroundImage).toContain('2.3px');
+  expect(eclipse.afterContent).toBe('none');
   await codeViewed.click();
   await expect(
     page.locator('#diff-app button[aria-label="Viewed"]'),
@@ -792,6 +806,44 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   await expect(codeCounter).toHaveText('2/3');
   await expect(codeViewed).toHaveAttribute('aria-label', codeUnread);
   await expect(codeViewed).toHaveAttribute('aria-pressed', 'false');
+
+  const generatedCircle = page.locator(
+    '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"]',
+  );
+  await expect(generatedCircle).toHaveAttribute(
+    'aria-label',
+    'Mark 1 remaining as viewed (0 of 1 viewed)',
+  );
+  const separated = await generatedCircle.evaluate((circle) => {
+    const pill = document.querySelector('[data-diffseek-always-read]');
+    const box = circle.getBoundingClientRect();
+    const pillBox = pill?.getBoundingClientRect();
+    const overlaps = Boolean(
+      pillBox &&
+        box.left < pillBox.right &&
+        box.right > pillBox.left &&
+        box.top < pillBox.bottom &&
+        box.bottom > pillBox.top,
+    );
+    return {
+      overlapsPill: overlaps,
+      snackInsideRow: document.querySelector('[data-diffseek="snackbar"]')
+        ?.closest('.diffseek-menu-row') != null,
+    };
+  });
+  expect(separated).toEqual({ overlapsPill: false, snackInsideRow: false });
+  await generatedCircle.click();
+  await expect(
+    page.locator('#diff-generated button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.locator('[role="treeitem"][id="src/generated.ts"]'),
+  ).toBeHidden();
+  await expect(generatedCircle).toHaveAttribute('aria-pressed', 'true');
+  await generatedCircle.click();
+  await expect(
+    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('hides generated and viewed files for a fresh install and honors saved preferences', async () => {

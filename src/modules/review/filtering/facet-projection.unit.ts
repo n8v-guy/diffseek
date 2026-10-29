@@ -60,7 +60,7 @@ describe('projectFacet', () => {
     });
   });
 
-  it('treats a partially viewed scope as half marked', () => {
+  it('treats a partially viewed scope as partial', () => {
     const files = [
       file('src/first.ts', [{ facet: 'groups', value: 'Code' }], true),
       file('src/second.ts', [{ facet: 'groups', value: 'Code' }]),
@@ -164,6 +164,46 @@ describe('projectFacet', () => {
       paths: ['src/hidden-viewed.ts', 'src/also-viewed.ts'],
       viewedCount: 2,
       viewedState: 'filled',
+      visible: 0,
+    });
+  });
+
+  it('keeps a generated-row circle for files the generated filter is hiding', () => {
+    const files = [
+      file('src/gen-unread.ts', [
+        { facet: 'generated', value: 'true' },
+        { facet: 'owners', value: '@org' },
+      ]),
+      file(
+        'src/gen-viewed.ts',
+        [
+          { facet: 'generated', value: 'true' },
+          { facet: 'viewed', value: 'true' },
+          { facet: 'owners', value: '@org' },
+        ],
+        true,
+      ),
+      file('src/gen-other.ts', [
+        { facet: 'generated', value: 'true' },
+        { facet: 'owners', value: '@other' },
+      ]),
+    ];
+    const filters = emptyFacetExclusions();
+    filters.get('generated')?.add('true');
+    filters.get('viewed')?.add('true');
+    filters.get('owners')?.add('@other');
+
+    expect(projectFacet('generated', files, filters).get('true')).toEqual({
+      counted: 2,
+      paths: ['src/gen-unread.ts'],
+      total: 3,
+      viewedCount: 1,
+      viewedState: 'partial',
+      visible: 0,
+    });
+    expect(projectFacet('owners', files, filters).get('@org')).toMatchObject({
+      counted: 0,
+      paths: [],
       visible: 0,
     });
   });

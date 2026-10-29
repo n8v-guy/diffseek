@@ -116,11 +116,14 @@ needs explicit keyboard focus behavior and permanent accessible names.
 **Decision:** A menu row or folder counts files that pass every active filter
 except the Viewed filter's hiding. Generated files count only when that filter
 shows them. Files hidden by an owner, group, or format filter do not count.
-The circle is empty when none of those files are viewed, half filled (a fixed
-left half, not a pie) when some are, and filled when all are. Nothing counted
-means no circle. Clicking empty or partial marks only the visible unread files
-viewed. Clicking filled marks every counted file not viewed. A folder sums the
-files under it. Individual files stay empty or filled.
+The circle is empty when none of those files are viewed, an eclipse (a fixed
+off-center disc inside a thin ring, not a pie) when some are, and filled when
+all are. Nothing counted means no circle. Clicking empty or partial marks only
+the visible unread files viewed. Clicking filled marks every counted file not
+viewed. The Generated row counts generated files that pass every other filter
+and ignores that row's own hide, so its circle and click still reach those
+files while they are hidden. A folder sums the files under it. Individual
+files stay empty or filled.
 
 **Why:** The indicator matches the slice the reviewer can still finish, including
 viewed files the Viewed filter is hiding, without painting a partial slice as

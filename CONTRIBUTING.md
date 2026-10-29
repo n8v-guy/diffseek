@@ -73,14 +73,20 @@ and collapsed/muted in place in the diff. File actions mark that file viewed or 
 pills, and corner circles share one counted set: files that pass every active
 filter except the Viewed filter's hiding. Generated files count only while the
 Generated filter shows them. Files hidden by an owner, group, or format filter
-do not count. The circle is empty, half filled, or filled as none, some, or all
-of that set are viewed. The half is a fixed left half. An empty or half circle
-marks the visible unread files viewed and never hidden files. A filled circle
-marks the counted files not viewed. Its tooltip says how many remain, for
-example "Mark 8 remaining as viewed (12 of 20 viewed)"; a filled circle says
-"Mark as not viewed". Partial uses `aria-pressed="mixed"`. A folder sums the
-files under it, so a fully viewed folder still disappears while viewed files
-are hidden. The counter badge stays visible/total. Reset clears review-local
+do not count. The circle is empty, an eclipse, or filled as none, some, or all
+of that set are viewed. The eclipse is a fixed off-center disc in a thin ring.
+An empty or eclipse circle marks the visible unread files viewed and never
+hidden files. A filled circle marks the counted files not viewed. Its tooltip
+says how many remain, for example "Mark 8 remaining as viewed (12 of 20
+viewed)"; a filled circle says "Mark as not viewed". Partial uses
+`aria-pressed="mixed"`. The Generated row uses the same circle and counts
+generated files that pass every other filter. It ignores the Viewed filter and
+its own show, hide, or always-hide state, so the mark stays while those files
+are hidden. Clicking it marks or clears that counted set, including files
+hidden only by the Generated filter. The auto-view pill is a separate control.
+A folder sums the files under it, so a fully viewed folder still disappears
+while viewed files are hidden. The counter badge stays visible/total. Reset
+clears review-local
 filters without changing viewed/generated defaults. Started and completed
 actions appear in a short-lived top-right notification stack.
 

@@ -615,38 +615,40 @@ describe('filter menu in-place patch', () => {
     expect(onViewed).toHaveBeenCalled();
   });
 
-  it('rebuilds when a plain count row gains viewed actions', () => {
+  it('keeps the generated row circle while generated files are hidden', () => {
     const element = menu();
     const state = filters();
-    state.get('generated')?.add('true');
     const onViewed = vi.fn();
+    state.get('generated')?.add('true');
     mountFilterMenu(element, {
       files,
       filters: state,
-      onChange: vi.fn(),
-      onViewed,
-    });
-    expect(
-      element.querySelector(
-        '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"]',
-      ),
-    ).toBeNull();
-
-    state.get('generated')?.delete('true');
-    mountFilterMenu(element, {
-      files,
-      filters: state,
+      filterDefaults: {
+        hidden: new Set<'viewed' | 'generated'>(['generated']),
+        viewed: new Set<'generated'>(),
+      },
       onChange: vi.fn(),
       onViewed,
     });
 
-    expect(
-      element
-        .querySelector(
-          '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]',
-        )
-        ?.getAttribute('aria-pressed'),
-    ).toBe('true');
+    const row = element.querySelector(
+      '.diffseek-menu-row:has([data-filter-kind="generated"])',
+    );
+    const action = row?.querySelector<HTMLButtonElement>(
+      '[data-diffseek-menu-viewed-action]',
+    );
+    const counter = row?.querySelector<HTMLButtonElement>(
+      '[data-diffseek-menu-count-action]',
+    );
+    const pill = row?.querySelector('[data-diffseek-always-read]');
+    expect(counter?.textContent).toBe('0/1');
+    expect(action?.title).toBe('Mark as not viewed');
+    expect(action?.getAttribute('aria-pressed')).toBe('true');
+    expect(action?.classList.contains('diffseek-viewed-partial')).toBe(false);
+    expect(pill).not.toBeNull();
+    expect(action).not.toBe(pill);
+    action?.click();
+    expect(onViewed).toHaveBeenCalledWith(false, ['docs/guide.md']);
   });
 
   it('rebuilds when section all shortcuts appear or disappear', () => {

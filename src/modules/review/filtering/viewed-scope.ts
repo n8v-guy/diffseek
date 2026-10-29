@@ -1,3 +1,4 @@
+import type { LabelFacet } from '../classification/labels';
 import type { FileRecord, FilterState } from '../model/file';
 
 import { matchesFilters } from './filters';
@@ -41,8 +42,9 @@ export function bucketActionPaths(bucket: CountBucket): string[] {
  */
 export function includeCountedFiles(
   filters: FilterState,
+  alsoIgnore: readonly LabelFacet[] = [],
 ): (file: FileRecord) => boolean {
-  const counted = filtersIgnoringViewedHide(filters);
+  const counted = filtersIgnoringHides(filters, ['viewed', ...alsoIgnore]);
   return (file) =>
     file.capabilities.viewed && matchesFilters(file, counted);
 }
@@ -67,12 +69,18 @@ export function scopeAriaPressed(
   return 'false';
 }
 
-function filtersIgnoringViewedHide(filters: FilterState): FilterState {
-  const viewed = filters.get('viewed');
-  if (!viewed?.has('true')) return filters;
-  const next = new Map(filters);
-  const remaining = new Set(viewed);
-  remaining.delete('true');
-  next.set('viewed', remaining);
-  return next;
+function filtersIgnoringHides(
+  filters: FilterState,
+  facets: readonly LabelFacet[],
+): FilterState {
+  let next: FilterState | null = null;
+  for (const facet of facets) {
+    const values = (next ?? filters).get(facet);
+    if (!values?.has('true')) continue;
+    next ??= new Map(filters);
+    const remaining = new Set(values);
+    remaining.delete('true');
+    next.set(facet, remaining);
+  }
+  return next ?? filters;
 }
