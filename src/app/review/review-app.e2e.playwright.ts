@@ -860,7 +860,7 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   ).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('hides generated and viewed files for a fresh install and honors saved preferences', async () => {
+test('hides generated and viewed files and auto-views generated for a fresh install, and honors saved preferences', async () => {
   await writeFilterDefaults(null);
   const page = await context.newPage();
   const fixture = await readFile(fixturePath, 'utf8');
@@ -891,7 +891,14 @@ test('hides generated and viewed files for a fresh install and honors saved pref
     page.locator('[role="treeitem"][id="src/generated.ts"]'),
   ).toBeHidden();
   await expect(page.locator('[role="treeitem"][id="src/app.ts"]')).toBeVisible();
-  await expect(count('viewed')).toHaveText('0/1');
+  await expect(page.locator('[data-diffseek-always-read]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(
+    page.locator('#diff-generated button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(count('viewed')).toHaveText('0/2');
   await expect(count('generated')).toHaveText('0/1');
   expect(await readStoredFilterDefaults()).toEqual({});
 
@@ -906,7 +913,8 @@ test('hides generated and viewed files for a fresh install and honors saved pref
   ).toBeVisible();
   await expect(count('generated')).toHaveText('1/1');
 
-  await writeFilterDefaults(null);
+  // The fresh hiding defaults with auto-view switched off.
+  await writeFilterDefaults({ hidden: ['viewed', 'generated'], viewed: [] });
   await page.reload();
   await page.getByLabel('Filter options').click();
   await expect(viewed).toHaveAttribute('aria-checked', 'mixed');

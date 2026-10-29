@@ -743,8 +743,60 @@ describe('review app reuse invariants', () => {
 });
 
 describe('fresh filter defaults', () => {
-  it('hides generated and viewed files until they are shown again', async () => {
+  it('hides generated and viewed files and turns auto-view on for a fresh install', async () => {
     await fakeBrowser.storage.local.clear();
+    openMenu();
+    const markFiles = vi.fn(async () => ({
+      requested: 1,
+      completed: ['src/generated.ts'],
+      failed: [],
+    }));
+    const app = await startReviewApp({
+      ...inertMetadata,
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      markFiles,
+      readImmediate: async () => ({
+        codeowners: '',
+        attributes: 'src/generated.ts linguist-generated',
+      }),
+    });
+
+    await vi.waitFor(() =>
+      expect(
+        document
+          .querySelector('[data-diffseek-always-read]')
+          ?.getAttribute('aria-pressed'),
+      ).toBe('true'),
+    );
+    await vi.waitFor(() =>
+      expect(markFiles).toHaveBeenCalledWith(
+        expect.anything(),
+        ['src/generated.ts'],
+        true,
+        expect.anything(),
+      ),
+    );
+    expect(
+      document
+        .querySelector('[data-filter-kind="viewed"][data-filter-value="true"]')
+        ?.getAttribute('aria-checked'),
+    ).toBe('mixed');
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
+    expect(
+      (await fakeBrowser.storage.local.get('diffseek:filter-defaults'))[
+        'diffseek:filter-defaults'
+      ],
+    ).toBeUndefined();
+    app.stop();
+  });
+
+  it('hides generated and viewed files until they are shown again', async () => {
+    // The fresh hiding defaults with auto-view switched off.
+    await fakeBrowser.storage.local.set({
+      'diffseek:filter-defaults': { hidden: ['viewed', 'generated'], viewed: [] },
+    });
     openMenu();
     const markFiles = vi.fn(async () => ({
       requested: 1,
@@ -784,11 +836,6 @@ describe('fresh filter defaults', () => {
     expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
     expect(count('viewed')).toBe('0/1');
     expect(count('generated')).toBe('0/1');
-    expect(
-      (await fakeBrowser.storage.local.get('diffseek:filter-defaults'))[
-        'diffseek:filter-defaults'
-      ],
-    ).toBeUndefined();
 
     viewed()?.click();
     await vi.waitFor(() =>
