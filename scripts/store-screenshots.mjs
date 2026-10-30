@@ -179,6 +179,7 @@ async function noiseCut(page) {
 
 /** Output box around the "−" / "✓" signs (a ::before) on the given facet rows. */
 async function signBox(page, kinds, clip) {
+  await page.evaluate(() => document.fonts.ready);
   const boxes = [];
   for (const kind of kinds) {
     const item = page.locator(`[data-filter-kind="${kind}"][data-filter-value="true"]`);
@@ -186,9 +187,13 @@ async function signBox(page, kinds, clip) {
       const rect = element.getBoundingClientRect();
       const label = element.querySelector('span')?.getBoundingClientRect() ?? rect;
       const sign = getComputedStyle(element, '::before');
-      const width = Number.parseFloat(sign.width) || 16;
       const left = rect.left + (Number.parseFloat(getComputedStyle(element).paddingLeft) || 0);
-      return { x: left, y: label.top, width: Math.min(width, label.left - left), height: label.height };
+      // The sign's box is wider than the glyph and left-aligned, so measure
+      // the glyph's own ink in the sign's font.
+      const context = document.createElement('canvas').getContext('2d');
+      context.font = sign.font;
+      const ink = context.measureText(sign.content.replace(/^["']|["']$/g, ''));
+      return { x: left - ink.actualBoundingBoxLeft, y: label.top, width: ink.actualBoundingBoxLeft + ink.actualBoundingBoxRight, height: label.height };
     });
     boxes.push(await outBox(box, clip, 0, 0));
   }
@@ -202,39 +207,26 @@ async function signBox(page, kinds, clip) {
   };
 }
 
-/**
- * Before and after "only" on the payments owner, at the 12/82 baseline.
- * The tree pane sits at GitHub's minimum width so the tree and the menu
- * fit side by side in the after half.
- */
+/** Before and after "only" on the payments owner, at the 12/82 baseline. */
 async function onlySplit(page) {
   await settleCounts(page);
-  await closeMenu(page);
-  await narrowTree(page);
-  await openMenu(page);
   const row = await paymentsRow(page);
   const only = row.locator('.diffseek-menu-only');
   const menu = page.locator('[data-diffseek="filters"]');
-  const search = page.locator('input[placeholder^="Filter files"]').filter({ visible: true }).first();
-  const subjects = [search, menu.locator('[data-filter-kind="generated"]'), webRow(page)];
+  const button = page.getByRole('button', { name: 'Filter options' }).filter({ visible: true }).first();
+  // Frame from the filter button down, so GitHub's "N / 82 viewed" stays out.
+  const subjects = [button, menu.locator('[data-filter-kind="generated"]'), webRow(page)];
   const beforeClip = await frame(page, subjects, clipWidth, clipHeight, 4);
   await row.hover();
   await cursorOn(page, only, false);
-  const beforeMenu = await menu.boundingBox();
-  const beforeCrop = Math.round((beforeMenu.x - beforeClip.x) * scale - 14);
+  const beforeCrop = halfCrop(await menu.boundingBox(), beforeClip);
   const onlyBox = await outBox(only, beforeClip, beforeCrop, 0);
-  const beforeMenuBox = await outBox(beforeMenu, beforeClip, beforeCrop, 0);
   const beforeShot = await shoot(page, beforeClip);
 
   await only.click();
   await waitForToasts(page);
   await openMenu(page);
   await page.mouse.move(2, 2);
-  await page.evaluate(() => {
-    let node = document.querySelector('[role="tree"]')?.parentElement ?? null;
-    while (node && node.scrollHeight <= node.clientHeight + 4) node = node.parentElement;
-    if (node) node.scrollTop = 0;
-  });
   const afterClip = await frame(page, subjects, clipWidth, clipHeight, 4);
   // "all" only shows while its section title is hovered.
   const ownersTitle = page.locator('.diffseek-menu-section:has([data-filter-kind="owners"]) .diffseek-menu-section-title');
@@ -242,53 +234,30 @@ async function onlySplit(page) {
   await ownersTitle.hover();
   await cursorOn(page, ownersAll, false);
   await page.waitForTimeout(300);
-  const tree = await page.locator('[role="tree"]').first().boundingBox();
-  const afterMenu = await menu.boundingBox();
-  const afterWidth = Math.min(outWidth - 420, Math.round((afterMenu.x + afterMenu.width - tree.x) * scale + 22));
-  const beforeWidth = outWidth - afterWidth;
-  const afterCrop = Math.round((tree.x - afterClip.x) * scale - 8);
-  const allBox = await outBox(ownersAll, afterClip, afterCrop, beforeWidth);
-  const treeBox = await outBox(tree, afterClip, afterCrop, beforeWidth);
-  const afterMenuBox = await outBox(afterMenu, afterClip, afterCrop, beforeWidth);
-  const menuLeft = afterMenuBox.x;
-  const files = await page.locator('[role="treeitem"][id]:not([aria-expanded]):not([hidden])').count();
-  console.log('only payments: tree file rows', files);
+  const afterCrop = halfCrop(await menu.boundingBox(), afterClip);
+  const allBox = await outBox(ownersAll, afterClip, afterCrop, 640);
   const afterShot = await shoot(page, afterClip);
-  const panel = { x: treeBox.x - 2, y: treeBox.y - 4, w: menuLeft - 10 - (treeBox.x - 2), h: outHeight - 8 - (treeBox.y - 4) };
   await compose('02-only.png', {
     layers: [
-      { shot: beforeShot, left: 0, width: beforeWidth, crop: beforeCrop },
-      { shot: afterShot, left: beforeWidth, width: afterWidth, crop: afterCrop },
+      { shot: beforeShot, left: 0, width: 640, crop: beforeCrop },
+      { shot: afterShot, left: 640, width: 640, crop: afterCrop },
     ],
     tags: [
-      { x: Math.round(beforeWidth / 2), y: 10, text: 'Before', size: 25.5, center: true },
-      { x: Math.round(beforeWidth + afterWidth / 2), y: 10, text: 'After “only”', size: 25.5, center: true },
+      { x: 320, y: 10, text: 'Before', size: 25.5, center: true },
+      { x: 960, y: 10, text: 'After “only”', size: 25.5, center: true },
     ],
     notes: [
-      // Both labels sit on the lower Formats rows, which this shot is not about.
-      { target: onlyBox, shape: 'rect', at: [Math.round(beforeMenuBox.x + 10), 540], width: Math.round(beforeMenuBox.w - 20), title: '“only”', sub: 'show just this category' },
-      { target: allBox, shape: 'rect', at: [Math.round(menuLeft + 10), 540], width: Math.round(afterMenuBox.w - 20), title: '“all” resets', sub: 'the whole section is back' },
-      { target: panel, shape: 'rect', inside: true, at: [Math.round(panel.x + 14), Math.round(panel.y + panel.h - 96)], width: Math.round(panel.w - 28), title: 'The tree keeps what’s left', sub: 'only unviewed files in this category' },
+      { target: onlyBox, shape: 'rect', at: [440, Math.round(onlyBox.y + 70)], width: 186, title: '“only” singles out', sub: 'this category' },
+      { target: allBox, shape: 'rect', at: [1080, Math.round(allBox.y + 70)], width: 186, title: '“all” resets', sub: 'back to all the categories' },
     ],
   });
-}
-
-/** Set the file tree pane to GitHub's own minimum width, as a drag would. */
-async function narrowTree(page) {
-  await page.evaluate(() => {
-    const pane = document.querySelector('[role="tree"]')?.closest('[style*="--pane-width"]');
-    if (!pane) throw new Error('File tree pane not found');
-    const min = getComputedStyle(pane).getPropertyValue('--pane-min-width').trim() || '256px';
-    pane.style.setProperty('--pane-width-custom', min);
-    pane.style.setProperty('--pane-width', min);
-  });
-  await settleLayout(page);
 }
 
 /**
- * Left: the DiffSeek menu on the PR. Right: GitHub's own compare view of the
- * base branch against its README-only first commit, where CODEOWNERS and
- * .gitattributes show as added files.
+ * Left: GitHub's own compare view of the base branch against its
+ * README-only first commit, where CODEOWNERS and .gitattributes show as
+ * added files. Right: the DiffSeek menu on the PR. Labels sit beside the
+ * source lines, with arrows to the menu rows they feed.
  */
 async function sourcesSplit(page) {
   await settleCounts(page);
@@ -300,13 +269,16 @@ async function sourcesSplit(page) {
     tests: rowOf('groups', 'Tests'),
     typescript: rowOf('languages', 'TypeScript'),
   };
-  const leftClip = await frame(page, [menu.locator('[data-filter-kind="viewed"]'), rows.typescript], clipWidth, clipHeight);
+  const menuClip = await frame(page, [menu.locator('[data-filter-kind="viewed"]'), rows.typescript], clipWidth, clipHeight);
   await page.mouse.move(2, 2);
+  // The menu keeps a 430px strip on the right; the labels sit between it
+  // and the source lines.
+  const menuLeft = outWidth - 430;
   const menuBox = await menu.boundingBox();
-  const leftCrop = halfCrop(menuBox, leftClip);
-  const left = {};
-  for (const [key, row] of Object.entries(rows)) left[key] = await outBox(row, leftClip, leftCrop, 0);
-  const leftShot = await shoot(page, leftClip);
+  const menuCrop = Math.round((menuBox.x - menuClip.x) * scale - 16);
+  const menuRows = {};
+  for (const [key, row] of Object.entries(rows)) menuRows[key] = await outBox(row, menuClip, menuCrop, menuLeft);
+  const menuShot = await shoot(page, menuClip);
 
   await page.goto(compareUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   const entry = (path) => page.locator(`copilot-diff-entry[data-file-path="${path}"]`);
@@ -377,8 +349,7 @@ async function sourcesSplit(page) {
   await page.evaluate(() => window.scrollBy(0, -12));
   await settleLayout(page);
   const top = await owners.boundingBox();
-  const rightClip = { x: top.x - 4, y: top.y - 10, width: clipWidth, height: clipHeight };
-  const rightCrop = 0;
+  const sourceClip = { x: top.x - 4, y: top.y - 10, width: clipWidth, height: clipHeight };
   const lines = {
     payments: await lineRows('CODEOWNERS', [10, 11]),
     generated: await lineRows('.gitattributes', [4, 5, 6, 7]),
@@ -386,26 +357,36 @@ async function sourcesSplit(page) {
     typescript: await lineRows('.gitattributes', [26, 27]),
   };
   console.log('sources:', JSON.stringify(Object.fromEntries(Object.entries(lines).map(([key, value]) => [key, value.text]))));
-  const right = {};
+  const source = {};
   for (const [key, box] of Object.entries(lines)) {
     // Highlight the code text, not the full-width row.
-    const out = await outBox(box, rightClip, rightCrop, 640);
-    right[key] = { ...out, w: Math.min(out.w, outWidth - 6 - out.x) };
+    const out = await outBox(box, sourceClip, 0, 0);
+    source[key] = { ...out, w: Math.min(out.w, menuLeft - 220 - out.x) };
   }
-  const rightShot = await shoot(page, rightClip);
-  const note = (key, title, sub) => ({ target: left[key], target2: right[key], shape: 'rect', at: [440, Math.round(left[key].y - 16)], width: 186, title, sub });
+  const sourceShot = await shoot(page, sourceClip);
+  const labelLeft = menuLeft - 198;
+  const note = (key, title, sub) => ({
+    target: menuRows[key],
+    arrow: true,
+    target2: source[key],
+    shape: 'rect',
+    at: [labelLeft, Math.round(source[key].y + source[key].h / 2 - 30)],
+    width: 186,
+    title,
+    sub,
+  });
   await compose('04-sources.png', {
     layers: [
-      { shot: leftShot, left: 0, width: 640, crop: leftCrop },
-      { shot: rightShot, left: 640, width: 640, crop: rightCrop },
+      { shot: sourceShot, left: 0, width: menuLeft, crop: 0 },
+      { shot: menuShot, left: menuLeft, width: outWidth - menuLeft, crop: menuCrop },
     ],
     tags: [
-      { x: 452, y: 742, text: 'DiffSeek menu' },
-      { x: 1000, y: 742, text: 'Repository files' },
+      { x: Math.round((menuLeft - 210) / 2), y: 742, text: 'Repository files', center: true },
+      { x: Math.round(menuLeft + 215), y: 742, text: 'DiffSeek menu', center: true },
     ],
     notes: [
-      note('generated', 'Generated', 'linguist-generated in .gitattributes'),
       note('payments', 'Owner: payments', '@acme/payments in CODEOWNERS'),
+      note('generated', 'Generated', 'linguist-generated in .gitattributes'),
       note('tests', 'Group: Tests', 'group=Tests in .gitattributes'),
       note('typescript', 'Format: TypeScript', 'linguist-language in .gitattributes'),
     ],
@@ -489,8 +470,8 @@ async function viewedBadges(page) {
     layers: [{ shot, left: 0, width: outWidth, crop: 0 }],
     tags: [],
     notes: [
-      { target: boxes.folder, shape: 'ring', at: [Math.round(boxes.folder.x + 90), Math.round(boxes.folder.y - 34)], width: 290, title: 'File tree badge', lines: ['status of <strong>shown</strong> files', '○ none  ◐ some  ● all'] },
-      { target: boxes.circle, shape: 'ring', at: [Math.round(boxes.menu.x + boxes.menu.w + 34), Math.round(boxes.circle.y + 20)], width: 270, title: 'Menu category badge', lines: ['status of <strong>all</strong> category files'] },
+      { target: boxes.folder, shape: 'ring', at: [Math.round(boxes.folder.x + 90), Math.round(boxes.folder.y - 34)], width: 290, title: 'File tree badge', lines: ['viewed status of <strong>shown</strong> files', '○ none  ◐ some  ● all'] },
+      { target: boxes.circle, shape: 'ring', at: [Math.round(boxes.menu.x + boxes.menu.w + 34), Math.round(boxes.circle.y + 20)], width: 270, title: 'Menu category badge', lines: ['viewed status of <strong>all</strong> category files'] },
     ],
   });
 }
@@ -961,14 +942,28 @@ async function compose(name, { layers, tags, notes }) {
         }
         draw('line', { x1: sx, y1: sy, x2: ax, y2: ay, stroke: accent, 'stroke-width': 2, 'stroke-linecap': 'round' });
         draw('circle', { cx: ax, cy: ay, r: 3.5, fill: accent });
+        if (note.arrow) {
+          // Arrowhead on the target end, pointing at the target.
+          const ux = (sx - ax) / (Math.hypot(sx - ax, sy - ay) || 1);
+          const uy = (sy - ay) / (Math.hypot(sx - ax, sy - ay) || 1);
+          const size = 11;
+          const points = [
+            [sx, sy],
+            [sx - ux * size - uy * size * 0.5, sy - uy * size + ux * size * 0.5],
+            [sx - ux * size + uy * size * 0.5, sy - uy * size - ux * size * 0.5],
+          ];
+          draw('polygon', { points: points.map((point) => point.join(',')).join(' '), fill: accent });
+        }
         if (note.target2) {
           // A second leader from the label to the matching source lines.
           const u = note.target2;
           const pad = 3;
           draw('rect', { x: u.x - pad, y: u.y - pad, width: u.w + pad * 2, height: u.h + pad * 2, rx: 6, fill: 'none', stroke: accent, 'stroke-width': 2.5 });
-          const ex = u.x - pad;
+          // The second target may sit on either side of the label.
+          const onLeft = u.x + u.w < rect.left;
+          const ex = onLeft ? u.x + u.w + pad : u.x - pad;
           const ey = Math.max(u.y, Math.min(rect.top + rect.height / 2, u.y + u.h));
-          const bx = rect.right;
+          const bx = onLeft ? rect.left : rect.right;
           const by = Math.max(rect.top + 8, Math.min(ey, rect.bottom - 8));
           draw('line', { x1: bx, y1: by, x2: ex, y2: ey, stroke: accent, 'stroke-width': 2, 'stroke-linecap': 'round' });
           draw('circle', { cx: bx, cy: by, r: 3.5, fill: accent });
