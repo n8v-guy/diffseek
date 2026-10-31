@@ -20,6 +20,7 @@
     "postinstall": "wxt prepare --config config/wxt.config.ts",
     "prepare": "husky",
     "release:zip": "wxt zip --config config/wxt.config.ts",
+    "store-screenshots": "./scripts/store-screenshots.ts",
     "test": "vitest --config config/vitest.config.ts",
     "test:ci": "vitest run --config config/vitest.config.ts",
     "test:e2e": "pnpm build && pnpm test:e2e:run",
