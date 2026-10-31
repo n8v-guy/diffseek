@@ -451,14 +451,14 @@ describe('mountFilterMenu', () => {
     expect(onViewed).toHaveBeenCalledWith(
       true,
       ['src/app.test.ts', 'unmapped.txt'],
-      'Marked all 2 Modified files viewed (1 hidden)',
+      { kind: 'category', name: 'Modified', hidden: 1 },
     );
     onViewed.mockClear();
     action?.click();
     expect(onViewed).toHaveBeenCalledWith(
       true,
       ['src/app.test.ts', 'unmapped.txt'],
-      'Marked all 2 Modified files viewed (1 hidden)',
+      { kind: 'category', name: 'Modified', hidden: 1 },
     );
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -486,14 +486,14 @@ describe('mountFilterMenu', () => {
     expect(onViewed).toHaveBeenCalledWith(
       false,
       ['docs/guide.md'],
-      'Unmarked all 1 Generated file',
+      { kind: 'category', name: 'Generated files', hidden: 0 },
     );
     onViewed.mockClear();
     action?.click();
     expect(onViewed).toHaveBeenCalledWith(
       false,
       ['docs/guide.md'],
-      'Unmarked all 1 Generated file',
+      { kind: 'category', name: 'Generated files', hidden: 0 },
     );
   });
 
@@ -546,14 +546,14 @@ describe('mountFilterMenu', () => {
     expect(onViewed).toHaveBeenCalledWith(
       true,
       ['src/app.test.ts'],
-      'Marked all 1 @owner file viewed',
+      { kind: 'category', name: '@owner', hidden: 0 },
     );
     onViewed.mockClear();
     action?.click();
     expect(onViewed).toHaveBeenCalledWith(
       true,
       ['src/app.test.ts'],
-      'Marked all 1 @owner file viewed',
+      { kind: 'category', name: '@owner', hidden: 0 },
     );
   });
 
@@ -687,7 +687,7 @@ describe('filter menu in-place patch', () => {
     expect(onViewed).toHaveBeenCalledWith(
       false,
       ['docs/guide.md'],
-      'Unmarked all 1 Generated file (1 hidden)',
+      { kind: 'category', name: 'Generated files', hidden: 1 },
     );
   });
 

@@ -1,14 +1,14 @@
 import {
-  categoryViewedNotice,
   scopeAriaPressed,
   scopeViewedLabel,
   viewedMark,
   type LabelFacet,
+  type ViewedScope,
 } from '@diffseek/review';
 
 export type MenuViewedActionOptions = {
   facet: LabelFacet;
-  onViewed: (viewed: boolean, paths: string[], notice?: string) => void;
+  onViewed: (viewed: boolean, paths: string[], scope?: ViewedScope) => void;
   paths: string[];
   value: string;
   scope: string;
@@ -77,12 +77,7 @@ export function configureViewedAction(
     options.onViewed(
       markViewed,
       options.paths,
-      categoryViewedNotice(
-        options.scope,
-        markViewed,
-        options.paths.length,
-        options.hidden,
-      ),
+      { kind: 'category', name: options.scope, hidden: options.hidden },
     );
   };
 }

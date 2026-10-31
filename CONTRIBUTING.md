@@ -87,7 +87,18 @@ viewed" or "Unmarked 8 visible files in checkout". A fully viewed folder still
 disappears while viewed files are hidden. Files GitHub cannot mark stay out of
 both circles. Reset clears review-local
 filters without changing viewed/generated defaults. Started and completed
-actions appear in a short-lived top-right notification stack.
+actions appear in a short-lived top-right notification stack, without actions.
+Toasts say "Marked … viewed" or "Unmarked …" (never "as viewed") with the count
+and scope. Folder and menu clicks show a progress toast ("Marking 8 visible
+files in checkout viewed…") and a completion with the same scope; other batches
+say "Marking 5 files viewed…" then "Marked 5 files viewed", and a single file
+is named with no progress toast ("Marked app.ts viewed"). Auto-view reports
+"Auto-viewed 8 generated files". Failures read "Marked 4 of 5 files viewed; 1
+failed. Hover for details" or "Couldn't mark 5 files viewed. Hover for
+details", keep the reasons in the hover title, and stay up for 12 seconds
+instead of 7. Generated and Viewed rows say "Generated: Show now" and so on,
+and the auto-view pill says "Auto-view on: generated files get marked viewed"
+or "Auto-view off".
 
 Repository metadata for the open review starts from cache, then PR head:
 

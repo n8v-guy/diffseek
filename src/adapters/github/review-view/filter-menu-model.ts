@@ -11,6 +11,7 @@ import {
   type FilterState,
   type LabelFacet,
   projectFacet,
+  type ViewedScope,
 } from '@diffseek/review';
 
 export type FilterMenuOptions = {
@@ -24,7 +25,7 @@ export type FilterMenuOptions = {
     state: FilterDefaultState,
   ) => void;
   onAlwaysReadChange?: (enabled: boolean) => void;
-  onViewed?: (viewed: boolean, paths: string[], notice?: string) => void;
+  onViewed?: (viewed: boolean, paths: string[], scope?: ViewedScope) => void;
 };
 
 export type MenuRowModel = {
@@ -47,7 +48,7 @@ export type MenuRowModel = {
     state: FilterDefaultState,
   ) => void;
   onAlwaysReadChange?: (enabled: boolean) => void;
-  onViewed?: (viewed: boolean, paths: string[], notice?: string) => void;
+  onViewed?: (viewed: boolean, paths: string[], scope?: ViewedScope) => void;
 };
 
 export function menuRowModels(options: FilterMenuOptions): MenuRowModel[] {

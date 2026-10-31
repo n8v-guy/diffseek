@@ -48,7 +48,7 @@ describe('scanPage', () => {
 
     expect(scanPage(document)).toEqual({
       supported: false,
-      reason: 'File tree is unavailable',
+      reason: 'no file tree on this page',
     });
   });
 

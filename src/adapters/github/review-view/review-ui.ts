@@ -2,6 +2,7 @@ import type {
   FilterDefaultState,
   RememberedFilterFacet,
 } from '@diffseek/browser/filter-defaults';
+import { type ViewedScope, viewedScopeNotice } from '@diffseek/review';
 
 import {
   type ActionResult,
@@ -9,6 +10,7 @@ import {
 } from '../review-page/viewed-actions';
 
 const snackbarDurationMs = 7_000;
+const failureSnackbarDurationMs = 12_000;
 
 export function menuNeedsRemount(menu: HTMLElement): boolean {
   if (menu.dataset.diffseekMenuOwned !== 'true') return true;
@@ -80,18 +82,22 @@ export function removeUnavailable(root: Document): void {
   root.querySelector('[data-diffseek="unavailable"]')?.remove();
 }
 
-export function showViewedScope(root: Document, message: string): void {
-  showSnackbar(root, message);
-}
-
 export function showBatchStarted(
   root: Document,
   viewed: boolean,
   requested: number,
+  scope?: ViewedScope,
 ): void {
+  if (scope) {
+    showSnackbar(root, viewedScopeNotice(scope, viewed, requested, 'progress'));
+    return;
+  }
+  if (requested <= 1) return;
   showSnackbar(
     root,
-    `Marking ${fileCount(requested)} as ${stateLabel(viewed)}…`,
+    viewed
+      ? `Marking ${fileCount(requested)} viewed…`
+      : `Unmarking ${fileCount(requested)}…`,
   );
 }
 
@@ -99,41 +105,103 @@ export function showBatchResult(
   root: Document,
   result: ActionResult,
   viewed: boolean,
+  scope?: ViewedScope,
 ): void {
-  const status = showSnackbar(
-    root,
-    `Marked ${fileCount(result.completed.length)} as ${stateLabel(viewed)}` +
-      (result.failed.length > 0 ? `; ${result.failed.length} failed` : ''),
-  );
   if (result.failed.length > 0) {
-    status.title = result.failed
-      .map(({ path, reason }) => `${path}: ${reason}`)
-      .join('\n');
+    showBatchFailure(root, result, viewed);
+    return;
   }
+  if (scope) {
+    showSnackbar(
+      root,
+      viewedScopeNotice(scope, viewed, result.completed.length, 'done'),
+    );
+    return;
+  }
+  const subject =
+    result.completed.length === 1
+      ? fileName(result.completed[0] ?? '')
+      : fileCount(result.completed.length);
+  showSnackbar(
+    root,
+    viewed ? `Marked ${subject} viewed` : `Unmarked ${subject}`,
+  );
+}
+
+export function showAutoViewed(root: Document, result: ActionResult): void {
+  if (result.failed.length > 0) {
+    showBatchFailure(root, result, true);
+    return;
+  }
+  if (result.completed.length === 0) return;
+  showSnackbar(
+    root,
+    `Auto-viewed ${result.completed.length} generated ${
+      result.completed.length === 1 ? 'file' : 'files'
+    }`,
+  );
+}
+
+function showBatchFailure(
+  root: Document,
+  result: ActionResult,
+  viewed: boolean,
+): void {
+  const total = Math.max(
+    result.requested,
+    result.completed.length + result.failed.length,
+  );
+  const subject =
+    total === 1 ? fileName(result.failed[0]?.path ?? '') : fileCount(total);
+  let message: string;
+  if (result.completed.length === 0) {
+    message = viewed
+      ? `Couldn't mark ${subject} viewed. Hover for details`
+      : `Couldn't unmark ${subject}. Hover for details`;
+  } else {
+    const done = `${result.completed.length} of ${fileCount(total)}`;
+    message =
+      (viewed ? `Marked ${done} viewed` : `Unmarked ${done}`) +
+      `; ${result.failed.length} failed. Hover for details`;
+  }
+  const status = showSnackbar(root, message, failureSnackbarDurationMs);
+  status.title = result.failed
+    .map(({ path, reason }) => `${path}: ${reason}`)
+    .join('\n');
 }
 
 export function showRememberedFilterDefault(
   root: Document,
-  _facet: RememberedFilterFacet,
+  facet: RememberedFilterFacet,
   state: FilterDefaultState,
 ): void {
-  showSnackbar(root, state === 'hidden' ? 'Always hide' : 'Show now');
+  showSnackbar(
+    root,
+    `${facetName(facet)}: ${state === 'hidden' ? 'Always hide' : 'Show now'}`,
+  );
 }
 
-export function showHideNow(root: Document): void {
-  showSnackbar(root, 'Hide now');
+export function showHideNow(
+  root: Document,
+  facet: RememberedFilterFacet,
+): void {
+  showSnackbar(root, `${facetName(facet)}: Hide now`);
 }
 
 export function showAlwaysRead(root: Document, enabled: boolean): void {
   showSnackbar(
     root,
     enabled
-      ? 'Always mark generated files viewed'
-      : 'Stop marking generated files viewed',
+      ? 'Auto-view on: generated files get marked viewed'
+      : 'Auto-view off',
   );
 }
 
-function showSnackbar(root: Document, message: string): HTMLElement {
+function showSnackbar(
+  root: Document,
+  message: string,
+  durationMs = snackbarDurationMs,
+): HTMLElement {
   let stack = root.querySelector<HTMLElement>(
     '[data-diffseek="snackbars"]',
   );
@@ -151,7 +219,7 @@ function showSnackbar(root: Document, message: string): HTMLElement {
   setTimeout(() => {
     snackbar.remove();
     if (stack?.childElementCount === 0) stack.remove();
-  }, snackbarDurationMs);
+  }, durationMs);
   return snackbar;
 }
 
@@ -205,6 +273,10 @@ function fileCount(count: number): string {
   return `${count} ${count === 1 ? 'file' : 'files'}`;
 }
 
-function stateLabel(viewed: boolean): string {
-  return viewed ? 'viewed' : 'not viewed';
+function fileName(path: string): string {
+  return path.split('/').at(-1) ?? path;
+}
+
+function facetName(facet: RememberedFilterFacet): string {
+  return facet === 'generated' ? 'Generated' : 'Viewed';
 }

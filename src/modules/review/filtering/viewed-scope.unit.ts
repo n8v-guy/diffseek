@@ -4,12 +4,11 @@ import type { FileRecord } from '../model/file';
 
 import { emptyFacetExclusions } from './facets';
 import {
-  categoryViewedNotice,
-  folderViewedNotice,
   includeCountedFiles,
   scopeAriaPressed,
   scopeViewedLabel,
   viewedMark,
+  viewedScopeNotice,
 } from './viewed-scope';
 
 function file(
@@ -121,23 +120,36 @@ describe('viewed scope', () => {
   });
 
   it('announces tree folders and menu categories differently', () => {
-    expect(folderViewedNotice('checkout', true, 8)).toBe(
+    const folder = { kind: 'folder', name: 'checkout' } as const;
+    const payments = { kind: 'category', name: 'payments', hidden: 4 } as const;
+    const generated = {
+      kind: 'category',
+      name: 'Generated files',
+      hidden: 0,
+    } as const;
+    expect(viewedScopeNotice(folder, true, 8, 'progress')).toBe(
+      'Marking 8 visible files in checkout viewed…',
+    );
+    expect(viewedScopeNotice(folder, true, 8, 'done')).toBe(
       'Marked 8 visible files in checkout viewed',
     );
-    expect(folderViewedNotice('checkout', false, 8)).toBe(
-      'Unmarked 8 visible files in checkout',
+    expect(viewedScopeNotice(folder, false, 8, 'progress')).toBe(
+      'Unmarking 8 visible files in checkout…',
     );
-    expect(folderViewedNotice('src', true, 1)).toBe(
-      'Marked 1 visible file in src viewed',
+    expect(viewedScopeNotice(folder, false, 1, 'done')).toBe(
+      'Unmarked 1 visible file in checkout',
     );
-    expect(categoryViewedNotice('payments', true, 26, 4)).toBe(
+    expect(viewedScopeNotice(payments, true, 26, 'progress')).toBe(
+      'Marking all 26 payments files viewed (4 hidden)…',
+    );
+    expect(viewedScopeNotice(payments, true, 26, 'done')).toBe(
       'Marked all 26 payments files viewed (4 hidden)',
     );
-    expect(categoryViewedNotice('payments', false, 38)).toBe(
-      'Unmarked all 38 payments files',
+    expect(viewedScopeNotice(payments, false, 38, 'progress')).toBe(
+      'Unmarking all 38 payments files (4 hidden)…',
     );
-    expect(categoryViewedNotice('Generated files', true, 1, 1)).toBe(
-      'Marked all 1 Generated file viewed (1 hidden)',
+    expect(viewedScopeNotice(generated, false, 1, 'done')).toBe(
+      'Unmarked all 1 Generated file',
     );
   });
 });

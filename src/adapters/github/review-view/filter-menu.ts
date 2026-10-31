@@ -5,6 +5,7 @@ import {
   type FacetProjection,
   type LabelFacet,
   projectFacet,
+  type ViewedScope,
 } from '@diffseek/review';
 
 import {
@@ -49,7 +50,7 @@ type FilterSectionOptions = {
   choices: Array<FacetProjection & { label: string; value: string }>;
   excluded: Set<string>;
   onChange: () => void;
-  onViewed?: (viewed: boolean, paths: string[], notice?: string) => void;
+  onViewed?: (viewed: boolean, paths: string[], scope?: ViewedScope) => void;
 };
 
 export function mountFilterMenu(
@@ -239,7 +240,10 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
     if (cycleFilterDefault(options)) {
       applyCheckedState(item, options);
       if (item.getAttribute('aria-checked') === 'false') {
-        showHideNow(item.ownerDocument);
+        showHideNow(
+          item.ownerDocument,
+          options.facet === 'generated' ? 'generated' : 'viewed',
+        );
       }
       options.onChange();
       return;

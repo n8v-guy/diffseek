@@ -2,7 +2,6 @@ import {
   bucketActionPaths,
   emptyFacetExclusions,
   fileViewedLabel,
-  folderViewedNotice,
   includeCountedFiles,
   scopeAriaPressed,
   scopeViewedLabel,
@@ -10,6 +9,7 @@ import {
   type FileRecord,
   type FilterState,
   ReviewIndex,
+  type ViewedScope,
 } from '@diffseek/review';
 
 import {
@@ -100,7 +100,7 @@ const hitSlopPx = 4;
 
 export function mountViewedActions(
   snapshot: SupportedSnapshot,
-  onAction: (viewed: boolean, paths: string[], notice?: string) => void,
+  onAction: (viewed: boolean, paths: string[], scope?: ViewedScope) => void,
   index = new ReviewIndex(snapshot.files),
   filters: FilterState = emptyFacetExclusions(),
 ): void {
@@ -158,7 +158,7 @@ function bindViewedAnchor(
   bucket: CountBucket,
   file: boolean,
   itemId: string,
-  onAction: (viewed: boolean, paths: string[], notice?: string) => void,
+  onAction: (viewed: boolean, paths: string[], scope?: ViewedScope) => void,
 ): void {
   if (!anchor.classList.contains(viewedActionClass)) {
     anchor.classList.add(viewedActionClass);
@@ -178,15 +178,11 @@ function bindViewedAnchor(
   anchor.classList.toggle(viewedPartialClass, pressed === 'mixed');
   const paths = bucketActionPaths(bucket);
   const markViewed = pressed !== 'true';
-  const notice = file
+  const scope = file
     ? undefined
-    : folderViewedNotice(
-        itemId.split('/').at(-1) ?? itemId,
-        markViewed,
-        paths.length,
-      );
+    : { kind: 'folder' as const, name: itemId.split('/').at(-1) ?? itemId };
   actionHandlers.set(anchor, () =>
-    notice ? onAction(markViewed, paths, notice) : onAction(markViewed, paths),
+    scope ? onAction(markViewed, paths, scope) : onAction(markViewed, paths),
   );
 }
 

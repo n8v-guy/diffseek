@@ -480,7 +480,7 @@ async function clearViewedFiles(page: Page): Promise<void> {
   await action.click();
   await expect(
     page.locator('[data-diffseek="snackbar"]').filter({
-      hasText: /^Marked .+ as not viewed/,
+      hasText: /^Unmarked all /,
     }),
   ).toBeVisible({ timeout: 300_000 });
 }

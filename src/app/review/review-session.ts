@@ -24,11 +24,11 @@ import {
   removeInjected,
   removeUnavailable,
   showAlwaysRead,
+  showAutoViewed,
   showBatchResult,
   showBatchStarted,
   showRememberedFilterDefault,
   showUnavailable,
-  showViewedScope,
 } from '@diffseek/github/review-view/review-ui';
 import type { ReviewRef } from '@diffseek/github/routing/page-route';
 import {
@@ -41,6 +41,7 @@ import {
   excludedFacetCount,
   FileCatalog,
   ReviewIndex,
+  type ViewedScope,
 } from '@diffseek/review';
 
 import { ViewedActionExecutor } from './action-executor';
@@ -292,7 +293,7 @@ export class ReviewSession {
         this.presenter.apply(catalogSnapshot, this.filters, index);
         mountViewedActions(
           catalogSnapshot,
-          (viewed, paths, notice) => this.batch(viewed, paths, notice),
+          (viewed, paths, scope) => this.batch(viewed, paths, scope),
           index,
           this.filters,
         );
@@ -333,9 +334,9 @@ export class ReviewSession {
     );
   }
 
-  private batch(viewed: boolean, paths: string[], notice?: string): void {
+  private batch(viewed: boolean, paths: string[], scope?: ViewedScope): void {
     if (!this.snapshot) return;
-    if (notice) showViewedScope(this.options.root, notice); else showBatchStarted(this.options.root, viewed, paths.length);
+    showBatchStarted(this.options.root, viewed, paths.length, scope);
     void this.actionExecutor
       .enqueue({
         reviewKey: this.options.review.key,
@@ -345,7 +346,7 @@ export class ReviewSession {
       })
       .then((result) => {
         if (!result || this.lifecycle.signal.aborted) return;
-        showBatchResult(this.options.root, result, viewed);
+        showBatchResult(this.options.root, result, viewed, scope);
         this.schedule();
       });
   }
@@ -361,7 +362,6 @@ export class ReviewSession {
   private enqueueDefaultViewed(paths: string[]): void {
     for (const path of paths) this.defaultViewedAttempts.add(path);
     this.defaultViewedInFlight += 1;
-    showBatchStarted(this.options.root, true, paths.length);
     void this.actionExecutor
       .enqueue({
         reviewKey: this.options.review.key,
@@ -373,7 +373,7 @@ export class ReviewSession {
       .then((result) => {
         this.defaultViewedInFlight = Math.max(0, this.defaultViewedInFlight - 1);
         if (this.lifecycle.signal.aborted) return;
-        if (result) showBatchResult(this.options.root, result, true);
+        if (result) showAutoViewed(this.options.root, result);
         this.reconcile();
       });
   }
@@ -396,7 +396,7 @@ export class ReviewSession {
         showAlwaysRead(this.options.root, enabled);
         void this.options.writeFilterDefaults(this.options.filterDefaults);
       },
-      onViewed: (viewed, paths, notice) => this.batch(viewed, paths, notice),
+      onViewed: (viewed, paths, scope) => this.batch(viewed, paths, scope),
     });
   }
 

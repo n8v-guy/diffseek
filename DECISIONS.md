@@ -118,11 +118,14 @@ generated files count and mark every markable file in that category, ignoring
 every filter. The badge stays visible/total. The circle is empty, an eclipse
 (a fixed off-center disc inside a thin ring), or filled for that same set.
 Clicking empty or partial marks the category's remaining files viewed,
-including hidden ones. Clicking filled unmarks the whole category. A snackbar
-names the scope: "Marked all 26 payments files viewed" or "Unmarked all 38
-payments files", plus "(4 hidden)" when hidden files were included. Folders
-still count and mark only files that pass the active filters except the
-Viewed filter's hiding, and say "Marked 8 visible files in checkout viewed".
+including hidden ones. Clicking filled unmarks the whole category. A progress
+snackbar and then a completion snackbar name the scope: "Marking all 26
+payments files viewed…" then "Marked all 26 payments files viewed", or
+"Unmarking all 38 payments files…" then "Unmarked all 38 payments files", plus
+"(4 hidden)" when hidden files were included. Folders still count and mark only
+files that pass the active filters except the Viewed filter's hiding, and say
+"Marking 8 visible files in checkout viewed…" then "Marked 8 visible files in
+checkout viewed".
 Individual files stay empty or filled. Files GitHub cannot mark are excluded.
 
 **Why:** The menu icon and the click agree, including files the current

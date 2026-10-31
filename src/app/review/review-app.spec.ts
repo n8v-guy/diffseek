@@ -1074,7 +1074,7 @@ describe('review app interactions', () => {
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
         ?.textContent,
-    ).toBe('Show now');
+    ).toBe('Viewed: Show now');
 
     document
       .querySelector<HTMLButtonElement>(
@@ -1104,7 +1104,7 @@ describe('review app interactions', () => {
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
         ?.textContent,
-    ).toBe('Always hide');
+    ).toBe('Viewed: Always hide');
     app.stop();
   });
 
@@ -1145,7 +1145,7 @@ describe('review app interactions', () => {
       expect(
         [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
           ?.textContent,
-      ).toBe('Marked 0 files as viewed; 1 failed');
+      ).toBe("Couldn't mark app.ts viewed. Hover for details");
     });
     expect(markFiles).toHaveBeenCalledOnce();
     app.stop();
@@ -1276,7 +1276,7 @@ describe('review app interactions', () => {
     ).toBe('Collapse file');
     expect(
       document.querySelector('[data-diffseek="unavailable"]')?.textContent,
-    ).toContain('File tree is unavailable');
+    ).toBe('DiffSeek unavailable: no file tree on this page');
     app.stop();
   });
 

@@ -175,7 +175,7 @@ describe('viewed actions', () => {
     expect(onAction).toHaveBeenCalledWith(
       true,
       ['src/app.ts', 'src/new.ts', 'src/generated.ts'],
-      'Marked 3 visible files in src viewed',
+      { kind: 'folder', name: 'src' },
     );
 
     const viewedFile = document.querySelector<HTMLButtonElement>(
@@ -222,7 +222,7 @@ describe('viewed actions', () => {
     expect(onAction).toHaveBeenCalledWith(
       true,
       ['src/new.ts'],
-      'Marked 1 visible file in src viewed',
+      { kind: 'folder', name: 'src' },
     );
     expect(
       document.querySelector('#src\\/generated\\.ts [data-diffseek-viewed-action]'),
@@ -258,7 +258,7 @@ describe('viewed actions', () => {
     expect(onAction).toHaveBeenCalledWith(
       false,
       ['src/app.ts', 'src/new.ts', 'src/generated.ts'],
-      'Unmarked 3 visible files in src',
+      { kind: 'folder', name: 'src' },
     );
   });
 
