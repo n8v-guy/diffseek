@@ -9,10 +9,10 @@ import {
 describe('filter defaults', () => {
   beforeEach(() => fakeBrowser.reset());
 
-  it('hides viewed and generated files when nothing is saved', async () => {
+  it('hides viewed and generated files and auto-views generated when nothing is saved', async () => {
     expect(await readFilterDefaults()).toEqual({
       hidden: new Set(['viewed', 'generated']),
-      viewed: new Set(),
+      viewed: new Set(['generated']),
     });
     expect(
       (await fakeBrowser.storage.local.get('diffseek:filter-defaults'))[

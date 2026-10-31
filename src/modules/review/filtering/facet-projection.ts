@@ -2,12 +2,22 @@ import type { LabelFacet } from '../classification/labels';
 import type { FileRecord, FilterState } from '../model/file';
 
 import { matchesFilters } from './filters';
+import {
+  addCountedFile,
+  bucketActionPaths,
+  emptyCountBucket,
+  viewedMark,
+  type CountBucket,
+  type ViewedMark,
+} from './viewed-scope';
 
 export type FacetProjection = {
-  hiddenViewedPaths: string[];
+  counted: number;
+  hidden: number;
   paths: string[];
   total: number;
-  viewed: boolean;
+  viewedCount: number;
+  viewedState: ViewedMark;
   visible: number;
 };
 
@@ -16,14 +26,15 @@ export function projectFacet(
   files: readonly FileRecord[],
   filters: FilterState,
 ): Map<string, FacetProjection> {
-  const viewedHidden =
-    facet !== 'viewed' && filters.get('viewed')?.has('true') === true;
-  const filtersWithoutViewed = viewedHidden
-    ? withoutViewedExclusion(filters)
-    : filters;
-  const projections = new Map<
+  const rows = new Map<
     string,
-    Omit<FacetProjection, 'viewed'>
+    {
+      total: number;
+      visible: number;
+      bucket: CountBucket;
+      hiddenUnread: number;
+      hiddenCounted: number;
+    }
   >();
   for (const file of files) {
     const values = new Set(
@@ -32,52 +43,41 @@ export function projectFacet(
         .map((label) => label.value),
     );
     const visible = matchesFilters(file, filters);
+    const counted = file.capabilities.viewed;
     for (const value of values) {
-      const projection = projections.get(value) ?? {
-        hiddenViewedPaths: [],
-        paths: [],
+      const row = rows.get(value) ?? {
         total: 0,
         visible: 0,
+        bucket: emptyCountBucket(),
+        hiddenUnread: 0,
+        hiddenCounted: 0,
       };
-      projection.total += 1;
-      if (visible) {
-        projection.visible += 1;
-        if (file.capabilities.viewed) projection.paths.push(file.path);
+      row.total += 1;
+      if (visible) row.visible += 1;
+      if (counted) addCountedFile(row.bucket, file);
+      if (counted && !visible) {
+        row.hiddenCounted += 1;
+        row.hiddenUnread += file.viewed ? 0 : 1;
       }
-      if (
-        viewedHidden &&
-        !visible &&
-        file.viewed &&
-        file.capabilities.viewed &&
-        matchesFilters(file, filtersWithoutViewed)
-      ) {
-        projection.hiddenViewedPaths.push(file.path);
-      }
-      projections.set(value, projection);
+      rows.set(value, row);
     }
   }
 
-  const filesByPath = new Map(files.map((file) => [file.path, file]));
   return new Map(
-    [...projections].map(([value, projection]) => [
-      value,
-      {
-        ...projection,
-        viewed:
-          projection.paths.length > 0 &&
-          projection.paths.every((path) => filesByPath.get(path)?.viewed),
-      },
-    ]),
-  );
-}
-
-function withoutViewedExclusion(filters: FilterState): FilterState {
-  return new Map(
-    [...filters].map(([facet, values]) => [
-      facet,
-      facet === 'viewed'
-        ? new Set([...values].filter((value) => value !== 'true'))
-        : values,
-    ]),
+    [...rows].map(([value, row]) => {
+      const viewedState = viewedMark(row.bucket.viewed, row.bucket.counted);
+      return [
+        value,
+        {
+          counted: row.bucket.counted,
+          hidden: viewedState === 'filled' ? row.hiddenCounted : row.hiddenUnread,
+          paths: bucketActionPaths(row.bucket),
+          total: row.total,
+          viewedCount: row.bucket.viewed,
+          viewedState,
+          visible: row.visible,
+        },
+      ];
+    }),
   );
 }

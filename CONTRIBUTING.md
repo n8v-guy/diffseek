@@ -69,13 +69,25 @@ always hide and the first click shows them. The Generated row has an
 for a fresh install. A saved always-hide-and-mark-read record is read as always
 hide with auto-view on. Multi-item sections expose row-hover
 `only` and title-hover `all` shortcuts. Non-matches are hidden in the file tree
-and collapsed/muted in place in the diff. File, folder, counter-pill, and
-counter-overlay actions mark their current visible scope viewed through
-GitHub's native controls. Reset clears review-local filters without changing
-viewed/generated defaults. When viewed files are hidden, a category containing
-matching hidden viewed files instead offers to mark only those files not
-viewed, making them visible again. Started and completed actions appear in a
-short-lived top-right notification stack.
+and collapsed/muted in place in the diff. File actions mark that file viewed or not viewed. Menu rows for owners,
+groups, formats, change status, and generated files count and mark the whole
+category, including files hidden by any other filter. The counter badge stays
+visible/total. The circle is empty, an eclipse, or filled for that whole
+category, so it describes the click. The eclipse is a fixed off-center disc in
+a thin ring. A menu tooltip says, for example, "Mark 26 remaining in payments
+as viewed (12 of 38 viewed)"; a filled circle says "Mark as not viewed".
+Partial uses `aria-pressed="mixed"`. Clicking a menu circle announces the
+category, for example "Marked all 26 payments files viewed" or "Unmarked all
+38 payments files", and adds "(4 hidden)" when the action includes hidden
+files. The auto-view pill stays a separate control. A folder sums only the
+files under it that pass the active filters, except the Viewed filter's
+hiding, and its click marks only those visible files. Its tooltip omits the
+category name, and its snackbar says "Marked 8 visible files in checkout
+viewed" or "Unmarked 8 visible files in checkout". A fully viewed folder still
+disappears while viewed files are hidden. Files GitHub cannot mark stay out of
+both circles. Reset clears review-local
+filters without changing viewed/generated defaults. Started and completed
+actions appear in a short-lived top-right notification stack.
 
 Repository metadata for the open review starts from cache, then PR head:
 

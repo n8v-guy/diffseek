@@ -167,10 +167,14 @@
 }
 
 .diffseek-menu-only:hover,
-.diffseek-menu-all:hover,
-.diffseek-menu-always-read:hover {
+.diffseek-menu-all:hover {
   background: var(--diffseek-accent);
   color: var(--diffseek-background);
+}
+
+/* A toggle must not look pressed on hover: outline only, fill = state. */
+.diffseek-menu-always-read:hover {
+  box-shadow: inset 0 0 0 1px var(--diffseek-accent);
 }
 
 .diffseek-reset-filters {
@@ -276,6 +280,16 @@ span.diffseek-menu-count {
   position: absolute;
   right: -4px;
   width: 12px;
+}
+
+/* Partial mark. This is the only block that paints it. */
+.diffseek-viewed-partial::before {
+  border-width: 1.5px;
+  background: radial-gradient(
+    circle at 36% 64%,
+    var(--diffseek-accent) 0 2.3px,
+    var(--diffseek-background) 2.8px
+  );
 }
 
 .diffseek-viewed-icon-anchor[aria-pressed='true']::before,
