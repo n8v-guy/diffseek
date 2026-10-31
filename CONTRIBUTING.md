@@ -221,8 +221,10 @@ DIFFSEEK_GITHUB_STORAGE_STATE=.cache/github-storage.json pnpm test:e2e:live
 ```
 
 It runs repeated cold, warm, and hot samples against `sha-tm/diffseek-test-data#1`
-by default (`DIFFSEEK_LIVE_SAMPLES`, default 3). Cold clears extension storage,
-then writes an explicit shown filter preference so a fresh-install hide default
+by default (`DIFFSEEK_LIVE_SAMPLES`, default 3). Every live test seeds filter
+defaults with auto-view off, so runs never mark the fixture's generated files
+viewed on GitHub; setup then marks all of its viewed files not viewed. Cold
+clears extension storage, then writes an explicit shown filter preference so a fresh-install hide default
 does not collapse the file list, and loads the PR. Warm is a reload. Hot clicks
 Conversation, then Files changed. Each sample records time to the first
 DiffSeek control, time from the Filter click until the DiffSeek menu is
