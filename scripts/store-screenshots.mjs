@@ -7,8 +7,8 @@
  * STORAGE_STATE is a Playwright storage-state JSON file. The script never
  * prints it. Each shot uses a fresh Chromium profile with the built extension.
  * Shots 2-4 turn auto-view off in that profile first, so the PR stays at its
- * 12/82 baseline. Viewed checkboxes live on GitHub, so shots that change them
- * restore the baseline before the browser closes.
+ * 12/82 baseline. Viewed checkboxes live on GitHub, so shot 1, which changes
+ * them, restores the baseline before the browser closes.
  */
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -89,11 +89,7 @@ if (pick.has('2')) {
 }
 if (pick.has('3')) {
   await withPage(async (page) => {
-    try {
-      await viewedBadges(page);
-    } finally {
-      await restoreBaseline(page);
-    }
+    await viewedBadges(page);
   });
 }
 if (pick.has('4')) {
@@ -171,8 +167,8 @@ async function noiseCut(page) {
     layers: [{ shot, left: 0, width: outWidth, crop: 0 }],
     tags: [],
     notes: [
-      { target: signs, shape: 'rect', at: [Math.round(center - 125), Math.round(signs.y - 132)], width: 250, title: 'Hidden by default', sub: '“−” means these files are hidden. Click to show them.' },
-      { target: pillBox, shape: 'rect', at: [Math.round(menuBox.x + menuBox.w + 36), Math.round(pillBox.y + 56)], width: 270, title: 'auto-view', sub: 'generated files are marked viewed automatically' },
+      { target: signs, shape: 'rect', at: [Math.round(center - 125), Math.round(signs.y - 132)], width: 250, title: 'Hidden by default', sub: 'Viewed and generated files are hidden. Click to show them.' },
+      { target: pillBox, shape: 'rect', at: [Math.round(menuBox.x + menuBox.w + 36), Math.round(pillBox.y + 56)], width: 270, title: 'auto-view by default', sub: 'By default, generated files are also marked as viewed automatically.' },
     ],
   });
 }
@@ -247,8 +243,8 @@ async function onlySplit(page) {
       { x: 960, y: 10, text: 'After “only”', size: 25.5, center: true },
     ],
     notes: [
-      { target: onlyBox, shape: 'rect', at: [440, Math.round(onlyBox.y + 70)], width: 186, title: '“only” singles out', sub: 'this category' },
-      { target: allBox, shape: 'rect', at: [1080, Math.round(allBox.y + 70)], width: 186, title: '“all” resets', sub: 'back to all the categories' },
+      { target: onlyBox, shape: 'rect', at: [410, Math.round(onlyBox.y + 70)], width: 220, title: '“only” singles out category within section' },
+      { target: allBox, shape: 'rect', at: [1060, Math.round(allBox.y + 70)], width: 210, title: '“all” resets the section', sub: 'Back to all the categories' },
     ],
   });
 }
@@ -269,7 +265,10 @@ async function sourcesSplit(page) {
     tests: rowOf('groups', 'Tests'),
     typescript: rowOf('languages', 'TypeScript'),
   };
-  const menuClip = await frame(page, [menu.locator('[data-filter-kind="viewed"]'), rows.typescript], clipWidth, clipHeight);
+  // Formats with no linguist-language line fall back to the file extension.
+  const otherFormats = ['proto', 'snap', 'sql', 'yaml'];
+  const formatRow = (name) => menu.locator('.diffseek-menu-row').filter({ has: page.locator('[data-filter-kind="languages"]').getByText(name, { exact: true }) }).first();
+  const menuClip = await frame(page, [menu.locator('[data-filter-kind="viewed"]'), formatRow(otherFormats.at(-1))], clipWidth, clipHeight);
   await page.mouse.move(2, 2);
   // The menu keeps a 430px strip on the right; the labels sit between it
   // and the source lines.
@@ -278,6 +277,18 @@ async function sourcesSplit(page) {
   const menuCrop = Math.round((menuBox.x - menuClip.x) * scale - 16);
   const menuRows = {};
   for (const [key, row] of Object.entries(rows)) menuRows[key] = await outBox(row, menuClip, menuCrop, menuLeft);
+  const formatBoxes = [];
+  for (const name of otherFormats) formatBoxes.push(await outBox(formatRow(name), menuClip, menuCrop, menuLeft));
+  // Trim where the TypeScript row meets proto, so the two outlines keep a gap.
+  menuRows.typescript = { ...menuRows.typescript, h: menuRows.typescript.h - 6 };
+  const otherTop = Math.min(...formatBoxes.map((box) => box.y)) + 8;
+  menuRows.other = {
+    x: formatBoxes[0].x,
+    y: otherTop,
+    w: formatBoxes[0].w,
+    h: Math.max(...formatBoxes.map((box) => box.y + box.h)) - otherTop,
+  };
+  console.log('other formats:', JSON.stringify(menuRows.other));
   const menuShot = await shoot(page, menuClip);
 
   await page.goto(compareUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -365,7 +376,8 @@ async function sourcesSplit(page) {
   }
   const sourceShot = await shoot(page, sourceClip);
   const labelLeft = menuLeft - 198;
-  const note = (key, title, sub) => ({
+  const note = (key, title, sub, extra = {}) => ({
+    ...extra,
     target: menuRows[key],
     arrow: true,
     target2: source[key],
@@ -385,10 +397,22 @@ async function sourcesSplit(page) {
       { x: Math.round(menuLeft + 215), y: 742, text: 'DiffSeek menu', center: true },
     ],
     notes: [
-      note('payments', 'Owner: payments', '@acme/payments in CODEOWNERS'),
-      note('generated', 'Generated', 'linguist-generated in .gitattributes'),
-      note('tests', 'Group: Tests', 'group=Tests in .gitattributes'),
-      note('typescript', 'Format: TypeScript', 'linguist-language in .gitattributes'),
+      note('payments', 'Owners', 'taken from CODEOWNERS'),
+      note('generated', 'Generated', 'file masks marked linguist-generated'),
+      note('tests', 'Groups', 'defined by group= in .gitattributes'),
+      note('typescript', 'Formats', 'languages set by linguist-language', { enter: 'left' }),
+      // No config line feeds these rows, so this label has no source box. It
+      // sits under the Formats label, so the two arrows run side by side.
+      {
+        target: menuRows.other,
+        arrow: true,
+        enter: 'left',
+        shape: 'rect',
+        at: [labelLeft, Math.round(source.typescript.y + source.typescript.h / 2 - 30) + 92],
+        width: 186,
+        title: 'Other formats',
+        sub: 'file extensions without a linguist-language',
+      },
     ],
   });
 }
@@ -398,12 +422,9 @@ function webRow(page) {
 }
 
 /**
- * Tree and menu badges at the 12/82 baseline, with a real menu toast in its
- * own top-right spot. The payments row is marked and then unmarked from the
- * menu, which leaves the baseline as it was; the second toast is the one in
- * the shot. That toast node is copied in place so it outlives its 7s timer
- * while GitHub settles. The shot shows the full viewport width, so it runs
- * at a lower zoom than the others.
+ * Tree and menu badges at the 12/82 baseline, with no toast on screen. The
+ * shot shows the full viewport width, so it runs at a lower zoom than the
+ * others.
  */
 async function viewedBadges(page) {
   await settleCounts(page);
@@ -427,23 +448,7 @@ async function viewedBadges(page) {
     throw new Error(`web folder circle is ${await action.getAttribute('aria-pressed')}, expected mixed at the 12/82 baseline`);
   }
   await openMenu(page);
-  const paymentsMark = () => paymentsRow(page).then((row) => row.locator('[data-diffseek-menu-viewed-action]'));
-  await (await paymentsMark()).click();
-  console.log('menu toast:', await waitForToast(page, /^Marked all \d+ payments files viewed/, 60_000));
-  await expectCounter(page, 50);
-  await waitForToasts(page);
-  await openMenu(page);
-  await (await paymentsMark()).click();
-  const unmarked = /^Unmarked all \d+ payments files/;
-  const toast = await waitForToast(page, unmarked, 60_000);
-  await holdToast(page, unmarked);
-  console.log('menu toast:', toast);
-  await expectCounter(page, 12);
-  await openMenu(page);
-  await page.waitForFunction(() => {
-    const row = document.querySelector('.diffseek-menu-row:has([data-filter-kind="owners"][data-filter-value="@acme/payments"])');
-    return row?.querySelector('[data-diffseek-menu-viewed-action]')?.getAttribute('aria-pressed') === 'false';
-  }, undefined, { timeout: 30_000 });
+  await waitForQuiet(page);
   if ((await (await ownAction(folder)).getAttribute('aria-pressed')) !== 'mixed') throw new Error('web folder left the baseline');
   const zoom = 1.2;
   const width = outWidth / zoom;
@@ -461,35 +466,19 @@ async function viewedBadges(page) {
     menu: await outBox(page.locator('[data-diffseek="filters"]'), clip, 0, 0),
   };
   console.log('badges:', await (await ownAction(folder)).getAttribute('title'), '|', await web.getAttribute('title'));
+  if ((await page.locator('[data-diffseek="snackbar"]').count()) > 0) throw new Error('A toast is on screen');
   const shot = await shoot(page, clip);
-  await page.evaluate(() => {
-    document.querySelector('[data-shot-hold]')?.remove();
-    document.querySelector('[data-diffseek="snackbars"]')?.style.removeProperty('visibility');
-  });
+  const treeAt = [Math.round(boxes.folder.x + 90), Math.round(boxes.folder.y - 34)];
   await compose('03-viewed-badges.png', {
     layers: [{ shot, left: 0, width: outWidth, crop: 0 }],
     tags: [],
     notes: [
-      { target: boxes.folder, shape: 'ring', at: [Math.round(boxes.folder.x + 90), Math.round(boxes.folder.y - 34)], width: 290, title: 'File tree badge', lines: ['viewed status of <strong>shown</strong> files', '○ none  ◐ some  ● all'] },
-      { target: boxes.circle, shape: 'ring', at: [Math.round(boxes.menu.x + boxes.menu.w + 34), Math.round(boxes.circle.y + 20)], width: 270, title: 'Menu category badge', lines: ['viewed status of <strong>all</strong> category files'] },
+      { id: 'tree', target: boxes.folder, shape: 'ring', at: treeAt, width: 290, title: 'File tree badge', lines: ['viewed status of <strong>shown</strong> files', '○ none  ◐ some  ● all'] },
+      { id: 'menu', target: boxes.circle, shape: 'ring', at: [Math.round(boxes.menu.x + boxes.menu.w + 34), Math.round(boxes.circle.y + 20)], width: 270, title: 'Menu category badge', lines: ['viewed status of <strong>all</strong> category files'] },
+      // Lower than both, with arrows up to each of them.
+      { points: ['tree', 'menu'], at: [treeAt[0], 640], width: 300, title: 'Click the badge to toggle viewed' },
     ],
   });
-}
-
-/** Copy the snackbar stack holding the matching toast so it stays put after its timer. */
-async function holdToast(page, pattern) {
-  await page.evaluate((source) => {
-    const stack = document.querySelector('[data-diffseek="snackbars"]');
-    if (!stack) throw new Error('No snackbar on screen');
-    const copy = stack.cloneNode(true);
-    copy.setAttribute('data-shot-hold', '');
-    const keep = new RegExp(source);
-    for (const toast of copy.querySelectorAll('[data-diffseek="snackbar"]')) {
-      if (!keep.test(toast.textContent ?? '')) toast.remove();
-    }
-    stack.after(copy);
-    stack.style.visibility = 'hidden';
-  }, pattern.source);
 }
 
 async function quietProfile(page) {
@@ -888,6 +877,30 @@ async function compose(name, { layers, tags, notes }) {
         for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
         svg.append(node);
       };
+      // A leader meets a label on a straight stretch of its edge, clear of
+      // the rounded corners, so the dot never sits on a curve.
+      const corner = 14;
+      const anchor = (rect, x, y) => {
+        const clampX = (value) => Math.max(rect.left + corner, Math.min(value, rect.right - corner));
+        const clampY = (value) => Math.max(rect.top + corner, Math.min(value, rect.bottom - corner));
+        if (x < rect.left) return [rect.left, clampY(y)];
+        if (x > rect.right) return [rect.right, clampY(y)];
+        if (y < rect.top) return [clampX(x), rect.top];
+        return [clampX(x), rect.bottom];
+      };
+      const arrowhead = (fromX, fromY, toX, toY) => {
+        const length = Math.hypot(toX - fromX, toY - fromY) || 1;
+        const ux = (toX - fromX) / length;
+        const uy = (toY - fromY) / length;
+        const size = 11;
+        const points = [
+          [toX, toY],
+          [toX - ux * size - uy * size * 0.5, toY - uy * size + ux * size * 0.5],
+          [toX - ux * size + uy * size * 0.5, toY - uy * size - ux * size * 0.5],
+        ];
+        draw('polygon', { points: points.map((point) => point.join(',')).join(' '), fill: accent });
+      };
+      const labels = {};
       for (const note of notes) {
         const label = document.createElement('div');
         label.className = 'note';
@@ -909,6 +922,23 @@ async function compose(name, { layers, tags, notes }) {
           label.append(sub);
         }
         body.append(label);
+        if (note.id) labels[note.id] = label;
+        if (note.points) {
+          // Arrows from this label up to other labels.
+          const rect = label.getBoundingClientRect();
+          for (const id of note.points) {
+            const other = labels[id].getBoundingClientRect();
+            const [ex, ey] = anchor(other, (rect.left + rect.right) / 2, rect.top);
+            const [bx, by] = anchor(rect, ex, ey);
+            const tip = 3;
+            const length = Math.hypot(ex - bx, ey - by) || 1;
+            const tx = ex - ((ex - bx) / length) * tip;
+            const ty = ey - ((ey - by) / length) * tip;
+            draw('line', { x1: bx, y1: by, x2: tx, y2: ty, stroke: accent, 'stroke-width': 2, 'stroke-linecap': 'round' });
+            draw('circle', { cx: bx, cy: by, r: 3.5, fill: accent });
+            arrowhead(bx, by, tx, ty);
+          }
+        }
         if (!note.target) continue;
         if (note.inside) {
           const t = note.target;
@@ -919,8 +949,7 @@ async function compose(name, { layers, tags, notes }) {
         const t = note.target;
         const cx = t.x + t.w / 2;
         const cy = t.y + t.h / 2;
-        const ax = Math.max(rect.left, Math.min(cx, rect.right));
-        const ay = Math.max(rect.top, Math.min(cy, rect.bottom));
+        const [ax, ay] = anchor(rect, cx, cy);
         const dx = ax - cx;
         const dy = ay - cy;
         const length = Math.hypot(dx, dy) || 1;
@@ -936,24 +965,20 @@ async function compose(name, { layers, tags, notes }) {
           const hw = t.w / 2 + pad;
           const hh = t.h / 2 + pad;
           draw('rect', { x: cx - hw, y: cy - hh, width: hw * 2, height: hh * 2, rx: 8, fill: 'none', stroke: accent, 'stroke-width': 2.5 });
-          const k = Math.min(hw / Math.abs(dx || 1e-6), hh / Math.abs(dy || 1e-6));
-          sx = cx + dx * k;
-          sy = cy + dy * k;
+          if (note.enter === 'left') {
+            // Enter through the left edge, level with the label where possible.
+            sx = cx - hw;
+            sy = Math.max(cy - hh + 10, Math.min(ay, cy + hh - 10));
+          } else {
+            const k = Math.min(hw / Math.abs(dx || 1e-6), hh / Math.abs(dy || 1e-6));
+            sx = cx + dx * k;
+            sy = cy + dy * k;
+          }
         }
         draw('line', { x1: sx, y1: sy, x2: ax, y2: ay, stroke: accent, 'stroke-width': 2, 'stroke-linecap': 'round' });
         draw('circle', { cx: ax, cy: ay, r: 3.5, fill: accent });
-        if (note.arrow) {
-          // Arrowhead on the target end, pointing at the target.
-          const ux = (sx - ax) / (Math.hypot(sx - ax, sy - ay) || 1);
-          const uy = (sy - ay) / (Math.hypot(sx - ax, sy - ay) || 1);
-          const size = 11;
-          const points = [
-            [sx, sy],
-            [sx - ux * size - uy * size * 0.5, sy - uy * size + ux * size * 0.5],
-            [sx - ux * size + uy * size * 0.5, sy - uy * size - ux * size * 0.5],
-          ];
-          draw('polygon', { points: points.map((point) => point.join(',')).join(' '), fill: accent });
-        }
+        // Arrowhead on the target end, pointing at the target.
+        if (note.arrow) arrowhead(ax, ay, sx, sy);
         if (note.target2) {
           // A second leader from the label to the matching source lines.
           const u = note.target2;
@@ -964,7 +989,7 @@ async function compose(name, { layers, tags, notes }) {
           const ex = onLeft ? u.x + u.w + pad : u.x - pad;
           const ey = Math.max(u.y, Math.min(rect.top + rect.height / 2, u.y + u.h));
           const bx = onLeft ? rect.left : rect.right;
-          const by = Math.max(rect.top + 8, Math.min(ey, rect.bottom - 8));
+          const by = Math.max(rect.top + corner, Math.min(ey, rect.bottom - corner));
           draw('line', { x1: bx, y1: by, x2: ex, y2: ey, stroke: accent, 'stroke-width': 2, 'stroke-linecap': 'round' });
           draw('circle', { cx: bx, cy: by, r: 3.5, fill: accent });
         }
@@ -1049,18 +1074,6 @@ async function closeMenu(page) {
   if ((await page.locator('[data-diffseek="filters"]').count()) === 0) return;
   await page.keyboard.press('Escape');
   await page.locator('[data-diffseek="filters"]').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined);
-}
-
-/** Wait for a live DiffSeek snackbar whose text matches, and return that text. */
-async function waitForToast(page, pattern, timeout) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const texts = await page.locator('[data-diffseek="snackbar"]').allTextContents();
-    const hit = texts.find((text) => pattern.test(text));
-    if (hit) return hit;
-    await page.waitForTimeout(150);
-  }
-  throw new Error(`No snackbar matched ${pattern}`);
 }
 
 async function waitForToasts(page) {
