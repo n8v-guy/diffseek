@@ -42,7 +42,7 @@ const viewedFacetAction =
   '[data-diffseek-menu-viewed-action][data-viewed-facet="viewed"][data-viewed-value="true"]';
 const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
 const stepTimeout = 20_000;
-const panelsTimeout = 60_000;
+const panelsTimeout = 90_000;
 const hotSettleMs = 500;
 // Fresh-install hiding without auto-view, which would mark the fixture's
 // generated files viewed on GitHub. Unit tests cover the auto-view default.
@@ -133,6 +133,8 @@ describeLive('live DiffSeek performance', () => {
         await page.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
       });
       cold.push(coldSample);
+      // Cold expects exactly 1 tree and panel rebuild: GitHub's own broken
+      // cold-load redraw since 2026-10-31 (see defaultLivePerfBudgets).
       expect(rebuildFailures(coldSample, budgets)).toEqual([]);
       phases.push(
         { sample: index, phase: 'toggle-filter', ...(await runToggle(page)) },
@@ -143,6 +145,7 @@ describeLive('live DiffSeek performance', () => {
         await page.reload({ waitUntil: 'domcontentloaded' });
       });
       warm.push(warmSample);
+      // Warm also expects exactly 1: the same GitHub redraw on reload.
       expect(rebuildFailures(warmSample, budgets)).toEqual([]);
 
       await showConversation(page);

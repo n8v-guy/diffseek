@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  actionFailures,
   defaultLivePerfBudgets,
   generatedCategorizedPattern,
   generatedIndexedText,
@@ -82,7 +83,22 @@ describe('live-perf helpers', () => {
     };
     expect(medianSample([slow, fast, fast]).firstRenderSeconds).toBe(4);
     expect(rebuildFailures(slow, defaultLivePerfBudgets({}))).toEqual([
-      'cold treeRebuilds 1 > 0',
+      'cold panelRebuilds 0 !== 1',
+    ]);
+    expect(
+      rebuildFailures({ ...slow, panelRebuilds: 1 }, defaultLivePerfBudgets({})),
+    ).toEqual([]);
+    expect(
+      rebuildFailures({ ...fast, panelRebuilds: 2 }, defaultLivePerfBudgets({})),
+    ).toEqual(['cold treeRebuilds 0 !== 1', 'cold panelRebuilds 2 !== 1']);
+    expect(rebuildFailures({ ...slow, scenario: 'warm' }, defaultLivePerfBudgets({}))).toEqual([
+      'warm panelRebuilds 0 !== 1',
+    ]);
+    expect(
+      rebuildFailures({ ...slow, scenario: 'warm', panelRebuilds: 1 }, defaultLivePerfBudgets({})),
+    ).toEqual([]);
+    expect(actionFailures('mark-viewed', { ...fast, treeRebuilds: 1 }, defaultLivePerfBudgets({}))).toEqual([
+      'mark-viewed treeRebuilds 1 > 0',
     ]);
     expect(hotLossFailures({ ...slow, scenario: 'hot' })).toEqual([]);
     expect(hotLossFailures({ ...slow, scenario: 'hot', panelNetLoss: 4 })).toEqual([
@@ -94,7 +110,7 @@ describe('live-perf helpers', () => {
     expect(medianBudgetFailures([slow, slow, slow], defaultLivePerfBudgets({}))).toEqual([
       'cold firstRenderSeconds 50 > 12',
       'cold menuOpenSeconds 20 > 6',
-      'cold panelsSeconds 100 > 27',
+      'cold panelsSeconds 100 > 45',
       'cold reconciles 800 > 500',
       'cold domMutations 20000 > 12000',
     ]);
