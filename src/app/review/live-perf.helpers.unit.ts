@@ -92,8 +92,11 @@ describe('live-perf helpers', () => {
       rebuildFailures({ ...fast, panelRebuilds: 2 }, defaultLivePerfBudgets({})),
     ).toEqual(['cold treeRebuilds 0 !== 1', 'cold panelRebuilds 2 !== 1']);
     expect(rebuildFailures({ ...slow, scenario: 'warm' }, defaultLivePerfBudgets({}))).toEqual([
-      'warm treeRebuilds 1 > 0',
+      'warm panelRebuilds 0 !== 1',
     ]);
+    expect(
+      rebuildFailures({ ...slow, scenario: 'warm', panelRebuilds: 1 }, defaultLivePerfBudgets({})),
+    ).toEqual([]);
     expect(actionFailures('mark-viewed', { ...fast, treeRebuilds: 1 }, defaultLivePerfBudgets({}))).toEqual([
       'mark-viewed treeRebuilds 1 > 0',
     ]);

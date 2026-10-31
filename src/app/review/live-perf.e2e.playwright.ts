@@ -140,6 +140,7 @@ describeLive('live DiffSeek performance', () => {
         await page.reload({ waitUntil: 'domcontentloaded' });
       });
       warm.push(warmSample);
+      // Warm also expects exactly 1: the same GitHub redraw on reload.
       expect(rebuildFailures(warmSample, budgets)).toEqual([]);
 
       await showConversation(page);
