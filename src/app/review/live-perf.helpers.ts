@@ -46,6 +46,8 @@ export type LivePerfBudgets = {
   actionReconciles: number;
   treeRebuilds: number;
   panelRebuilds: number;
+  coldTreeRebuilds: number;
+  coldPanelRebuilds: number;
 };
 
 export type CookieLike = {
@@ -75,6 +77,11 @@ export function defaultLivePerfBudgets(
     actionReconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_ACTION_RECONCILES, 40),
     treeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_TREE_REBUILDS, 0),
     panelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_PANEL_REBUILDS, 0),
+    // Broken GitHub behavior (observed 2026-10-31): GitHub itself now redraws
+    // the file tree and diff panels exactly once on a cold load, with nothing
+    // lost. Cold expects exactly this many; revisit when GitHub stops it.
+    coldTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_TREE_REBUILDS, 1),
+    coldPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANEL_REBUILDS, 1),
   };
 }
 
@@ -159,9 +166,9 @@ export function actionFailures(
   budgets: LivePerfBudgets,
 ): string[] {
   const failures = rebuildFailures(
-    { ...counts, scenario: 'cold', firstRenderSeconds: 0, menuOpenSeconds: 0, panelsSeconds: 0 },
+    { ...counts, scenario: 'warm', firstRenderSeconds: 0, menuOpenSeconds: 0, panelsSeconds: 0 },
     budgets,
-  ).map((failure) => failure.replace('cold ', `${action} `));
+  ).map((failure) => failure.replace('warm ', `${action} `));
   if (counts.reconciles > budgets.actionReconciles) {
     failures.push(
       `${action} reconciles ${counts.reconciles} > ${budgets.actionReconciles}`,
@@ -170,12 +177,29 @@ export function actionFailures(
   return failures;
 }
 
-/** Every run must stay at or under the rebuild caps. One rebuild fails the job. */
+/**
+ * Warm runs and actions must stay at or under the rebuild caps. Cold must hit
+ * the cold counts exactly (GitHub's own one-time redraw), so a DiffSeek
+ * rebuild on top of it, or GitHub fixing it, both fail the job.
+ */
 export function rebuildFailures(
   sample: LivePerfSample,
   budgets: LivePerfBudgets,
 ): string[] {
   const failures: string[] = [];
+  if (sample.scenario === 'cold') {
+    if (sample.treeRebuilds !== budgets.coldTreeRebuilds) {
+      failures.push(
+        `cold treeRebuilds ${sample.treeRebuilds} !== ${budgets.coldTreeRebuilds}`,
+      );
+    }
+    if (sample.panelRebuilds !== budgets.coldPanelRebuilds) {
+      failures.push(
+        `cold panelRebuilds ${sample.panelRebuilds} !== ${budgets.coldPanelRebuilds}`,
+      );
+    }
+    return failures;
+  }
   if (sample.treeRebuilds > budgets.treeRebuilds) {
     failures.push(
       `${sample.scenario} treeRebuilds ${sample.treeRebuilds} > ${budgets.treeRebuilds}`,
@@ -268,7 +292,7 @@ export function livePerfSummary(report: {
     '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     ...rows,
     '',
-    'Durations are medians. Cold and warm tree rebuilds and diff-panel rebuilds must stay at 0. Hot ignores mass removal and fails only when a row removed after the first DiffSeek control is still gone 500 ms later.',
+    'Durations are medians. Cold tree rebuilds and diff-panel rebuilds must be exactly 1 (GitHub redraws once on cold load since 2026-10-31, temporary); warm must stay at 0. Hot ignores mass removal and fails only when a row removed after the first DiffSeek control is still gone 500 ms later.',
     '',
   ].join('\n');
 }
