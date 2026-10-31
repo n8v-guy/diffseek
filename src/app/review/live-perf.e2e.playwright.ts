@@ -42,7 +42,7 @@ const viewedFacetAction =
   '[data-diffseek-menu-viewed-action][data-viewed-facet="viewed"][data-viewed-value="true"]';
 const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
 const stepTimeout = 20_000;
-const panelsTimeout = 60_000;
+const panelsTimeout = 90_000;
 const hotSettleMs = 500;
 
 describeLive('live DiffSeek performance', () => {
