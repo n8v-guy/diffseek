@@ -7,6 +7,10 @@ let context: BrowserContext;
 const fixturePath = resolve(
   'src/adapters/github/review-page/fixtures/github-pr.html',
 );
+const srcUnread = 'Mark 3 remaining as viewed (0 of 3 viewed)';
+const srcPartial = 'Mark 1 remaining as viewed (2 of 3 viewed)';
+const codeUnread = 'Mark 3 remaining in Code as viewed (0 of 3 viewed)';
+const codePartial = 'Mark 1 remaining in Code as viewed (2 of 3 viewed)';
 
 test.beforeAll(async () => {
   const extension = resolve('.output/chrome-mv3');
@@ -261,7 +265,16 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
     page.locator('[role="treeitem"][id="docs/readme.md"]'),
   ).toBeVisible();
 
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
+  await expect(page.locator('[data-diffseek="snackbars"]')).toHaveAttribute(
+    'aria-live',
+    'polite',
+  );
+  await expect(
+    page.locator('[data-diffseek="snackbar"]', {
+      hasText: 'Marked 3 visible files in src viewed',
+    }),
+  ).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute(
     'data-native-click-after-snackbar-paint',
     'true',
@@ -309,21 +322,21 @@ test('interleaves native and DiffSeek viewed actions in action order', async () 
   });
 
   await page.locator('#diff-app button[aria-label="Not Viewed"]').click();
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
   await expect(
-    page.locator('#src [aria-label="Mark as viewed"]'),
+    page.locator(`#src [aria-label="${srcPartial}"]`),
   ).toBeVisible();
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcPartial}"]`).click();
   await expect(
     page.locator('#diff-app button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toContainText('Marked 3 files as viewed');
+  ).toContainText('Marked 1 file as viewed');
 });
 
 test('does not overwrite a later native action with a pending batch path', async () => {
@@ -346,7 +359,7 @@ test('does not overwrite a later native action with a pending batch path', async
     document.documentElement.dataset.nativeDelay = '75';
   });
 
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
   const generated = page.locator(
     '#diff-generated button[aria-label="Not Viewed"]',
   );
@@ -383,7 +396,7 @@ test('drops a pending viewed result after route navigation', async () => {
   );
   await page.goto('https://github.com/octo/repo/pull/3/changes');
 
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
   await page.evaluate(() => {
     history.pushState({}, '', '/octo/repo/issues/3');
     document.body.innerHTML = '<main>Issue route</main>';
@@ -545,11 +558,18 @@ test('clears native filters before taking over the menu', async () => {
   await generated.locator('xpath=..').hover();
   await alwaysRead.click();
   await expect(alwaysRead).toHaveAttribute('aria-pressed', 'true');
+  const pressedBackground = await alwaysRead.evaluate(
+    (pill) => getComputedStyle(pill).backgroundColor,
+  );
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await alwaysRead.click();
   await expect(alwaysRead).toHaveAttribute('aria-pressed', 'false');
+  const hoveredBackground = await alwaysRead.evaluate(
+    (pill) => getComputedStyle(pill).backgroundColor,
+  );
+  expect(hoveredBackground).not.toBe(pressedBackground);
   await page.locator('#diff-generated button[aria-label="Viewed"]').click();
   await expect(
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
@@ -656,15 +676,15 @@ test('stays idempotent through a deterministic native-extension action storm', a
     document.documentElement.dataset.nativeDelay = '75';
   });
   await page.locator('#diff-app button[aria-label="Not Viewed"]').click();
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcUnread}"]`).click();
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
   await expect(
-    page.locator('#src [aria-label="Mark as viewed"]'),
+    page.locator(`#src [aria-label="${srcPartial}"]`),
   ).toBeVisible();
-  await page.locator('#src [aria-label="Mark as viewed"]').click();
+  await page.locator(`#src [aria-label="${srcPartial}"]`).click();
   await expect(
     page.locator('#diff-app button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
@@ -721,8 +741,9 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   const codeViewed = page.locator(
     '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
   );
-  await expect(codeViewed).toHaveAttribute('aria-label', 'Mark as viewed');
-  await expect(codeCounter).toHaveAttribute('aria-label', 'Mark as viewed');
+  await expect(codeViewed).toHaveAttribute('aria-label', codeUnread);
+  await expect(codeCounter).toHaveAttribute('aria-label', codeUnread);
+  await expect(codeViewed).toHaveAttribute('aria-pressed', 'false');
   const badgeStyle = await codeViewed.evaluate((action) => ({
     height: getComputedStyle(action, '::before').height,
     right: getComputedStyle(action, '::before').right,
@@ -741,15 +762,34 @@ test('retains collapsed folders and marks only visible facet files', async () =>
     page.locator('#diff-new button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(
-    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
-  ).toHaveAttribute('aria-pressed', 'false');
+    page.locator('#diff-generated button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.locator('[data-diffseek="snackbar"]', {
+      hasText: 'Marked all 3 Code files viewed (1 hidden)',
+    }),
+  ).toBeVisible();
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toContainText('Marked 2 files as viewed');
+  ).toContainText('Marked 3 files as viewed');
 
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
-  await expect(codeViewed).toHaveAttribute('aria-label', 'Mark as viewed');
-  await expect(codeCounter).toHaveAttribute('aria-label', 'Mark as viewed');
+  await expect(codeViewed).toHaveAttribute('aria-label', codePartial);
+  await expect(codeCounter).toHaveAttribute('aria-label', codePartial);
+  await expect(codeViewed).toHaveAttribute('aria-pressed', 'mixed');
+  await expect(codeViewed).toHaveClass(/diffseek-viewed-partial/);
+  const eclipse = await codeViewed.evaluate((action) => {
+    const before = getComputedStyle(action, '::before');
+    const after = getComputedStyle(action, '::after');
+    return {
+      backgroundImage: before.backgroundImage,
+      afterContent: after.content,
+    };
+  });
+  expect(eclipse.backgroundImage).toContain('radial-gradient');
+  expect(eclipse.backgroundImage).toContain('36%');
+  expect(eclipse.backgroundImage).toContain('2.3px');
+  expect(eclipse.afterContent).toBe('none');
   await codeViewed.click();
   await expect(
     page.locator('#diff-app button[aria-label="Viewed"]'),
@@ -778,10 +818,49 @@ test('retains collapsed folders and marks only visible facet files', async () =>
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'false');
   await expect(codeCounter).toHaveText('2/3');
-  await expect(codeViewed).toHaveAttribute('aria-label', 'Mark as viewed');
+  await expect(codeViewed).toHaveAttribute('aria-label', codeUnread);
+  await expect(codeViewed).toHaveAttribute('aria-pressed', 'false');
+
+  const generatedCircle = page.locator(
+    '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"]',
+  );
+  await expect(generatedCircle).toHaveAttribute(
+    'aria-label',
+    'Mark 1 remaining in Generated files as viewed (0 of 1 viewed)',
+  );
+  const separated = await generatedCircle.evaluate((circle) => {
+    const pill = document.querySelector('[data-diffseek-always-read]');
+    const box = circle.getBoundingClientRect();
+    const pillBox = pill?.getBoundingClientRect();
+    const overlaps = Boolean(
+      pillBox &&
+        box.left < pillBox.right &&
+        box.right > pillBox.left &&
+        box.top < pillBox.bottom &&
+        box.bottom > pillBox.top,
+    );
+    return {
+      overlapsPill: overlaps,
+      snackInsideRow: document.querySelector('[data-diffseek="snackbar"]')
+        ?.closest('.diffseek-menu-row') != null,
+    };
+  });
+  expect(separated).toEqual({ overlapsPill: false, snackInsideRow: false });
+  await generatedCircle.click();
+  await expect(
+    page.locator('#diff-generated button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.locator('[role="treeitem"][id="src/generated.ts"]'),
+  ).toBeHidden();
+  await expect(generatedCircle).toHaveAttribute('aria-pressed', 'true');
+  await generatedCircle.click();
+  await expect(
+    page.locator('#diff-generated button[aria-label="Not Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('hides generated and viewed files for a fresh install and honors saved preferences', async () => {
+test('hides generated and viewed files and auto-views generated for a fresh install, and honors saved preferences', async () => {
   await writeFilterDefaults(null);
   const page = await context.newPage();
   const fixture = await readFile(fixturePath, 'utf8');
@@ -812,7 +891,14 @@ test('hides generated and viewed files for a fresh install and honors saved pref
     page.locator('[role="treeitem"][id="src/generated.ts"]'),
   ).toBeHidden();
   await expect(page.locator('[role="treeitem"][id="src/app.ts"]')).toBeVisible();
-  await expect(count('viewed')).toHaveText('0/1');
+  await expect(page.locator('[data-diffseek-always-read]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(
+    page.locator('#diff-generated button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(count('viewed')).toHaveText('0/2');
   await expect(count('generated')).toHaveText('0/1');
   expect(await readStoredFilterDefaults()).toEqual({});
 
@@ -827,7 +913,8 @@ test('hides generated and viewed files for a fresh install and honors saved pref
   ).toBeVisible();
   await expect(count('generated')).toHaveText('1/1');
 
-  await writeFilterDefaults(null);
+  // The fresh hiding defaults with auto-view switched off.
+  await writeFilterDefaults({ hidden: ['viewed', 'generated'], viewed: [] });
   await page.reload();
   await page.getByLabel('Filter options').click();
   await expect(viewed).toHaveAttribute('aria-checked', 'mixed');

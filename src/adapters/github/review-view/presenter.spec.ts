@@ -38,6 +38,22 @@ describe('ReviewPresenter', () => {
     }
   });
 
+  it('hides a folder once every file under it is viewed and hidden', () => {
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+    snapshot.files
+      .find((file) => file.path === 'docs/readme.md')
+      ?.labels.push({ facet: 'viewed', value: 'true' });
+    const state = filters();
+    state.get('viewed')?.add('true');
+
+    new ReviewPresenter().apply(snapshot, state);
+
+    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
+    expect(document.getElementById('docs')?.hidden).toBe(true);
+    expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
+  });
+
   it('hides non-matching tree rows and empty folders', () => {
     const snapshot = scanPage(document);
     if (!snapshot.supported) throw new Error(snapshot.reason);

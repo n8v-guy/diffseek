@@ -111,15 +111,23 @@ with exclusions. Each shortcut modifies only its own facet.
 existing OR-within, AND-across filter model. **Cost:** Hover-only presentation
 needs explicit keyboard focus behavior and permanent accessible names.
 
-## D009 — Hidden viewed files have a contextual category escape
+## D009 — Viewed circles follow counted files
 
-**Decision:** Category viewed actions normally target visible files. If the
-Viewed files filter hides matching viewed files that pass every other active
-facet, both row actions instead mark only those hidden files not viewed.
+**Decision:** Menu rows for owners, groups, formats, change status, and
+generated files count and mark every markable file in that category, ignoring
+every filter. The badge stays visible/total. The circle is empty, an eclipse
+(a fixed off-center disc inside a thin ring), or filled for that same set.
+Clicking empty or partial marks the category's remaining files viewed,
+including hidden ones. Clicking filled unmarks the whole category. A snackbar
+names the scope: "Marked all 26 payments files viewed" or "Unmarked all 38
+payments files", plus "(4 hidden)" when hidden files were included. Folders
+still count and mark only files that pass the active filters except the
+Viewed filter's hiding, and say "Marked 8 visible files in checkout viewed".
+Individual files stay empty or filled. Files GitHub cannot mark are excluded.
 
-**Why:** Reviewers can restore a category without revealing or mutating
-unrelated files. **Cost:** Action scope exceptionally extends beyond visible
-`X`, but only for the reversible state that would otherwise be unreachable.
+**Why:** The menu icon and the click agree, including files the current
+filters have hidden. The tree stays limited to what is on screen. **Cost:** A
+menu click can change files the reviewer is not currently looking at.
 
 ## D010 — Fallback labels remain data but not menu noise
 

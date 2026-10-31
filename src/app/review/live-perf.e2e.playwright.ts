@@ -44,6 +44,9 @@ const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
 const stepTimeout = 20_000;
 const panelsTimeout = 60_000;
 const hotSettleMs = 500;
+// Fresh-install hiding without auto-view, which would mark the fixture's
+// generated files viewed on GitHub. Unit tests cover the auto-view default.
+const hideDefaults = { hidden: ['viewed', 'generated'], viewed: [] };
 
 describeLive('live DiffSeek performance', () => {
   test.describe.configure({ mode: 'serial' });
@@ -84,6 +87,8 @@ describeLive('live DiffSeek performance', () => {
       );
     }
     await context.addCookies(parseStorageCookies(raw));
+    // Auto-view would mark the fixture's generated files viewed on GitHub.
+    await writeShownDefaults(context);
     const setup = await context.newPage();
     await setup.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
     await assertAuthenticatedReview(setup);
@@ -155,8 +160,9 @@ describeLive('live DiffSeek performance', () => {
     expect(medianBudgetFailures(hot, budgets)).toEqual([]);
   });
 
-  test('fresh defaults hide generated and viewed files until shown', async () => {
+  test('hide defaults hide generated and viewed files until shown', async () => {
     await clearExtensionStore(context);
+    await writeDefaults(context, hideDefaults);
     const page = await context.newPage();
     await page.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
     await expect(page.getByLabel('Filter options')).toBeVisible({
@@ -434,10 +440,17 @@ async function clearExtensionStore(browserContext: BrowserContext): Promise<void
   });
 }
 
-/** Explicit shown preference. An absent key is the fresh-install hide default. */
+/** Explicit shown preference with auto-view off. An absent key is a fresh install. */
 async function writeShownDefaults(browserContext: BrowserContext): Promise<void> {
+  await writeDefaults(browserContext, { hidden: [], viewed: [] });
+}
+
+async function writeDefaults(
+  browserContext: BrowserContext,
+  defaults: { hidden: string[]; viewed: string[] },
+): Promise<void> {
   const worker = await extensionWorker(browserContext);
-  await worker.evaluate(() => {
+  await worker.evaluate((value) => {
     const extension = globalThis as unknown as {
       chrome: {
         storage: {
@@ -446,9 +459,9 @@ async function writeShownDefaults(browserContext: BrowserContext): Promise<void>
       };
     };
     return extension.chrome.storage.local.set({
-      'diffseek:filter-defaults': { hidden: [], viewed: [] },
+      'diffseek:filter-defaults': value,
     });
-  });
+  }, defaults);
 }
 
 async function extensionWorker(browserContext: BrowserContext) {

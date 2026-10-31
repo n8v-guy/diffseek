@@ -6,7 +6,7 @@ Open a PR and see only what's left to review. Generated files and files you've a
 
 ## Your progress, right in the tree
 
-Every file and folder in GitHub's file tree gets a viewed badge, so you see at a glance what's done and what isn't. Click a folder's badge to mark everything visible inside it as viewed.
+Every file and folder in GitHub's file tree gets a viewed badge. An empty circle is unread, an eclipse is partly reviewed, and a check is done. Click a folder's badge to mark the unread files still in view.
 
 ## More than GitHub's filter
 

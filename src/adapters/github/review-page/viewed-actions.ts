@@ -1,4 +1,16 @@
-import { ReviewIndex } from '@diffseek/review';
+import {
+  bucketActionPaths,
+  emptyFacetExclusions,
+  fileViewedLabel,
+  folderViewedNotice,
+  includeCountedFiles,
+  scopeAriaPressed,
+  scopeViewedLabel,
+  type CountBucket,
+  type FileRecord,
+  type FilterState,
+  ReviewIndex,
+} from '@diffseek/review';
 
 import {
   type PageSnapshot,
@@ -81,59 +93,106 @@ export async function markViewed(
  */
 const viewedActionSelector = '[data-diffseek-viewed-action]';
 const viewedActionClass = 'diffseek-viewed-icon-anchor';
+const viewedPartialClass = 'diffseek-viewed-partial';
 const actionHandlers = new WeakMap<Element, () => void>();
 const listeningDocuments = new WeakSet<Document>();
 const hitSlopPx = 4;
 
 export function mountViewedActions(
   snapshot: SupportedSnapshot,
-  onAction: (viewed: boolean, paths: string[]) => void,
+  onAction: (viewed: boolean, paths: string[], notice?: string) => void,
   index = new ReviewIndex(snapshot.files),
+  filters: FilterState = emptyFacetExclusions(),
 ): void {
   const tree = snapshot.tree();
   if (!tree) return;
   listenForViewedActions(tree.ownerDocument);
   const stale = new Set(tree.querySelectorAll<HTMLElement>(viewedActionSelector));
+  const counts = includeCountedFiles(filters);
+  const folders = index.folderViewed(counts);
   const filesByPath = new Map(
     snapshot.files.map((file) => [file.path, file]),
   );
 
   for (const item of tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')) {
-    const paths = index
-      .filesUnder(item.id)
-      .filter((file) => file.capabilities.viewed)
-      .map((file) => file.path);
-    if (paths.length === 0) continue;
-
-    const viewed = paths.every((path) => filesByPath.get(path)?.viewed);
-    const icon = [...item.querySelectorAll<SVGElement>('svg.octicon')].find(
-      (candidate) =>
-        candidate.closest('[role="treeitem"]') === item &&
-        [...candidate.classList].some((name) =>
-          name.startsWith('octicon-file'),
-        ),
-    );
-    // Draw on GitHub's icon wrapper; never on the treeitem itself.
-    const anchor = icon?.parentElement;
-    if (!anchor || anchor === item) continue;
+    const file = filesByPath.get(item.id);
+    const bucket = file ? fileBucket(file, counts) : folders.get(item.id);
+    if (!bucket || bucket.counted === 0) continue;
+    const anchor = iconAnchor(item);
+    if (!anchor) continue;
     stale.delete(anchor);
-    if (!anchor.classList.contains(viewedActionClass)) {
-      anchor.classList.add(viewedActionClass);
-    }
-    setAttribute(anchor, 'data-diffseek-viewed-action', 'true');
-    const label = viewed ? 'Mark as not viewed' : 'Mark as viewed';
-    setAttribute(anchor, 'aria-label', label);
-    setAttribute(anchor, 'aria-pressed', String(viewed));
-    setAttribute(anchor, 'title', label);
-    actionHandlers.set(anchor, () => onAction(!viewed, paths));
+    bindViewedAnchor(anchor, bucket, file != null, item.id, onAction);
   }
 
   for (const anchor of stale) clearViewedAction(anchor);
 }
 
+function fileBucket(
+  file: FileRecord,
+  counts: (file: FileRecord) => boolean,
+): CountBucket | null {
+  if (!counts(file)) return null;
+  const bucket = {
+    counted: 1,
+    viewed: file.viewed ? 1 : 0,
+    unreadPaths: file.viewed ? [] : [file.path],
+    countedPaths: [file.path],
+  };
+  return bucket;
+}
+
+function iconAnchor(item: HTMLElement): HTMLElement | null {
+  const icon = [...item.querySelectorAll<SVGElement>('svg.octicon')].find(
+    (candidate) =>
+      candidate.closest('[role="treeitem"]') === item &&
+      [...candidate.classList].some((name) => name.startsWith('octicon-file')),
+  );
+  // Draw on GitHub's icon wrapper; never on the treeitem itself.
+  const anchor = icon?.parentElement;
+  if (!anchor || anchor === item) return null;
+  return anchor;
+}
+
+function bindViewedAnchor(
+  anchor: HTMLElement,
+  bucket: CountBucket,
+  file: boolean,
+  itemId: string,
+  onAction: (viewed: boolean, paths: string[], notice?: string) => void,
+): void {
+  if (!anchor.classList.contains(viewedActionClass)) {
+    anchor.classList.add(viewedActionClass);
+  }
+  setAttribute(anchor, 'data-diffseek-viewed-action', 'true');
+  const label = file
+    ? fileViewedLabel(bucket.viewed === bucket.counted)
+    : scopeViewedLabel(bucket.viewed, bucket.counted);
+  const pressed = file
+    ? bucket.viewed === bucket.counted
+      ? 'true'
+      : 'false'
+    : scopeAriaPressed(bucket.viewed, bucket.counted);
+  setAttribute(anchor, 'aria-label', label);
+  setAttribute(anchor, 'aria-pressed', pressed);
+  setAttribute(anchor, 'title', label);
+  anchor.classList.toggle(viewedPartialClass, pressed === 'mixed');
+  const paths = bucketActionPaths(bucket);
+  const markViewed = pressed !== 'true';
+  const notice = file
+    ? undefined
+    : folderViewedNotice(
+        itemId.split('/').at(-1) ?? itemId,
+        markViewed,
+        paths.length,
+      );
+  actionHandlers.set(anchor, () =>
+    notice ? onAction(markViewed, paths, notice) : onAction(markViewed, paths),
+  );
+}
+
 export function clearViewedAction(anchor: Element): void {
   actionHandlers.delete(anchor);
-  anchor.classList.remove(viewedActionClass);
+  anchor.classList.remove(viewedActionClass, viewedPartialClass);
   if (anchor.getAttribute('class') === '') anchor.removeAttribute('class');
   for (const name of [
     'data-diffseek-viewed-action',

@@ -80,6 +80,10 @@ export function removeUnavailable(root: Document): void {
   root.querySelector('[data-diffseek="unavailable"]')?.remove();
 }
 
+export function showViewedScope(root: Document, message: string): void {
+  showSnackbar(root, message);
+}
+
 export function showBatchStarted(
   root: Document,
   viewed: boolean,

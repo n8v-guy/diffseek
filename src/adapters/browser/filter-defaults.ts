@@ -68,8 +68,12 @@ function isRememberedFilterFacet(
   return rememberedFilterFacets.some((facet) => facet === value);
 }
 
+/** A fresh install hides viewed and generated files and auto-views generated ones. */
 function unconfiguredDefaults(): FilterDefaults {
-  return { hidden: new Set(rememberedFilterFacets), viewed: new Set() };
+  return {
+    hidden: new Set(rememberedFilterFacets),
+    viewed: new Set(['generated']),
+  };
 }
 
 function emptyDefaults(): FilterDefaults {

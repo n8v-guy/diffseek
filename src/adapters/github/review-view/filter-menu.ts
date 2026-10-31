@@ -49,7 +49,7 @@ type FilterSectionOptions = {
   choices: Array<FacetProjection & { label: string; value: string }>;
   excluded: Set<string>;
   onChange: () => void;
-  onViewed?: (viewed: boolean, paths: string[]) => void;
+  onViewed?: (viewed: boolean, paths: string[], notice?: string) => void;
 };
 
 export function mountFilterMenu(
@@ -283,17 +283,19 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
     );
   }
   const onViewed = options.onViewed;
-  const escapeViewed = options.hiddenViewedPaths.length > 0;
-  const actionPaths = escapeViewed
-    ? options.hiddenViewedPaths
-    : options.paths;
-  if (actionPaths.length > 0 && onViewed) {
+  if (options.paths.length > 0 && onViewed) {
     const actionOptions = {
-      ...options,
-      onViewed,
-      paths: actionPaths,
-      viewed: escapeViewed || options.viewed,
+      counted: options.counted,
       disabled: options.disabled === true,
+      facet: options.facet,
+      hidden: options.hidden,
+      onViewed,
+      paths: options.paths,
+      scope: options.label,
+      total: options.total,
+      value: options.value,
+      viewedCount: options.viewedCount,
+      visible: options.visible,
     };
     row.append(menuViewedCounter(actionOptions));
     row.append(menuViewedOverlay(actionOptions));
