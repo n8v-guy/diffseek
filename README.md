@@ -4,9 +4,13 @@ Fast, lightweight GitHub PR filter by file groups, formats and CODEOWNERS. Focus
 
 Open a PR and see only what's left to review. Generated files and files you've already viewed are hidden from the start; one click in the filter menu brings them back.
 
+![Default view: generated and viewed files hidden, auto-view on](https://github.com/user-attachments/assets/1bf00ec7-a00a-4c65-ba2f-6cf5040a073a)
+
 ## Your progress, right in the tree
 
 Every file and folder in GitHub's file tree gets a viewed badge, so you see at a glance what's done and what isn't. Click a folder's badge to mark everything visible inside it as viewed.
+
+![Viewed badges in the file tree and filter menu; click one to mark files viewed](https://github.com/user-attachments/assets/b04d7a17-79dd-4bb7-9272-5c38085c74cd)
 
 ## More than GitHub's filter
 
@@ -16,6 +20,8 @@ Every file and folder in GitHub's file tree gets a viewed badge, so you see at a
 - Viewed, Generated and change status
 
 Every row shows a live count. Hover a row and click "only" to focus.
+
+![Filter menu: "only" singles out one category](https://github.com/user-attachments/assets/09d088e4-680b-43b7-9c87-32870afa5389)
 
 ## Setup (optional)
 
@@ -39,6 +45,8 @@ Your own groups and format aliases go in the same file:
 db/migrations/**  group=Migrations
 *.tsx             linguist-language=TypeScript
 ```
+
+![How CODEOWNERS and .gitattributes map to owners, generated files, groups and formats in the menu](https://github.com/user-attachments/assets/f1351f6d-5f70-48e7-bbc3-c716c5ceb5b0)
 
 ## Privacy
 
