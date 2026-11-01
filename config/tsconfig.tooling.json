@@ -12,11 +12,12 @@
   },
   "include": [
     "../config/**/*.ts",
+    "../config/**/*.d.ts",
     "../entrypoints/**/*.ts",
     "../scripts/**/*.ts",
     "../.wxt/wxt.d.ts"
   ],
-  "exclude": ["../config/tsconfig*.json", "../config/eslint.config.ts"],
+  "exclude": ["../config/tsconfig*.json"],
   "references": [
     { "path": "./tsconfig.modules.json" },
     { "path": "./tsconfig.adapters.json" },

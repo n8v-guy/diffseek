@@ -1,17 +1,48 @@
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-const gitBinary = '/usr/bin/git';
-const lintDisable = ['eslint', 'disable'].join('-');
+import { git } from './git-command.ts';
+
+const coverageIgnore = ['c8', 'ignore'].join(' ');
+const eslintDisable = ['eslint', 'disable'].join('-');
+const eslintEnable = ['eslint', 'enable'].join('-');
+const eslintEnv = ['eslint', 'env'].join('-');
+const eslintWord = 'eslint';
+const eslintBlockConfig = `/* ${eslintWord} `;
+const eslintLineConfig = `// ${eslintWord} `;
+const istanbulIgnore = ['istanbul', 'ignore'].join(' ');
+const jscpdIgnore = ['jscpd', 'ignore'].join(':');
+const stylelintDisable = ['stylelint', 'disable'].join('-');
 const tsExpectError = ['@ts', 'expect-error'].join('-');
 const tsIgnore = ['@ts', 'ignore'].join('-');
 const tsNocheck = ['@ts', 'nocheck'].join('-');
-const markers = [lintDisable, tsIgnore, tsExpectError, tsNocheck];
+const typeCoverageIgnore = ['type', 'coverage:ignore'].join('-');
+const v8Ignore = ['v8', 'ignore'].join(' ');
+const markers = [
+  coverageIgnore,
+  eslintBlockConfig,
+  eslintDisable,
+  eslintEnable,
+  eslintEnv,
+  eslintLineConfig,
+  istanbulIgnore,
+  jscpdIgnore,
+  stylelintDisable,
+  tsExpectError,
+  tsIgnore,
+  tsNocheck,
+  typeCoverageIgnore,
+  v8Ignore,
+];
+
+const patternChars = '.*+?^${}()|[]\\';
 
 export function findEscapeHatches(path: string, text: string): string[] {
-  const pattern = new RegExp(markers.join('|'));
+  const pattern = new RegExp(
+    markers.map((marker) => escapeMarker(marker)).join('|'),
+    'v',
+  );
   const violations: string[] = [];
   for (const [index, line] of text.split('\n').entries()) {
     if (!pattern.test(line)) continue;
@@ -20,11 +51,19 @@ export function findEscapeHatches(path: string, text: string): string[] {
   return violations;
 }
 
+function escapeMarker(value: string): string {
+  let escaped = '';
+  for (const char of value) {
+    escaped += patternChars.includes(char) ? `\\${char}` : char;
+  }
+  return escaped;
+}
+
 function main(): void {
   const violations: string[] = [];
   for (const path of trackedFiles()) {
     const text = textIfDecoded(path);
-    if (!text) continue;
+    if (text === undefined) continue;
     violations.push(...findEscapeHatches(path, text));
   }
   if (violations.length === 0) return;
@@ -34,18 +73,27 @@ function main(): void {
   process.exitCode = 1;
 }
 
+function missingFile(error: unknown): boolean {
+  return Error.isError(error) && 'code' in error && error.code === 'ENOENT';
+}
+
+function readBytes(path: string): Buffer | undefined {
+  try {
+    return readFileSync(path);
+  } catch (error) {
+    if (missingFile(error)) return undefined;
+    throw error;
+  }
+}
+
 function textIfDecoded(path: string): string | undefined {
-  const bytes = readFileSync(path);
-  return bytes.includes(0) ? undefined : bytes.toString('utf8');
+  const bytes = readBytes(path);
+  if (bytes === undefined || bytes.includes(0)) return undefined;
+  return bytes.toString('utf8');
 }
 
 function trackedFiles(): string[] {
-  return execFileSync(gitBinary, ['ls-files', '-z'], {
-    cwd: process.cwd(),
-    encoding: 'utf8',
-  })
-    .split('\0')
-    .filter(Boolean);
+  return git(['ls-files', '-z']).split('\0').filter(Boolean);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();

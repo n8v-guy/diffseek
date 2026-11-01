@@ -1,25 +1,20 @@
 import { fileURLToPath } from 'node:url';
 
 import js from '@eslint/js';
-import {
-  configs as commentConfigs,
-  rules as commentRules,
-} from '@eslint-community/eslint-plugin-eslint-comments';
 import vitest from '@vitest/eslint-plugin';
+import type { Linter } from 'eslint';
 import { defineConfig } from 'eslint/config';
 import { configs as deMorganConfigs } from 'eslint-plugin-de-morgan';
 import { flatConfigs as importConfigs } from 'eslint-plugin-import-x';
+import unsanitized from 'eslint-plugin-no-unsanitized';
 import { configs as perfectionistConfigs } from 'eslint-plugin-perfectionist';
+import playwright from 'eslint-plugin-playwright';
 import promisePlugin from 'eslint-plugin-promise';
 import { configs as regexpConfigs } from 'eslint-plugin-regexp';
 import { configs as sonarConfigs } from 'eslint-plugin-sonarjs';
 import unicornPlugin from 'eslint-plugin-unicorn';
 import { configs as tseslintConfigs } from 'typescript-eslint';
 
-const testFiles = [
-  '**/*.{test,spec,unit}.ts',
-  '**/*.e2e.playwright.ts',
-];
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 const typecheckProjects = [
   './config/tsconfig.modules.json',
@@ -27,17 +22,16 @@ const typecheckProjects = [
   './config/tsconfig.app.json',
   './config/tsconfig.tooling.json',
 ];
-const maxCognitiveComplexity = 15;
-const maxComplexity = 10;
-const maxDepth = 4;
-const maxFileLines = 512;
-const maxFunctionLines = 50;
-const maxNestedCallbacks = 3;
-const maxParameters = 4;
-const maxTestFunctionLines = 100;
-const duplicateStringThreshold = 2;
-const testDuplicateStringThreshold = 10;
-const commentPluginName = '@eslint-community/eslint-comments';
+const e2eFiles = ['**/*.e2e.playwright.ts'];
+const unitFiles = ['**/*.{test,spec,unit}.ts'];
+const testOverrides: Linter.RulesRecord = {
+  '@typescript-eslint/no-magic-numbers': 'off',
+  'max-lines-per-function': [
+    'error',
+    { max: 100, skipBlankLines: true, skipComments: true },
+  ],
+  'sonarjs/no-duplicate-string': ['error', { threshold: 10 }],
+};
 
 export default defineConfig(
   {
@@ -51,6 +45,12 @@ export default defineConfig(
       '**/test-results/**',
     ],
   },
+  {
+    linterOptions: {
+      noInlineConfig: true,
+      reportUnusedDisableDirectives: 'error',
+    },
+  },
   js.configs.recommended,
   sonarConfigs.recommended,
   unicornPlugin.configs.recommended,
@@ -58,18 +58,9 @@ export default defineConfig(
   promisePlugin.configs['flat/recommended'],
   importConfigs.recommended,
   importConfigs.typescript,
-  {
-    plugins: {
-      [commentPluginName]: { rules: commentRules },
-    },
-    rules: {
-      ...commentConfigs.recommended.rules,
-      [`${commentPluginName}/no-unused-disable`]: 'error',
-      [`${commentPluginName}/no-use`]: 'error',
-    },
-  },
   deMorganConfigs.recommended,
   perfectionistConfigs['recommended-natural'],
+  unsanitized.configs.recommended,
   tseslintConfigs.strictTypeChecked,
   tseslintConfigs.stylisticTypeChecked,
   {
@@ -80,28 +71,38 @@ export default defineConfig(
       },
     },
     rules: {
+      '@typescript-eslint/consistent-type-exports': 'error',
       '@typescript-eslint/consistent-type-imports': [
         'error',
         { fixStyle: 'inline-type-imports', prefer: 'type-imports' },
       ],
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/default-param-last': 'error',
+      '@typescript-eslint/explicit-function-return-type': 'error',
+      '@typescript-eslint/explicit-module-boundary-types': 'error',
+      '@typescript-eslint/no-import-type-side-effects': 'error',
       '@typescript-eslint/no-magic-numbers': ['error', { ignore: [-1, 0, 1] }],
-      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/no-shadow': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
-      '@typescript-eslint/require-await': 'error',
-      complexity: ['error', maxComplexity],
-      'import-x/no-cycle': 'error',
-      'import-x/no-duplicates': 'error',
-      'import-x/no-extraneous-dependencies': [
+      '@typescript-eslint/prefer-readonly': 'error',
+      '@typescript-eslint/restrict-template-expressions': [
         'error',
-        { devDependencies: true, packageDir: repositoryRoot },
+        { allowNumber: true },
       ],
+      '@typescript-eslint/strict-boolean-expressions': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      complexity: ['error', 10],
+      eqeqeq: 'error',
+      'import-x/first': 'error',
+      'import-x/newline-after-import': 'error',
+      'import-x/no-deprecated': 'error',
+      'import-x/no-duplicates': 'error',
+      'import-x/no-empty-named-blocks': 'error',
+      'import-x/no-mutable-exports': 'error',
+      'import-x/no-self-import': 'error',
+      'import-x/no-useless-path-segments': 'error',
       'import-x/order': [
         'error',
         {
@@ -117,26 +118,53 @@ export default defineConfig(
           'newlines-between': 'always',
         },
       ],
-      'max-depth': ['error', maxDepth],
+      'max-depth': ['error', 4],
       'max-lines': [
         'error',
-        { max: maxFileLines, skipBlankLines: true, skipComments: true },
+        { max: 512, skipBlankLines: true, skipComments: true },
       ],
       'max-lines-per-function': [
         'error',
-        { max: maxFunctionLines, skipBlankLines: true, skipComments: true },
+        { max: 50, skipBlankLines: true, skipComments: true },
       ],
-      'max-nested-callbacks': ['error', maxNestedCallbacks],
-      'max-params': ['error', maxParameters],
-      'max-statements-per-line': ['error', { max: 1 }],
+      'max-nested-callbacks': ['error', 3],
+      'max-params': ['error', 4],
+      'no-else-return': 'error',
+      'no-implicit-coercion': 'error',
+      'no-lonely-if': 'error',
+      'no-param-reassign': 'error',
+      'object-shorthand': 'error',
       'perfectionist/sort-import-attributes': 'off',
       'perfectionist/sort-imports': 'off',
-      'perfectionist/sort-named-imports': 'off',
-      'sonarjs/cognitive-complexity': ['error', maxCognitiveComplexity],
-      'sonarjs/no-duplicate-string': [
+      'perfectionist/sort-named-imports': [
         'error',
-        { threshold: duplicateStringThreshold },
+        { ignoreCase: true, type: 'alphabetical' },
       ],
+      'prefer-template': 'error',
+      'regexp/require-unicode-sets-regexp': 'error',
+      'sonarjs/cognitive-complexity': ['error', 15],
+      'sonarjs/no-duplicate-string': ['error', { threshold: 2 }],
+      'sonarjs/no-global-this': 'off',
+      'sonarjs/no-inverted-boolean-check': 'off',
+      'sonarjs/prefer-regexp-exec': 'off',
+      'unicorn/consistent-boolean-name': 'off',
+      'unicorn/name-replacements': 'off',
+      'unicorn/no-asterisk-prefix-in-documentation-comments': 'off',
+      'unicorn/no-await-expression-member': 'off',
+      'unicorn/no-nested-ternary': 'off',
+      'unicorn/no-null': 'off',
+      'unicorn/no-unreadable-for-of-expression': 'off',
+      'unicorn/no-unsafe-dom-html': 'error',
+      'unicorn/no-useless-undefined': 'off',
+      'unicorn/numeric-separators-style': 'off',
+      'unicorn/prefer-error-is-error': 'error',
+      'unicorn/prefer-global-this': 'off',
+      'unicorn/prefer-query-selector': 'off',
+      'unicorn/prefer-scoped-selector': 'off',
+      'unicorn/prefer-simple-condition-first': 'off',
+      'unicorn/prefer-ternary': 'off',
+      'unicorn/single-line-block-comment-style': 'off',
+      'unicorn/try-complexity': 'error',
     },
     settings: {
       'import-x/resolver': {
@@ -149,27 +177,36 @@ export default defineConfig(
     },
   },
   {
-    extends: [tseslintConfigs.disableTypeChecked],
     files: ['config/eslint.config.ts'],
+    rules: { '@typescript-eslint/no-magic-numbers': 'off' },
   },
   {
-    files: testFiles,
+    files: ['scripts/run-command.ts'],
+    rules: { 'sonarjs/no-os-command-from-path': 'off' },
+  },
+  {
+    files: ['scripts/store-screenshots/**/*.ts'],
+    rules: { '@typescript-eslint/no-magic-numbers': 'off' },
+  },
+  {
+    files: unitFiles,
     plugins: { vitest },
     rules: {
       ...vitest.configs.recommended.rules,
-      '@typescript-eslint/no-magic-numbers': 'off',
-      'max-lines-per-function': [
-        'error',
-        {
-          max: maxTestFunctionLines,
-          skipBlankLines: true,
-          skipComments: true,
-        },
-      ],
-      'sonarjs/no-duplicate-string': [
-        'error',
-        { threshold: testDuplicateStringThreshold },
-      ],
+      ...testOverrides,
+      'vitest/no-conditional-in-test': 'error',
+      'vitest/prefer-called-with': 'error',
+      'vitest/prefer-strict-equal': 'error',
+      'vitest/require-mock-type-parameters': 'error',
+      'vitest/require-top-level-describe': 'error',
+    },
+  },
+  {
+    files: e2eFiles,
+    ...playwright.configs['flat/recommended'],
+    rules: {
+      ...playwright.configs['flat/recommended'].rules,
+      ...testOverrides,
     },
   },
 );

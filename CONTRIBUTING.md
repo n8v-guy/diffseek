@@ -71,8 +71,9 @@ credentials as repository secrets, and the store listing must already exist.
 ## Commit conventions
 
 Commit subjects are one imperative line, matching the history. The commit
-message hook rejects a subject that is empty or continues onto another line,
-and CI checks every commit in the repository the same way.
+message hook strips editor comments, then rejects a subject that is empty or
+continues onto another line. CI checks the same way for commits since main,
+and skips dependabot branches.
 
 Never commit binary files (images, archives, builds), on any branch. Git decides
 what is binary by content, not extension. The pre-commit hook rejects them, and

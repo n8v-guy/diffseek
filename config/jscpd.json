@@ -11,8 +11,8 @@
     "**/playwright-report/**",
     "**/test-results/**"
   ],
-  "minLines": 8,
-  "minTokens": 60,
+  "minLines": 5,
+  "minTokens": 50,
   "reporters": ["console"],
   "threshold": 0
 }

@@ -16,4 +16,10 @@ describe('commit subjects', () => {
       'subject must be a single line',
     );
   });
+
+  it('ignores editor comments', () => {
+    expect(
+      findSubjectViolation('Add gates\n\n# Please enter the commit message\n'),
+    ).toBeUndefined();
+  });
 });

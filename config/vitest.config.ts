@@ -1,6 +1,8 @@
 import { configDefaults, defineConfig } from 'vitest/config';
 import { WxtVitest } from 'wxt/testing/vitest-plugin';
 
+const unitTestFiles = '**/*.{test,spec,unit}.ts';
+
 export default defineConfig({
   plugins: [
     WxtVitest({ configFile: 'config/wxt.config.ts' }),
@@ -11,18 +13,18 @@ export default defineConfig({
         '.output/**',
         '.wxt/**',
         'entrypoints/**',
-        '**/*.{test,spec,unit}.ts',
+        unitTestFiles,
       ],
       reporter: ['text', 'json'],
       thresholds: {
-        branches: 70,
-        functions: 75,
-        lines: 75,
-        statements: 75,
+        branches: 85,
+        functions: 94,
+        lines: 94,
+        statements: 92,
       },
     },
     environment: 'jsdom',
-    include: ['**/*.{test,spec,unit}.ts'],
     exclude: [...configDefaults.exclude, '**/*.e2e.playwright.ts'],
+    include: [unitTestFiles],
   },
 });

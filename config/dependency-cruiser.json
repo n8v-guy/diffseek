@@ -35,6 +35,18 @@
       "severity": "error",
       "from": { "path": "-client\\.ts$" },
       "to": { "path": "-background\\.ts$" }
+    },
+    {
+      "name": "not-to-unresolvable",
+      "severity": "error",
+      "from": {},
+      "to": { "couldNotResolve": true }
+    },
+    {
+      "name": "not-to-test",
+      "severity": "error",
+      "from": { "pathNot": "\\.(spec|unit)\\.ts$|\\.e2e\\.playwright\\.ts$" },
+      "to": { "path": "\\.(spec|unit)\\.ts$|\\.e2e\\.playwright\\.ts$" }
     }
   ],
   "options": {

@@ -2,7 +2,10 @@
   "extends": "../.wxt/tsconfig.json",
   "compilerOptions": {
     "allowImportingTsExtensions": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
     "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
     "noEmitOnError": true,
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,

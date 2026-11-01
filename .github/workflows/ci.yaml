@@ -8,11 +8,14 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: git fetch origin main
       - uses: pnpm/action-setup@v5
       - uses: actions/setup-node@v5
         with:
@@ -20,7 +23,22 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:ci:full
-      - run: pnpm exec wxt zip --config config/wxt.config.ts
-      - run: pnpm exec wxt zip -b firefox --config config/wxt.config.ts
+
+  strict:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: git fetch origin main
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm release:zip
+      - run: pnpm zip:firefox:store
       - run: pnpm check:size
       - run: pnpm check:strict
