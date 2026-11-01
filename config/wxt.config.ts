@@ -1,26 +1,21 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 import { defineConfig } from 'wxt';
 
-import {
-  buildNumber,
-  buildNumberEnv,
-  gitHeadCount,
-  manifestVersion,
-  readBuildNumberFile,
-} from './manifest-version.ts';
+import { manifestVersion } from './manifest-version.ts';
 
 const packageVersion =
   /"version": "([^"]+)"/.exec(
     readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
   )?.[1] ?? '0.0.0';
 
-// File before git: the Add-ons source archive has no repository.
-const branchCommitCount = buildNumber([
-  process.env[buildNumberEnv],
-  readBuildNumberFile(),
-  gitHeadCount(),
-]);
+const branchCommitCount = Number(
+  process.env.DIFFSEEK_BUILD_NUMBER ??
+    execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim(),
+);
 
 export default defineConfig({
   alias: {
@@ -58,14 +53,6 @@ export default defineConfig({
   }),
   zip: {
     artifactTemplate: '{{name}}-{{version}}-{{browser}}.zip',
-    sourcesTemplate: '{{name}}-{{version}}-sources.zip',
-    excludeSources: [
-      'coverage/**',
-      'docs/superpowers/**',
-      'playwright-report/**',
-      'screenshots/**',
-      'test-results/**',
-    ],
-    zipSources: process.env.DIFFSEEK_ZIP_SOURCES === '0' ? false : undefined,
+    zipSources: false,
   },
 });
