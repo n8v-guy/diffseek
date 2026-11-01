@@ -70,13 +70,18 @@ credentials as repository secrets, and the store listing must already exist.
 
 ## Commit conventions
 
-Commit subjects are one imperative line, matching the history.
+Commit subjects are one imperative line, matching the history. The commit
+message hook rejects a subject that is empty or continues onto another line,
+and CI checks every commit in the repository the same way.
 
 Never commit binary files (images, archives, builds), on any branch. Git decides
 what is binary by content, not extension. The pre-commit hook rejects them, and
 because hooks can be skipped, CI checks every file in the tree too.
 
 Git hooks run automatically: before a commit, lint fixes on staged code, the
-repository structure rules, and the binary check; before a push, the full CI
-check (structure, binaries, lint, unused code, types, tests with coverage,
-production dependency audit, and build).
+repository structure rules, the binary check, a ban on lint and type
+suppressions, and the one-line subject check; before a push, the full CI
+check (structure, binaries, suppressions, subjects, unused code, types, tests
+with coverage, production dependency audit, and build). CI also runs the
+stricter lint, duplication, dependency, type-coverage, stylesheet, Firefox
+store, and bundle-size gates.

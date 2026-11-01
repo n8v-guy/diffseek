@@ -1,5 +1,5 @@
 export default {
   '*.{ts,tsx}': [
-    'eslint --config config/eslint.config.ts --fix',
+    'eslint --config config/eslint.config.ts --fix --max-warnings 0',
   ],
 };

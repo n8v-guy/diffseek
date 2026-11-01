@@ -1,0 +1,18 @@
+{
+  "absolute": true,
+  "format": ["typescript", "css"],
+  "gitignore": true,
+  "ignore": [
+    "**/.cache/**",
+    "**/.output/**",
+    "**/.wxt/**",
+    "**/coverage/**",
+    "**/node_modules/**",
+    "**/playwright-report/**",
+    "**/test-results/**"
+  ],
+  "minLines": 8,
+  "minTokens": 60,
+  "reporters": ["console"],
+  "threshold": 0
+}

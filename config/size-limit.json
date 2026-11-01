@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Chrome zip",
+    "path": "../.output/*-chrome.zip",
+    "limit": "22 kB",
+    "gzip": false,
+    "brotli": false
+  },
+  {
+    "name": "Firefox zip",
+    "path": "../.output/*-firefox.zip",
+    "limit": "22 kB",
+    "gzip": false,
+    "brotli": false
+  }
+]

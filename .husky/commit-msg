@@ -1,0 +1,6 @@
+#!/bin/sh
+
+set -eu
+cd "$(dirname "$0")/.."
+
+node --experimental-strip-types scripts/check-commit-subjects.ts --message-file "$1"

@@ -1,0 +1,9 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "ignoreFiles": [
+    "**/.output/**",
+    "**/.wxt/**",
+    "**/coverage/**",
+    "**/node_modules/**"
+  ]
+}
