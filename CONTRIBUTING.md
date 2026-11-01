@@ -238,9 +238,9 @@ waits until every row removed after the first DiffSeek control is back and
 fails on any that came back late or never did. The job summary includes raw
 removed and re-added counts. The cold sample also toggles the viewed filter and
 marks one file row viewed. An empty sample set fails. Median durations are
-checked against limits: panel times at about 1.5× the CI median, first render
-and menu open as looser ceilings, with optional `DIFFSEEK_LIVE_BUDGET_*`
-overrides; the values live in
+checked against limits: one shared panel cutoff for cold, warm, and hot at
+about 1.5× the CI cold median, first render and menu open as looser ceilings,
+with optional `DIFFSEEK_LIVE_BUDGET_*` overrides; the values live in
 `src/app/review/live-perf.helpers.ts`. Results are written to
 `.cache/live-perf-latest.json`, the job summary, and a `live-perf` artifact.
 Override the target with `DIFFSEEK_LIVE_PR_URL`.
