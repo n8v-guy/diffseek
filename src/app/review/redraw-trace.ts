@@ -300,6 +300,10 @@ function publish(root: Document, trace: Trace): void {
   writeCount(data, 'diffseekPanelsReadded', trace.panelsReadded);
   writeCount(data, 'diffseekTreeNetLoss', trace.treeNetLoss);
   writeCount(data, 'diffseekPanelNetLoss', trace.panelNetLoss);
+  // Rows removed and not yet back: lets the hot check wait for an event
+  // (every row returned) instead of a fixed settle delay.
+  writeCount(data, 'diffseekTreeOpen', trace.treeSettle.open.size);
+  writeCount(data, 'diffseekPanelOpen', trace.panelSettle.open.size);
 }
 
 function writeCount(data: DOMStringMap, key: string, value: number): void {
@@ -318,5 +322,7 @@ function mutationStamp(trace: Trace): string {
     trace.panelsReadded,
     trace.treeNetLoss,
     trace.panelNetLoss,
+    trace.treeSettle.open.size,
+    trace.panelSettle.open.size,
   ].join(':');
 }

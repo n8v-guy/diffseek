@@ -232,15 +232,22 @@ visible, and time until the generated-facet denominator shows the full
 classified total. It also records reconcile passes, DiffSeek DOM mutations, and
 GitHub file-tree or diff-panel rebuilds (removed rows that come back). Cold
 and warm must be exactly 1 for now: since 2026-10-31 GitHub itself redraws the
-tree and panels once per page load, so 0 or 2 fail; revisit when GitHub stops. Hot ignores that mass-removal rule and fails only when
-a tree row or diff panel removed after the first DiffSeek control is still
-gone 500 ms later. The job summary includes raw removed and re-added counts.
+tree and panels once per page load, so 0 or 2 fail; revisit when GitHub stops. Hot ignores that mass-removal rule; it waits until
+every tree row or diff panel removed after the first DiffSeek control is back
+and fails on any that came back more than 500 ms later or never did. The job summary includes raw removed and re-added counts.
 The cold sample also toggles the viewed filter and marks one file row viewed.
 An empty sample set fails. Duration ceilings are about three times a measured
-local median (first render 12s/10s/8s, menu 6s, panels 27s/24s/22s) with
+local median (first render 12s/10s/8s, menu 6s, panels 20s/20s/22s) with
 optional `DIFFSEEK_LIVE_BUDGET_*` overrides. Results are written to
 `.cache/live-perf-latest.json`, the job summary, and a `live-perf` artifact.
 Override the target with `DIFFSEEK_LIVE_PR_URL`.
+
+Live e2e waits are event-based (`src/app/review/live-wait.ts`: in-page
+MutationObserver conditions, navigation events); timeouts are failure guards
+only, never pacing. GitHub server-renders the Filter options button and swaps
+in an interactive client copy about 2–3s into a load, so the menu is opened
+only once that copy is present (Primer `anchor-name` style or a React
+`onClick`).
 
 `pnpm check:ci` runs the quality checks and the production build together.
 
