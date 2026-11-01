@@ -1,11 +1,9 @@
-import type {
-  FilterDefaultState,
-  RememberedFilterFacet,
-} from '@diffseek/browser/filter-defaults';
+import type { FilterDefaultState } from '@diffseek/browser/filter-defaults';
 
 import {
   type ActionResult,
   clearViewedAction,
+  type ViewedTarget,
 } from '../review-page/viewed-actions';
 
 const snackbarDurationMs = 7_000;
@@ -72,7 +70,7 @@ export function showUnavailable(root: Document, reason: string): void {
   const status = root.createElement('span');
   status.dataset.diffseek = 'unavailable';
   status.setAttribute('role', 'status');
-  status.textContent = `DiffSeek unavailable: ${reason}`;
+  status.textContent = `DiffSeek unavailable. ${reason}`;
   placeStatus(root, status);
 }
 
@@ -80,60 +78,96 @@ export function removeUnavailable(root: Document): void {
   root.querySelector('[data-diffseek="unavailable"]')?.remove();
 }
 
-export function showViewedScope(root: Document, message: string): void {
-  showSnackbar(root, message);
+/** A single file has no progress message; its checkbox answers at once. */
+type BatchMessages = { progress?: string; done: string; failed: string };
+
+const markMessages: Record<ViewedTarget, BatchMessages> = {
+  file: {
+    done: 'File marked viewed',
+    failed: "Couldn't mark file viewed. Try again.",
+  },
+  folder: {
+    progress: 'Marking visible files in folder viewed…',
+    done: 'Visible files in folder marked viewed',
+    failed: "Couldn't mark files viewed. Try again.",
+  },
+  category: {
+    progress: 'Marking all files in category viewed…',
+    done: 'All files in category marked viewed',
+    failed: "Couldn't mark files viewed. Try again.",
+  },
+  'auto-view': {
+    progress: 'Auto-view: marking generated files viewed…',
+    done: 'Auto-view: generated files marked viewed',
+    failed: "Couldn't mark files viewed. Try again.",
+  },
+};
+
+const unmarkMessages: Record<ViewedTarget, BatchMessages> = {
+  file: {
+    done: 'File unmarked',
+    failed: "Couldn't unmark file. Try again.",
+  },
+  folder: {
+    progress: 'Unmarking visible files in folder…',
+    done: 'Visible files in folder unmarked',
+    failed: "Couldn't unmark files. Try again.",
+  },
+  category: {
+    progress: 'Unmarking all files in category…',
+    done: 'All files in category unmarked',
+    failed: "Couldn't unmark files. Try again.",
+  },
+  'auto-view': markMessages['auto-view'],
+};
+
+function batchMessages(target: ViewedTarget, viewed: boolean): BatchMessages {
+  return (viewed ? markMessages : unmarkMessages)[target];
 }
 
 export function showBatchStarted(
   root: Document,
+  target: ViewedTarget,
   viewed: boolean,
-  requested: number,
 ): void {
-  showSnackbar(
-    root,
-    `Marking ${fileCount(requested)} as ${stateLabel(viewed)}…`,
-  );
+  const { progress } = batchMessages(target, viewed);
+  if (progress) showSnackbar(root, progress);
 }
 
 export function showBatchResult(
   root: Document,
-  result: ActionResult,
+  target: ViewedTarget,
   viewed: boolean,
+  result: ActionResult,
 ): void {
-  const status = showSnackbar(
-    root,
-    `Marked ${fileCount(result.completed.length)} as ${stateLabel(viewed)}` +
-      (result.failed.length > 0 ? `; ${result.failed.length} failed` : ''),
-  );
-  if (result.failed.length > 0) {
-    status.title = result.failed
-      .map(({ path, reason }) => `${path}: ${reason}`)
-      .join('\n');
-  }
+  const messages = batchMessages(target, viewed);
+  showSnackbar(root, result.failed.length > 0 ? messages.failed : messages.done);
 }
 
 export function showRememberedFilterDefault(
   root: Document,
-  _facet: RememberedFilterFacet,
   state: FilterDefaultState,
 ): void {
-  showSnackbar(root, state === 'hidden' ? 'Always hide' : 'Show now');
+  showSnackbar(
+    root,
+    state === 'hidden' ? 'Always hidden' : 'Shown',
+  );
 }
 
 export function showHideNow(root: Document): void {
-  showSnackbar(root, 'Hide now');
+  showSnackbar(root, 'Hidden');
 }
 
 export function showAlwaysRead(root: Document, enabled: boolean): void {
   showSnackbar(
     root,
     enabled
-      ? 'Always mark generated files viewed'
-      : 'Stop marking generated files viewed',
+      ? 'Auto-view on: generated files get marked viewed'
+      : 'Auto-view off',
   );
 }
 
-function showSnackbar(root: Document, message: string): HTMLElement {
+function showSnackbar(root: Document, message: string): void {
   let stack = root.querySelector<HTMLElement>(
     '[data-diffseek="snackbars"]',
   );
@@ -152,7 +186,6 @@ function showSnackbar(root: Document, message: string): HTMLElement {
     snackbar.remove();
     if (stack?.childElementCount === 0) stack.remove();
   }, snackbarDurationMs);
-  return snackbar;
 }
 
 export function isNativeMutation(record: MutationRecord): boolean {
@@ -199,12 +232,4 @@ function accessibleName(element: HTMLElement): string {
       .trim() ??
     ''
   );
-}
-
-function fileCount(count: number): string {
-  return `${count} ${count === 1 ? 'file' : 'files'}`;
-}
-
-function stateLabel(viewed: boolean): string {
-  return viewed ? 'viewed' : 'not viewed';
 }

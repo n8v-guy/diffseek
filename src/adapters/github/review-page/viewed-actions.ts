@@ -2,7 +2,6 @@ import {
   bucketActionPaths,
   emptyFacetExclusions,
   fileViewedLabel,
-  folderViewedNotice,
   includeCountedFiles,
   scopeAriaPressed,
   scopeViewedLabel,
@@ -22,8 +21,11 @@ type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 export type ActionResult = {
   requested: number;
   completed: string[];
-  failed: Array<{ path: string; reason: string }>;
+  failed: string[];
 };
+
+/** What a viewed batch covers; picks the toast wording. */
+export type ViewedTarget = 'file' | 'folder' | 'category' | 'auto-view';
 
 export async function markViewed(
   snapshot: SupportedSnapshot,
@@ -46,7 +48,7 @@ export async function markViewed(
     const resolveButton = () => viewedButtonFor(snapshot, path);
     const button = resolveButton();
     if (!button) {
-      result.failed.push({ path, reason: 'Viewed control is unavailable' });
+      result.failed.push(path);
       options.onProgress?.(
         result.completed.length + result.failed.length,
         result.requested,
@@ -72,10 +74,7 @@ export async function markViewed(
       if (file) file.viewed = viewed;
       result.completed.push(path);
     } else {
-      result.failed.push({
-        path,
-        reason: 'GitHub did not confirm viewed state',
-      });
+      result.failed.push(path);
     }
     options.onProgress?.(
       result.completed.length + result.failed.length,
@@ -100,7 +99,7 @@ const hitSlopPx = 4;
 
 export function mountViewedActions(
   snapshot: SupportedSnapshot,
-  onAction: (viewed: boolean, paths: string[], notice?: string) => void,
+  onAction: (target: ViewedTarget, viewed: boolean, paths: string[]) => void,
   index = new ReviewIndex(snapshot.files),
   filters: FilterState = emptyFacetExclusions(),
 ): void {
@@ -121,7 +120,7 @@ export function mountViewedActions(
     const anchor = iconAnchor(item);
     if (!anchor) continue;
     stale.delete(anchor);
-    bindViewedAnchor(anchor, bucket, file != null, item.id, onAction);
+    bindViewedAnchor(anchor, bucket, file != null, onAction);
   }
 
   for (const anchor of stale) clearViewedAction(anchor);
@@ -157,8 +156,7 @@ function bindViewedAnchor(
   anchor: HTMLElement,
   bucket: CountBucket,
   file: boolean,
-  itemId: string,
-  onAction: (viewed: boolean, paths: string[], notice?: string) => void,
+  onAction: (target: ViewedTarget, viewed: boolean, paths: string[]) => void,
 ): void {
   if (!anchor.classList.contains(viewedActionClass)) {
     anchor.classList.add(viewedActionClass);
@@ -178,15 +176,8 @@ function bindViewedAnchor(
   anchor.classList.toggle(viewedPartialClass, pressed === 'mixed');
   const paths = bucketActionPaths(bucket);
   const markViewed = pressed !== 'true';
-  const notice = file
-    ? undefined
-    : folderViewedNotice(
-        itemId.split('/').at(-1) ?? itemId,
-        markViewed,
-        paths.length,
-      );
   actionHandlers.set(anchor, () =>
-    notice ? onAction(markViewed, paths, notice) : onAction(markViewed, paths),
+    onAction(file ? 'file' : 'folder', markViewed, paths),
   );
 }
 

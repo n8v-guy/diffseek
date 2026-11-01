@@ -74,20 +74,27 @@ groups, formats, change status, and generated files count and mark the whole
 category, including files hidden by any other filter. The counter badge stays
 visible/total. The circle is empty, an eclipse, or filled for that whole
 category, so it describes the click. The eclipse is a fixed off-center disc in
-a thin ring. A menu tooltip says, for example, "Mark 26 remaining in payments
-as viewed (12 of 38 viewed)"; a filled circle says "Mark as not viewed".
-Partial uses `aria-pressed="mixed"`. Clicking a menu circle announces the
-category, for example "Marked all 26 payments files viewed" or "Unmarked all
-38 payments files", and adds "(4 hidden)" when the action includes hidden
-files. The auto-view pill stays a separate control. A folder sums only the
-files under it that pass the active filters, except the Viewed filter's
-hiding, and its click marks only those visible files. Its tooltip omits the
-category name, and its snackbar says "Marked 8 visible files in checkout
-viewed" or "Unmarked 8 visible files in checkout". A fully viewed folder still
-disappears while viewed files are hidden. Files GitHub cannot mark stay out of
-both circles. Reset clears review-local
-filters without changing viewed/generated defaults. Started and completed
-actions appear in a short-lived top-right notification stack.
+a thin ring. Circle tooltips and accessible names are short and generic: one
+per state (empty, partial, filled), with no category name and no counts; the
+row around the circle already says which category it is. Partial uses `aria-pressed="mixed"`. A menu circle acts on every file in the
+category, hidden ones included. The auto-view pill stays a separate control. A
+folder sums only the files under it that pass the active filters, except the
+Viewed filter's hiding, and its click marks only those visible files. A fully viewed folder still disappears while
+viewed files are hidden. Files GitHub cannot mark stay out of both circles.
+Reset clears review-local filters without changing viewed/generated defaults.
+
+Every multi-file viewed batch shows a progress notification when it starts
+and a completion notification when it ends; a single file gets only the
+completion, since its circle answers at once. Notifications sit in a
+short-lived top-right stack with no actions on them. They are short, start with a capital letter, and never
+name a file, folder, category, or repository, and they carry no counts. Each
+case still reads differently: a file, the visible files in a folder, all files
+in a category, and auto-view each have their own subject, and unmarking says
+"unmark" rather than "mark … not viewed". Any failed path turns the completion
+into one short message that asks the reviewer to try again, with no details
+and no hover text. A filter-row notification names the row's new state in its
+tri-state cycle, and the auto-view pill's says on or off, instead of echoing a
+button label.
 
 Repository metadata for the open review starts from cache, then PR head:
 

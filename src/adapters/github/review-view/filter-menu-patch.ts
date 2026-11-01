@@ -107,10 +107,8 @@ function patchRow(
       counted: row.counted,
       disabled: row.disabled === true,
       facet: row.facet,
-      hidden: row.hidden,
       onViewed,
       paths: row.paths,
-      scope: row.label,
       value: row.value,
       viewedCount: row.viewedCount,
     };

@@ -465,11 +465,11 @@ async function clearViewedFiles(page: Page): Promise<void> {
   const action = page.locator(viewedFacetAction);
   if ((await action.count()) === 0) return;
   const label = await action.getAttribute('aria-label', { timeout: 5_000 });
-  if (label !== 'Mark as not viewed') return;
+  if (label !== 'Unmark all') return;
   await action.click();
   await untilDom(
     page,
-    { kind: 'text', selector: '[data-diffseek="snackbar"]', pattern: '^Marked .+ as not viewed' },
+    { kind: 'text', selector: '[data-diffseek="snackbar"]', pattern: "^(All files in category unmarked|Couldn't unmark files\\. Try again\\.)$" },
     300_000,
     'not-viewed snackbar',
   );

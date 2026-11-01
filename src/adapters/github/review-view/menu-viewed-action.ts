@@ -1,5 +1,4 @@
 import {
-  categoryViewedNotice,
   scopeAriaPressed,
   scopeViewedLabel,
   viewedMark,
@@ -8,13 +7,11 @@ import {
 
 export type MenuViewedActionOptions = {
   facet: LabelFacet;
-  onViewed: (viewed: boolean, paths: string[], notice?: string) => void;
+  onViewed: (viewed: boolean, paths: string[]) => void;
   paths: string[];
   value: string;
-  scope: string;
   counted: number;
   viewedCount: number;
-  hidden: number;
   disabled?: boolean;
 };
 
@@ -50,11 +47,7 @@ export function configureViewedAction(
 ): void {
   action.dataset.viewedFacet = options.facet;
   action.dataset.viewedValue = options.value;
-  const label = scopeViewedLabel(
-    options.viewedCount,
-    options.counted,
-    options.scope,
-  );
+  const label = scopeViewedLabel(options.viewedCount, options.counted);
   action.setAttribute('aria-label', label);
   const pressed = scopeAriaPressed(options.viewedCount, options.counted);
   action.setAttribute('aria-pressed', pressed);
@@ -74,15 +67,6 @@ export function configureViewedAction(
     event.preventDefault();
     event.stopPropagation();
     if (options.disabled) return;
-    options.onViewed(
-      markViewed,
-      options.paths,
-      categoryViewedNotice(
-        options.scope,
-        markViewed,
-        options.paths.length,
-        options.hidden,
-      ),
-    );
+    options.onViewed(markViewed, options.paths);
   };
 }

@@ -56,7 +56,7 @@ export function pageStructureKey(root: Document): string | null {
 
 export function scanPage(root: Document): PageSnapshot {
   const tree = root.querySelector<HTMLElement>(fileTreeSelector);
-  if (!tree) return { supported: false, reason: 'File tree is unavailable' };
+  if (!tree) return { supported: false, reason: 'No file tree on this page' };
 
   const files: FileRecord[] = [];
   const unavailable = new Map<string, string>();

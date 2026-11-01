@@ -50,47 +50,17 @@ export function includeCountedFiles(
 }
 
 export function fileViewedLabel(viewed: boolean): string {
-  return viewed ? 'Mark as not viewed' : 'Mark as viewed';
+  return viewed ? 'Unmark' : 'Mark viewed';
 }
 
-export function scopeViewedLabel(
-  viewed: number,
-  counted: number,
-  name?: string,
-): string {
-  if (viewedMark(viewed, counted) === 'filled') return fileViewedLabel(true);
-  const remaining = counted - viewed;
-  const where = name ? ` in ${name}` : '';
-  return `Mark ${remaining} remaining${where} as viewed (${viewed} of ${counted} viewed)`;
-}
+const scopeViewedLabels: Record<ViewedMark, string> = {
+  empty: 'Mark all viewed',
+  partial: 'Mark the rest viewed',
+  filled: 'Unmark all',
+};
 
-export function folderViewedNotice(
-  name: string,
-  markViewed: boolean,
-  count: number,
-): string {
-  const files = count === 1 ? 'file' : 'files';
-  return markViewed
-    ? `Marked ${count} visible ${files} in ${name} viewed`
-    : `Unmarked ${count} visible ${files} in ${name}`;
-}
-
-export function categoryViewedNotice(
-  name: string,
-  markViewed: boolean,
-  count: number,
-  hidden = 0,
-): string {
-  const noun = categoryNoun(name, count);
-  const suffix = hidden > 0 ? ` (${hidden} hidden)` : '';
-  return markViewed
-    ? `Marked all ${count} ${noun} viewed${suffix}`
-    : `Unmarked all ${count} ${noun}${suffix}`;
-}
-
-function categoryNoun(name: string, count: number): string {
-  const base = name.endsWith(' files') ? name.slice(0, -' files'.length) : name;
-  return `${base} ${count === 1 ? 'file' : 'files'}`;
+export function scopeViewedLabel(viewed: number, counted: number): string {
+  return scopeViewedLabels[viewedMark(viewed, counted)];
 }
 
 export function scopeAriaPressed(

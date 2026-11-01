@@ -451,7 +451,7 @@ describe('review app lifecycle', () => {
           '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
         )
         ?.getAttribute('aria-label'),
-    ).toBe('Mark as not viewed');
+    ).toBe('Unmark all');
 
     await nextReconcile(() => {
       const button = document.querySelector<HTMLButtonElement>(
@@ -466,7 +466,7 @@ describe('review app lifecycle', () => {
           '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
         )
         ?.getAttribute('aria-label'),
-    ).toBe('Mark 1 remaining in Code as viewed (2 of 3 viewed)');
+    ).toBe('Mark the rest viewed');
     expect(
       document
         .querySelector(
@@ -1103,7 +1103,7 @@ describe('review app interactions', () => {
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
         ?.textContent,
-    ).toBe('Show now');
+    ).toBe('Shown');
 
     document
       .querySelector<HTMLButtonElement>(
@@ -1133,11 +1133,11 @@ describe('review app interactions', () => {
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
         ?.textContent,
-    ).toBe('Always hide');
+    ).toBe('Always hidden');
     app.stop();
   });
 
-  it('reports a partial viewed-action failure without retrying', async () => {
+  it('asks to try again after a failed viewed action without retrying', async () => {
     const filterButton = document.querySelector<HTMLButtonElement>(
       'button[aria-label="Filter options"]',
     );
@@ -1150,12 +1150,7 @@ describe('review app interactions', () => {
     const markFiles = vi.fn().mockResolvedValue({
       requested: 1,
       completed: [],
-      failed: [
-        {
-          path: 'src/app.ts',
-          reason: 'GitHub did not confirm viewed state',
-        },
-      ],
+      failed: ['src/app.ts'],
     });
     const app = await startReviewApp({
       ...inertMetadata,
@@ -1174,7 +1169,7 @@ describe('review app interactions', () => {
       expect(
         [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
           ?.textContent,
-      ).toBe('Marked 0 files as viewed; 1 failed');
+      ).toBe("Couldn't mark file viewed. Try again.");
     });
     expect(markFiles).toHaveBeenCalledOnce();
     app.stop();
@@ -1186,7 +1181,7 @@ describe('review app interactions', () => {
       | ((result: {
           requested: number;
           completed: string[];
-          failed: Array<{ path: string; reason: string }>;
+          failed: string[];
         }) => void)
       | undefined;
     const markFiles = vi.fn(
@@ -1194,7 +1189,7 @@ describe('review app interactions', () => {
         new Promise<{
           requested: number;
           completed: string[];
-          failed: Array<{ path: string; reason: string }>;
+          failed: string[];
         }>((resolve) => {
           finishBatch = resolve;
         }),
@@ -1220,7 +1215,7 @@ describe('review app interactions', () => {
     finishBatch?.({
       requested: 1,
       completed: [],
-      failed: [{ path: 'src/app.ts', reason: 'stale' }],
+      failed: ['src/app.ts'],
     });
     await Promise.resolve();
 
@@ -1305,7 +1300,7 @@ describe('review app interactions', () => {
     ).toBe('Collapse file');
     expect(
       document.querySelector('[data-diffseek="unavailable"]')?.textContent,
-    ).toContain('File tree is unavailable');
+    ).toBe('DiffSeek unavailable. No file tree on this page');
     app.stop();
   });
 
@@ -1326,7 +1321,7 @@ describe('review app interactions', () => {
         document
           .querySelector('#src\\/app\\.ts [data-diffseek-viewed-action]')
           ?.getAttribute('aria-label'),
-      ).toBe('Mark as not viewed');
+      ).toBe('Unmark');
     });
     app.stop();
   });

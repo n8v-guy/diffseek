@@ -32,7 +32,7 @@ export async function restoreBaseline(page: Page, attempt = 1): Promise<void> {
   // A menu row marks its whole category, so one click on the Viewed row
   // clears every viewed file before the baseline files go back on.
   const clearAll = page.locator(clearAllSelector);
-  if ((await clearAll.count()) > 0 && (await clearAll.getAttribute('aria-label')) === 'Mark as not viewed') {
+  if ((await clearAll.count()) > 0 && (await clearAll.getAttribute('aria-label')) === 'Unmark all') {
     await clearAll.click({ force: true });
     await waitForToasts(page);
     await hasCounter(page, 0);

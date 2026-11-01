@@ -1,7 +1,6 @@
 import type {
   FilterDefaults,
   FilterDefaultState,
-  RememberedFilterFacet,
 } from '@diffseek/browser/filter-defaults';
 import {
   bindSnapshot,
@@ -14,6 +13,7 @@ import {
 import {
   type markViewed,
   mountViewedActions,
+  type ViewedTarget,
 } from '@diffseek/github/review-page/viewed-actions';
 import { mountFilterMenu } from '@diffseek/github/review-view/filter-menu';
 import { ReviewPresenter } from '@diffseek/github/review-view/presenter';
@@ -28,7 +28,6 @@ import {
   showBatchStarted,
   showRememberedFilterDefault,
   showUnavailable,
-  showViewedScope,
 } from '@diffseek/github/review-view/review-ui';
 import type { ReviewRef } from '@diffseek/github/routing/page-route';
 import {
@@ -292,7 +291,7 @@ export class ReviewSession {
         this.presenter.apply(catalogSnapshot, this.filters, index);
         mountViewedActions(
           catalogSnapshot,
-          (viewed, paths, notice) => this.batch(viewed, paths, notice),
+          (target, viewed, paths) => this.batch(target, viewed, paths),
           index,
           this.filters,
         );
@@ -333,9 +332,9 @@ export class ReviewSession {
     );
   }
 
-  private batch(viewed: boolean, paths: string[], notice?: string): void {
+  private batch(target: ViewedTarget, viewed: boolean, paths: string[]): void {
     if (!this.snapshot) return;
-    if (notice) showViewedScope(this.options.root, notice); else showBatchStarted(this.options.root, viewed, paths.length);
+    showBatchStarted(this.options.root, target, viewed);
     void this.actionExecutor
       .enqueue({
         reviewKey: this.options.review.key,
@@ -345,23 +344,20 @@ export class ReviewSession {
       })
       .then((result) => {
         if (!result || this.lifecycle.signal.aborted) return;
-        showBatchResult(this.options.root, result, viewed);
+        showBatchResult(this.options.root, target, viewed, result);
         this.schedule();
       });
   }
 
-  private rememberFilterDefault(
-    facet: RememberedFilterFacet,
-    state: FilterDefaultState,
-  ): void {
-    showRememberedFilterDefault(this.options.root, facet, state);
+  private rememberFilterDefault(state: FilterDefaultState): void {
+    showRememberedFilterDefault(this.options.root, state);
     void this.options.writeFilterDefaults(this.options.filterDefaults);
   }
 
   private enqueueDefaultViewed(paths: string[]): void {
     for (const path of paths) this.defaultViewedAttempts.add(path);
     this.defaultViewedInFlight += 1;
-    showBatchStarted(this.options.root, true, paths.length);
+    showBatchStarted(this.options.root, 'auto-view', true);
     void this.actionExecutor
       .enqueue({
         reviewKey: this.options.review.key,
@@ -373,7 +369,7 @@ export class ReviewSession {
       .then((result) => {
         this.defaultViewedInFlight = Math.max(0, this.defaultViewedInFlight - 1);
         if (this.lifecycle.signal.aborted) return;
-        if (result) showBatchResult(this.options.root, result, true);
+        if (result) showBatchResult(this.options.root, 'auto-view', true, result);
         this.reconcile();
       });
   }
@@ -389,14 +385,14 @@ export class ReviewSession {
       filterDefaults: this.options.filterDefaults,
       generatedDefaultBusy,
       onChange: () => this.reconcile(),
-      onFilterDefaultChange: (facet, state) =>
-        this.rememberFilterDefault(facet, state),
+      onFilterDefaultChange: (_facet, state) =>
+        this.rememberFilterDefault(state),
       onAlwaysReadChange: (enabled) => {
         if (!enabled) this.defaultViewedAttempts.clear();
         showAlwaysRead(this.options.root, enabled);
         void this.options.writeFilterDefaults(this.options.filterDefaults);
       },
-      onViewed: (viewed, paths, notice) => this.batch(viewed, paths, notice),
+      onViewed: (viewed, paths) => this.batch('category', viewed, paths),
     });
   }
 

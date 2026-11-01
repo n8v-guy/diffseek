@@ -7,20 +7,68 @@ import {
   showBatchStarted,
   showHideNow,
   showRememberedFilterDefault,
-  showViewedScope,
+  showUnavailable,
 } from './review-ui';
 
 describe('review status UI', () => {
-  it('announces a viewed-scope snackbar in the live region', () => {
+  it('announces a snackbar in the live region', () => {
     document.body.innerHTML = '<main></main>';
-    showViewedScope(document, 'Marked 8 visible files in checkout viewed');
+    showBatchStarted(document, 'folder', true);
     const stack = document.querySelector('[data-diffseek="snackbars"]');
     const snackbar = document.querySelector('[data-diffseek="snackbar"]');
     expect(stack?.getAttribute('aria-live')).toBe('polite');
     expect(snackbar?.getAttribute('role')).toBe('status');
     expect(snackbar?.textContent).toBe(
-      'Marked 8 visible files in checkout viewed',
+      'Marking visible files in folder viewed…',
     );
+  });
+
+  it('gives every batch distinct messages, with no progress for a single file', () => {
+    document.body.innerHTML = '<main></main>';
+    const done = { requested: 1, completed: ['a.ts'], failed: [] };
+    const failed = { requested: 1, completed: [], failed: ['a.ts'] };
+    for (const target of ['file', 'folder', 'category', 'auto-view'] as const) {
+      for (const viewed of target === 'auto-view' ? [true] : [true, false]) {
+        showBatchStarted(document, target, viewed);
+        showBatchResult(document, target, viewed, done);
+        showBatchResult(document, target, viewed, failed);
+      }
+    }
+
+    expect(
+      [
+        ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
+      ].map((item) => item.textContent),
+    ).toEqual([
+      'File marked viewed',
+      "Couldn't mark file viewed. Try again.",
+      'File unmarked',
+      "Couldn't unmark file. Try again.",
+      'Marking visible files in folder viewed…',
+      'Visible files in folder marked viewed',
+      "Couldn't mark files viewed. Try again.",
+      'Unmarking visible files in folder…',
+      'Visible files in folder unmarked',
+      "Couldn't unmark files. Try again.",
+      'Marking all files in category viewed…',
+      'All files in category marked viewed',
+      "Couldn't mark files viewed. Try again.",
+      'Unmarking all files in category…',
+      'All files in category unmarked',
+      "Couldn't unmark files. Try again.",
+      'Auto-view: marking generated files viewed…',
+      'Auto-view: generated files marked viewed',
+      "Couldn't mark files viewed. Try again.",
+    ]);
+  });
+
+  it('starts the unavailable status with a capital', () => {
+    document.body.innerHTML =
+      '<button aria-label="Filter options"></button>';
+    showUnavailable(document, 'No file tree on this page');
+    expect(
+      document.querySelector('[data-diffseek="unavailable"]')?.textContent,
+    ).toBe('DiffSeek unavailable. No file tree on this page');
   });
 
   afterEach(() => vi.useRealTimers());
@@ -29,36 +77,27 @@ describe('review status UI', () => {
     vi.useFakeTimers();
     document.body.innerHTML = '<main></main>';
 
-    showBatchStarted(document, true, 3);
+    showBatchStarted(document, 'category', true);
     vi.advanceTimersByTime(1_000);
 
-    showBatchResult(
-      document,
-      {
-        requested: 3,
-        completed: ['src/ok.ts'],
-        failed: [
-          { path: 'src/app.ts', reason: 'control unavailable' },
-          { path: 'docs/readme.md', reason: 'not confirmed' },
-        ],
-      },
-      true,
-    );
+    showBatchResult(document, 'category', true, {
+      requested: 3,
+      completed: ['src/ok.ts'],
+      failed: ['src/app.ts', 'docs/readme.md'],
+    });
 
     const snackbars = () => [
       ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
     ];
     expect(snackbars().map((item) => item.textContent)).toEqual([
-      'Marking 3 files as viewed…',
-      'Marked 1 file as viewed; 2 failed',
+      'Marking all files in category viewed…',
+      "Couldn't mark files viewed. Try again.",
     ]);
-    expect(snackbars()[1]?.title).toContain(
-      'src/app.ts: control unavailable',
-    );
+    expect(snackbars()[1]?.title).toBe('');
 
     vi.advanceTimersByTime(6_000);
     expect(snackbars().map((item) => item.textContent)).toEqual([
-      'Marked 1 file as viewed; 2 failed',
+      "Couldn't mark files viewed. Try again.",
     ]);
     vi.advanceTimersByTime(1_000);
     expect(
@@ -72,7 +111,7 @@ describe('review status UI', () => {
         <li data-diffseek-native-hidden="true" hidden>Native</li>
         <li data-diffseek="filters"></li>
       </ul>
-      <span class="diffseek-viewed-icon-anchor" data-diffseek-viewed-action="true" aria-pressed="false" aria-label="Mark as viewed" title="Mark as viewed">
+      <span class="diffseek-viewed-icon-anchor" data-diffseek-viewed-action="true" aria-pressed="false" aria-label="Mark viewed" title="Mark viewed">
         <svg class="octicon"></svg>
       </span>
     `;
@@ -96,8 +135,8 @@ describe('review status UI', () => {
   it('announces remembered filter defaults entering and leaving', () => {
     document.body.innerHTML = '<main></main>';
 
-    showRememberedFilterDefault(document, 'viewed', 'hidden');
-    showRememberedFilterDefault(document, 'generated', 'shown');
+    showRememberedFilterDefault(document, 'hidden');
+    showRememberedFilterDefault(document, 'shown');
     showHideNow(document);
     showAlwaysRead(document, true);
     showAlwaysRead(document, false);
@@ -109,11 +148,11 @@ describe('review status UI', () => {
         ),
       ].map((item) => item.textContent),
     ).toEqual([
-      'Always hide',
-      'Show now',
-      'Hide now',
-      'Always mark generated files viewed',
-      'Stop marking generated files viewed',
+      'Always hidden',
+      'Shown',
+      'Hidden',
+      'Auto-view on: generated files get marked viewed',
+      'Auto-view off',
     ]);
   });
 });

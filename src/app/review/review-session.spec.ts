@@ -44,7 +44,7 @@ describe('review session stream batching', () => {
       document
         .querySelector('#src\\/app\\.ts [data-diffseek-viewed-action]')
         ?.getAttribute('aria-label'),
-    ).toBe('Mark as not viewed');
+    ).toBe('Unmark');
 
     for (let index = 0; index < 5; index += 1) {
       const region = document.createElement('div');

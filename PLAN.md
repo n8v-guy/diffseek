@@ -106,8 +106,8 @@ after native or extension actions.
   - Keep one equal minimal inset outside the colored block.
   - Avoid JavaScript measurement and GitHub popup internals.
 - [x] Overlay every file/folder icon with an always-visible viewed action.
-  - Partial folders offer an eclipse and `Mark N remaining as viewed`.
-  - Fully viewed scopes offer `Mark as not viewed`.
+  - Partial folders offer an eclipse and a generic "mark the rest" label.
+  - Fully viewed scopes offer a generic "unmark all" label.
   - GitHub diff controls remain the source of truth.
 - [x] Replace inline batch status with a fixed top-right snackbar stack.
   - Emit starting and completion/failure notifications.
@@ -188,8 +188,8 @@ filtering without adding another filter model.
   (`−`). "auto-view" is a separate Generated-row pill, off by default.
 - [x] While "auto-view" is on, enqueue native viewed actions for generated
   files once per file. Let normal reconciliation update menu/tree badges.
-- [x] Use the cycle snackbars `Show now`, `Hide now`, and `Always hide`, plus
-  `Always mark generated files viewed` and `Stop marking generated files viewed`.
+- [x] Announce each cycle step and the auto-view pill with a snackbar that
+  describes the resulting state.
 - [x] Add a row-hover `only` pill to each item in multi-item sections; it
   excludes every sibling value without changing other facets.
 - [x] Add a title-row-hover `all` pill when a section has exclusions; it clears

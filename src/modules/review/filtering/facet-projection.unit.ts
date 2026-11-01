@@ -44,7 +44,6 @@ describe('projectFacet', () => {
 
     expect(projectFacet('owners', files, filters).get('@org/backend')).toEqual({
       counted: 2,
-      hidden: 0,
       paths: ['src/app.ts'],
       total: 2,
       viewedCount: 1,
@@ -53,7 +52,6 @@ describe('projectFacet', () => {
     });
     expect(projectFacet('groups', files, filters).get('Tests')).toEqual({
       counted: 1,
-      hidden: 1,
       paths: ['src/app.test.ts'],
       total: 1,
       viewedCount: 1,
@@ -131,7 +129,6 @@ describe('projectFacet', () => {
 
     expect(projectFacet('groups', files, filters).get('Code')).toEqual({
       counted: 3,
-      hidden: 0,
       paths: ['src/visible.ts'],
       total: 3,
       viewedCount: 2,
@@ -164,7 +161,6 @@ describe('projectFacet', () => {
 
     expect(projectFacet('groups', files, filters).get('Code')).toMatchObject({
       counted: 2,
-      hidden: 2,
       paths: ['src/hidden-viewed.ts', 'src/also-viewed.ts'],
       viewedCount: 2,
       viewedState: 'filled',
@@ -199,7 +195,6 @@ describe('projectFacet', () => {
 
     expect(projectFacet('generated', files, filters).get('true')).toEqual({
       counted: 3,
-      hidden: 2,
       paths: ['src/gen-unread.ts', 'src/gen-other.ts'],
       total: 3,
       viewedCount: 1,
@@ -208,7 +203,6 @@ describe('projectFacet', () => {
     });
     expect(projectFacet('owners', files, filters).get('@org')).toMatchObject({
       counted: 2,
-      hidden: 1,
       paths: ['src/gen-unread.ts'],
       viewedCount: 1,
       viewedState: 'partial',

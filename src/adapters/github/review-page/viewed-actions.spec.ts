@@ -52,12 +52,7 @@ describe('viewed actions', () => {
 
     expect(clicks).toHaveBeenCalledOnce();
     expect(result.completed).toEqual([]);
-    expect(result.failed).toEqual([
-      {
-        path: 'src/app.ts',
-        reason: 'GitHub did not confirm viewed state',
-      },
-    ]);
+    expect(result.failed).toEqual(['src/app.ts']);
   });
 
   it('continues with supported files after a viewed control is unavailable', async () => {
@@ -82,12 +77,7 @@ describe('viewed actions', () => {
     expect(result).toEqual({
       requested: 2,
       completed: ['src/new.ts'],
-      failed: [
-        {
-          path: 'src/app.ts',
-          reason: 'Viewed control is unavailable',
-        },
-      ],
+      failed: ['src/app.ts'],
     });
   });
 
@@ -159,8 +149,8 @@ describe('viewed actions', () => {
     const fileAction = document.querySelector<HTMLButtonElement>(
       '#src\\/app\\.ts [data-diffseek-viewed-action="true"]',
     );
-    expect(fileAction?.title).toBe('Mark as viewed');
-    expect(fileAction?.getAttribute('aria-label')).toBe('Mark as viewed');
+    expect(fileAction?.title).toBe('Mark viewed');
+    expect(fileAction?.getAttribute('aria-label')).toBe('Mark viewed');
     expect(fileAction?.getAttribute('aria-pressed')).toBe('false');
     // CSS-only: the toggle is GitHub's own icon wrapper; nothing is inserted.
     expect(document.querySelectorAll('[role="tree"] button')).toHaveLength(0);
@@ -170,21 +160,21 @@ describe('viewed actions', () => {
     const folder = document.querySelector<HTMLElement>(
       '#src [data-diffseek-viewed-action="true"]',
     );
-    expect(folder?.title).toBe('Mark 3 remaining as viewed (0 of 3 viewed)');
+    expect(folder?.title).toBe('Mark all viewed');
     expect(folder?.getAttribute('aria-pressed')).toBe('false');
     expect(onAction).toHaveBeenCalledWith(
+      'folder',
       true,
       ['src/app.ts', 'src/new.ts', 'src/generated.ts'],
-      'Marked 3 visible files in src viewed',
     );
 
     const viewedFile = document.querySelector<HTMLButtonElement>(
       '#docs\\/readme\\.md [data-diffseek-viewed-action="true"]',
     );
-    expect(viewedFile?.title).toBe('Mark as not viewed');
+    expect(viewedFile?.title).toBe('Unmark');
     expect(viewedFile?.getAttribute('aria-pressed')).toBe('true');
     viewedFile?.click();
-    expect(onAction).toHaveBeenLastCalledWith(false, ['docs/readme.md']);
+    expect(onAction).toHaveBeenLastCalledWith('file', false, ['docs/readme.md']);
   });
 
   it('uses an eclipse for a partly viewed folder and skips hidden files', () => {
@@ -217,12 +207,12 @@ describe('viewed actions', () => {
     expect(folder?.getAttribute('aria-pressed')).toBe('mixed');
     expect(folder?.classList.contains('diffseek-viewed-partial')).toBe(true);
     expect(folder?.getAttribute('aria-label')).toBe(
-      'Mark 1 remaining as viewed (1 of 2 viewed)',
+      'Mark the rest viewed',
     );
     expect(onAction).toHaveBeenCalledWith(
+      'folder',
       true,
       ['src/new.ts'],
-      'Marked 1 visible file in src viewed',
     );
     expect(
       document.querySelector('#src\\/generated\\.ts [data-diffseek-viewed-action]'),
@@ -230,7 +220,7 @@ describe('viewed actions', () => {
     expect(
       document.querySelector('#src\\/app\\.ts [data-diffseek-viewed-action]')
         ?.getAttribute('aria-label'),
-    ).toBe('Mark as not viewed');
+    ).toBe('Unmark');
   });
 
   it('clears viewed state for a filled folder', () => {
@@ -256,9 +246,9 @@ describe('viewed actions', () => {
     folder?.click();
 
     expect(onAction).toHaveBeenCalledWith(
+      'folder',
       false,
       ['src/app.ts', 'src/new.ts', 'src/generated.ts'],
-      'Unmarked 3 visible files in src',
     );
   });
 
@@ -283,9 +273,9 @@ describe('viewed actions', () => {
 
     expect(reconciled).toBe(overlay);
     expect(reconciled?.getAttribute('aria-pressed')).toBe('true');
-    expect(reconciled?.title).toBe('Mark as not viewed');
+    expect(reconciled?.title).toBe('Unmark');
     expect(firstAction).not.toHaveBeenCalled();
-    expect(nextAction).toHaveBeenCalledWith(false, ['src/app.ts']);
+    expect(nextAction).toHaveBeenCalledWith('file', false, ['src/app.ts']);
   });
 
   it('ignores clicks outside the toggle hit area and lets GitHub handle them', () => {

@@ -13,7 +13,6 @@ import {
 
 export type FacetProjection = {
   counted: number;
-  hidden: number;
   paths: string[];
   total: number;
   viewedCount: number;
@@ -32,8 +31,6 @@ export function projectFacet(
       total: number;
       visible: number;
       bucket: CountBucket;
-      hiddenUnread: number;
-      hiddenCounted: number;
     }
   >();
   for (const file of files) {
@@ -49,16 +46,10 @@ export function projectFacet(
         total: 0,
         visible: 0,
         bucket: emptyCountBucket(),
-        hiddenUnread: 0,
-        hiddenCounted: 0,
       };
       row.total += 1;
       if (visible) row.visible += 1;
       if (counted) addCountedFile(row.bucket, file);
-      if (counted && !visible) {
-        row.hiddenCounted += 1;
-        row.hiddenUnread += file.viewed ? 0 : 1;
-      }
       rows.set(value, row);
     }
   }
@@ -70,7 +61,6 @@ export function projectFacet(
         value,
         {
           counted: row.bucket.counted,
-          hidden: viewedState === 'filled' ? row.hiddenCounted : row.hiddenUnread,
           paths: bucketActionPaths(row.bucket),
           total: row.total,
           viewedCount: row.bucket.viewed,
