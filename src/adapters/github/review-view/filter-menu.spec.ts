@@ -61,6 +61,25 @@ const files: FileRecord[] = [
 
 const filters = (): FilterState => emptyFacetExclusions();
 
+const fallbackLabels: FileRecord['labels'] = [
+  { facet: 'groups', value: 'No groups' },
+  { facet: 'owners', value: 'Unmapped' },
+  { facet: 'languages', value: 'No extension' },
+  { facet: 'generated', value: 'false' },
+  { facet: 'statuses', value: 'modified' },
+];
+
+function withOwners(first: string, second: string): FileRecord[] {
+  return files.map((file, index) => ({
+    ...file,
+    labels: file.labels.map((label) =>
+      label.facet === 'owners' && label.value !== 'Unmapped'
+        ? { ...label, value: index === 0 ? first : second }
+        : label,
+    ),
+  }));
+}
+
 function menu(): HTMLElement {
   document.body.innerHTML = `
     <ul role="menu" aria-label="Filter options">
@@ -339,21 +358,8 @@ describe('mountFilterMenu', () => {
 
   it('removes a shared owner prefix from two or more mapped owners', () => {
     const element = menu();
-    const ownedFiles = files.map((file, index) => ({
-      ...file,
-      labels: file.labels.map((label) =>
-        label.facet === 'owners' && label.value !== 'Unmapped'
-          ? {
-              ...label,
-              value:
-                index === 0 ? '@team/backend' : '@team/platform',
-            }
-          : label,
-      ),
-    }));
-
     mountFilterMenu(element, {
-      files: ownedFiles,
+      files: withOwners('@team/backend', '@team/platform'),
       filters: filters(),
       onChange: vi.fn(),
     });
@@ -391,21 +397,8 @@ describe('mountFilterMenu', () => {
 
   it('keeps owner prefixes when mapped owners belong to different organizations', () => {
     const element = menu();
-    const ownedFiles = files.map((file, index) => ({
-      ...file,
-      labels: file.labels.map((label) =>
-        label.facet === 'owners' && label.value !== 'Unmapped'
-          ? {
-              ...label,
-              value:
-                index === 0 ? '@team/backend' : '@other/platform',
-            }
-          : label,
-      ),
-    }));
-
     mountFilterMenu(element, {
-      files: ownedFiles,
+      files: withOwners('@team/backend', '@other/platform'),
       filters: filters(),
       onChange: vi.fn(),
     });
@@ -860,13 +853,7 @@ describe('filter menu fallback sections', () => {
     const element = menu();
     const fallbackOnly: FileRecord = {
       ...files[2]!,
-      labels: [
-        { facet: 'groups', value: 'No groups' },
-        { facet: 'owners', value: 'Unmapped' },
-        { facet: 'languages', value: 'No extension' },
-        { facet: 'generated', value: 'false' },
-        { facet: 'statuses', value: 'modified' },
-      ],
+      labels: fallbackLabels,
     };
 
     mountFilterMenu(element, {
@@ -890,13 +877,7 @@ describe('filter menu fallback sections', () => {
     const typed = files[0]!;
     const untyped: FileRecord = {
       ...files[2]!,
-      labels: [
-        { facet: 'groups', value: 'No groups' },
-        { facet: 'owners', value: 'Unmapped' },
-        { facet: 'languages', value: 'No extension' },
-        { facet: 'generated', value: 'false' },
-        { facet: 'statuses', value: 'modified' },
-      ],
+      labels: fallbackLabels,
     };
 
     mountFilterMenu(element, {

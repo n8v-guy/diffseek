@@ -57,13 +57,12 @@ export async function sourcesSplit(page: Page): Promise<SourcesCapture> {
   // label column.
   const sourceZoom = 1.35;
   const sourceClip = { x: top.x - 4, y: top.y - 10, width: outWidth / sourceZoom, height: outHeight / sourceZoom, zoom: sourceZoom };
-  const lines: Record<SourceKey, Rect & { text: string[] }> = {
+  const lines: Record<SourceKey, Rect> = {
     payments: await lineRows(page, owners, [10, 11]),
     generated: await lineRows(page, attributes, [4, 5, 6, 7]),
     tests: await lineRows(page, attributes, [20, 21, 22, 23]),
     typescript: await lineRows(page, attributes, [26, 27]),
   };
-  console.log('sources:', JSON.stringify(Object.fromEntries(Object.entries(lines).map(([key, value]) => [key, value.text]))));
   // Highlight the code text, not the full-width row. compose() trims the
   // box where it would run under its label.
   const source = {
@@ -117,13 +116,12 @@ async function captureMenu(page: Page): Promise<Omit<SourcesCapture, 'sourceShot
     w: firstFormat.w,
     h: Math.max(...formatBoxes.map((item) => item.y + item.h)) - otherTop,
   };
-  console.log('other formats:', JSON.stringify(other));
   const menuShot = await shoot(page, menuClip);
   return { menuShot, menuLeft, menuCrop, menuFrame, menuRows: { ...found, other } };
 }
 
-/** Code-text box and text of the given line numbers in one compare file. */
-function lineRows(page: Page, path: string, numbers: number[]): Promise<Rect & { text: string[] }> {
+/** Code-text box of the given line numbers in one compare file. */
+function lineRows(page: Page, path: string, numbers: number[]): Promise<Rect> {
   return page.evaluate(({ selector, numbers, cellSelector }) => {
     const file = document.querySelector(selector);
     const rows = [...(file?.querySelectorAll('tr') ?? [])].filter((row) =>
@@ -138,10 +136,9 @@ function lineRows(page: Page, path: string, numbers: number[]): Promise<Rect & {
       const cell = row.getBoundingClientRect();
       return { left: text.left - 4, right: text.right + 4, top: cell.top, bottom: cell.bottom };
     });
-    const text = rows.map((row) => row.innerText.replace(/\s+/g, ' ').trim());
     const x = Math.min(...boxes.map((box) => box.left));
     const y = Math.min(...boxes.map((box) => box.top));
-    return { x, y, width: Math.max(...boxes.map((box) => box.right)) - x, height: Math.max(...boxes.map((box) => box.bottom)) - y, text };
+    return { x, y, width: Math.max(...boxes.map((box) => box.right)) - x, height: Math.max(...boxes.map((box) => box.bottom)) - y };
   }, { selector: entrySelector(path), numbers, cellSelector: lineCell });
 }
 

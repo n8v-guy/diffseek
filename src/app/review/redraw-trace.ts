@@ -38,21 +38,27 @@ function emptyLedger(): SettleLedger {
   return { open: new Map(), readded: 0, netLoss: 0 };
 }
 
+function countsFrom(trace?: RedrawCounts): RedrawCounts {
+  return {
+    reconciles: trace?.reconciles ?? 0,
+    domMutations: trace?.domMutations ?? 0,
+    treeRebuilds: trace?.treeRebuilds ?? 0,
+    panelRebuilds: trace?.panelRebuilds ?? 0,
+    treeRowsRemoved: trace?.treeRowsRemoved ?? 0,
+    panelsRemoved: trace?.panelsRemoved ?? 0,
+    treeRowsReadded: trace?.treeRowsReadded ?? 0,
+    panelsReadded: trace?.panelsReadded ?? 0,
+    treeNetLoss: trace?.treeNetLoss ?? 0,
+    panelNetLoss: trace?.panelNetLoss ?? 0,
+  };
+}
+
 const traces = new WeakMap<Document, Trace>();
 
 export function installRedrawTrace(root: Document): void {
   if (traces.has(root)) return;
   const trace: Trace = {
-    reconciles: 0,
-    domMutations: 0,
-    treeRebuilds: 0,
-    panelRebuilds: 0,
-    treeRowsRemoved: 0,
-    panelsRemoved: 0,
-    treeRowsReadded: 0,
-    panelsReadded: 0,
-    treeNetLoss: 0,
-    panelNetLoss: 0,
+    ...countsFrom(),
     depth: 0,
     pendingTree: new Map(),
     pendingPanels: new Map(),
@@ -80,16 +86,7 @@ export function installRedrawTrace(root: Document): void {
 export function resetRedrawTrace(root: Document): void {
   const trace = traces.get(root);
   if (!trace) return;
-  trace.reconciles = 0;
-  trace.domMutations = 0;
-  trace.treeRebuilds = 0;
-  trace.panelRebuilds = 0;
-  trace.treeRowsRemoved = 0;
-  trace.panelsRemoved = 0;
-  trace.treeRowsReadded = 0;
-  trace.panelsReadded = 0;
-  trace.treeNetLoss = 0;
-  trace.panelNetLoss = 0;
+  Object.assign(trace, countsFrom());
   trace.pendingTree.clear();
   trace.pendingPanels.clear();
   trace.treeSettle = emptyLedger();
@@ -133,18 +130,7 @@ export function readRedrawCounts(root: Document): RedrawCounts {
     settleTrace(trace, Date.now());
     publish(root, trace);
   }
-  return {
-    reconciles: trace?.reconciles ?? 0,
-    domMutations: trace?.domMutations ?? 0,
-    treeRebuilds: trace?.treeRebuilds ?? 0,
-    panelRebuilds: trace?.panelRebuilds ?? 0,
-    treeRowsRemoved: trace?.treeRowsRemoved ?? 0,
-    panelsRemoved: trace?.panelsRemoved ?? 0,
-    treeRowsReadded: trace?.treeRowsReadded ?? 0,
-    panelsReadded: trace?.panelsReadded ?? 0,
-    treeNetLoss: trace?.treeNetLoss ?? 0,
-    panelNetLoss: trace?.panelNetLoss ?? 0,
-  };
+  return countsFrom(trace);
 }
 
 function absorb(trace: Trace, records: MutationRecord[]): boolean {

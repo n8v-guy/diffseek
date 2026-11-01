@@ -1,13 +1,28 @@
 import { applyCheckedState } from './filter-default-state';
 import {
   type FilterMenuOptions,
+  type MenuRowModel,
   menuRowModels,
 } from './filter-menu-model';
 import { hasTransientExclusions } from './filter-reset';
 import { onlyFocusApplied } from './filter-shortcuts';
 import { configureViewedAction } from './menu-viewed-action';
 
-const filtersRootSelector = '[data-diffseek="filters"]';
+export const filtersRootSelector = '[data-diffseek="filters"]';
+
+export function syncMenuItemDisabled(
+  button: HTMLButtonElement,
+  disabled: boolean,
+): void {
+  button.disabled = disabled;
+  if (disabled) {
+    button.setAttribute('aria-disabled', 'true');
+    button.setAttribute('aria-busy', 'true');
+    return;
+  }
+  button.removeAttribute('aria-disabled');
+  button.removeAttribute('aria-busy');
+}
 
 export function patchFilterMenu(
   menu: HTMLElement,
@@ -15,7 +30,7 @@ export function patchFilterMenu(
 ): boolean {
   const root = menu.querySelector<HTMLElement>(filtersRootSelector);
   if (!root) return false;
-  const rows = menuRowModels(options);
+  const rows = menuRowModels(options).flatMap((section) => section.rows);
   const buttons = [
     ...root.querySelectorAll<HTMLButtonElement>(
       '[data-filter-kind][data-filter-value]',
@@ -56,7 +71,7 @@ export function patchFilterMenu(
 
 function patchAlwaysRead(
   rowElement: HTMLElement,
-  row: ReturnType<typeof menuRowModels>[number],
+  row: MenuRowModel,
 ): boolean {
   const alwaysRead = rowElement.querySelector<HTMLButtonElement>(
     '[data-diffseek-always-read]',
@@ -79,7 +94,7 @@ function patchAlwaysRead(
 
 function patchOnly(
   rowElement: HTMLElement,
-  row: ReturnType<typeof menuRowModels>[number],
+  row: MenuRowModel,
 ): boolean {
   const only = rowElement.querySelector<HTMLButtonElement>('[data-filter-only]');
   const values = row.onlyValues;
@@ -94,7 +109,7 @@ function patchOnly(
 
 function patchRow(
   button: HTMLButtonElement | undefined,
-  row: ReturnType<typeof menuRowModels>[number],
+  row: MenuRowModel,
 ): boolean {
   if (!button) return false;
   const rowElement = button.closest('.diffseek-menu-row');
@@ -102,14 +117,7 @@ function patchRow(
   applyCheckedState(button, row);
   if (!patchAlwaysRead(rowElement, row)) return false;
   if (!patchOnly(rowElement, row)) return false;
-  button.disabled = row.disabled === true;
-  if (row.disabled) {
-    button.setAttribute('aria-disabled', 'true');
-    button.setAttribute('aria-busy', 'true');
-  } else {
-    button.removeAttribute('aria-disabled');
-    button.removeAttribute('aria-busy');
-  }
+  syncMenuItemDisabled(button, row.disabled === true);
   const onViewed = row.onViewed;
   const counter = rowElement.querySelector<HTMLElement>('.diffseek-menu-count');
   const viewedAction = rowElement.querySelector<HTMLButtonElement>(

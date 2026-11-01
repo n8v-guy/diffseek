@@ -4,6 +4,7 @@
 
 **Decision:** Observe GitHub's meaningful page structure and imitate user
 clicks. Do not hook GitHub's internal state, requests, or undocumented APIs.
+Classic `/files` pages redirect to the modern changes view before DiffSeek starts.
 
 **Why:** The extension stays compatible with the user's session,
 understandable, and fail-open. **Cost:** Markup drift needs recorded page
@@ -27,6 +28,7 @@ cache and never replaces a settled head result; if the head read fails, the
 review takes the default-branch result. Failures are not stored. A failed read
 is retried, one at a time, when the menu opens or the tree changes, never on a
 timer. A missing file keeps the previous level.
+On a pull-request head, CODEOWNERS is probed at the last default-branch location, then the others.
 
 **Why:** Revisits skip reloading metadata files while unknown pull requests
 still start from their head, and a cold review still picks up rules on a later

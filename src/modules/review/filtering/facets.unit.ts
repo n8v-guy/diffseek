@@ -11,7 +11,9 @@ import {
 const labels: FileLabel[] = [
   { facet: 'groups', value: 'Tests' },
   { facet: 'owners', value: '@team' },
+  { facet: 'owners', value: '@other' },
   { facet: 'statuses', value: 'added' },
+  { facet: 'viewed', value: 'true' },
 ];
 
 describe('filter facets', () => {
@@ -33,6 +35,18 @@ describe('filter facets', () => {
     expect(matchesFacets(labels, excluded)).toBe(true);
   });
 
+  it('hides a file only when every value of a facet is excluded', () => {
+    const excluded = emptyFacetExclusions();
+    excluded.set('owners', new Set(['@team']));
+    expect(matchesFacets(labels, excluded)).toBe(true);
+    excluded.set('owners', new Set(['@team', '@other']));
+    expect(matchesFacets(labels, excluded)).toBe(false);
+
+    const viewed = emptyFacetExclusions();
+    viewed.set('viewed', new Set(['true']));
+    expect(matchesFacets(labels, viewed)).toBe(false);
+  });
+
   it('retains selected choices that are not currently observed', () => {
     const selected = emptyFacetExclusions();
     selected.set('groups', new Set(['Unavailable']));
@@ -49,8 +63,8 @@ describe('filter facets', () => {
       [
         { facet: 'languages', value: 'No extension' },
         { facet: 'languages', value: 'zsh' },
-        { facet: 'languages', value: 'typescript', mapped: true },
-        { facet: 'languages', value: 'CSS', mapped: true },
+        { facet: 'languages', value: 'typescript', fromLinguistLanguage: true },
+        { facet: 'languages', value: 'CSS', fromLinguistLanguage: true },
         { facet: 'languages', value: 'bash' },
         { facet: 'languages', value: 'YAML' },
         { facet: 'owners', value: 'Unmapped' },

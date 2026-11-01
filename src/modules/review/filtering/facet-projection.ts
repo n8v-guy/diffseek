@@ -1,7 +1,7 @@
 import type { LabelFacet } from '../classification/labels';
 import type { FileRecord, FilterState } from '../model/file';
 
-import { matchesFilters } from './filters';
+import { matchesFacets } from './facets';
 import {
   addCountedFile,
   bucketActionPaths,
@@ -39,7 +39,7 @@ export function projectFacet(
         .filter((label) => label.facet === facet)
         .map((label) => label.value),
     );
-    const visible = matchesFilters(file, filters);
+    const visible = matchesFacets(file.labels, filters);
     const counted = file.capabilities.viewed;
     for (const value of values) {
       const row = rows.get(value) ?? {

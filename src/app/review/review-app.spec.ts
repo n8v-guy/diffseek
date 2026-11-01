@@ -20,6 +20,35 @@ const inertMetadata = {
     fallback: typeof emptyMetadata,
   ) => fallback,
 };
+const changesPath = '/octo/repo/pull/1/changes';
+
+function metadataSource(attributes: string) {
+  const metadata = { ...emptyMetadata, attributes };
+  return {
+    readImmediate: async () => metadata,
+    refreshDefault: async () => ({ metadata, changed: false }),
+  };
+}
+
+function reviewApp(
+  extra: Partial<Parameters<typeof startReviewApp>[0]> = {},
+  pathname: () => string = () => changesPath,
+) {
+  return startReviewApp({
+    ...inertMetadata,
+    root: document,
+    pathname,
+    ...extra,
+  });
+}
+
+function marked(completed: string[]) {
+  return vi.fn(async () => ({
+    requested: completed.length,
+    completed,
+    failed: [] as string[],
+  }));
+}
 
 function installNativeBehavior(): void {
   for (const button of document.querySelectorAll<HTMLButtonElement>(
@@ -220,9 +249,7 @@ describe('review app lifecycle', () => {
           resolvePull = resolve;
         }),
     );
-    const app = await startReviewApp({
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'src/** group=cached',
@@ -269,9 +296,7 @@ describe('review app lifecycle', () => {
       codeowners: '',
       attributes: 'src/** group=pull',
     });
-    const app = await startReviewApp({
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'src/** group=cached',
@@ -301,9 +326,7 @@ describe('review app lifecycle', () => {
       codeowners: '',
       attributes: 'src/** group=pull',
     });
-    const app = await startReviewApp({
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'src/** group=cached',
@@ -334,9 +357,7 @@ describe('review app lifecycle', () => {
   it('adopts default-branch attributes when the pull-head read keeps failing', async () => {
     await fakeBrowser.storage.local.clear();
     openMenu();
-    const app = await startReviewApp({
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'docs/** group=Docs',
@@ -375,10 +396,7 @@ describe('review app lifecycle', () => {
       },
       changed: false,
     });
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '*.ts @cached',
         attributes: 'src/** group=Code',
@@ -400,21 +418,8 @@ describe('review app lifecycle', () => {
   });
 
   it('reconciles menu recreation, filtering, and a replaced tree', async () => {
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/** group=Code',
-      }),
-      refreshDefault: async () => ({
-        metadata: {
-          codeowners: '',
-          attributes: 'src/** group=Code',
-        },
-        changed: false,
-      }),
+    const app = await reviewApp({
+      ...metadataSource('src/** group=Code'),
     });
 
     await nextReconcile(openMenu);
@@ -452,18 +457,8 @@ describe('review app lifecycle', () => {
   });
 
   it('re-collapses a filtered file after GitHub expands it', async () => {
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/** group=Code',
-      }),
-      refreshDefault: async () => ({
-        metadata: { codeowners: '', attributes: 'src/** group=Code' },
-        changed: false,
-      }),
+    const app = await reviewApp({
+      ...metadataSource('src/** group=Code'),
     });
     openMenu();
     const codeFilter = '[data-filter-kind="groups"][data-filter-value="Code"]';
@@ -500,14 +495,8 @@ describe('review app lifecycle', () => {
     folder.append(group);
     tree?.prepend(folder);
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/** group=Code',
-      }),
+    const app = await reviewApp({
+      ...metadataSource('src/** group=Code'),
     });
 
     await nextReconcile(() => {
@@ -569,9 +558,7 @@ describe('review app lifecycle', () => {
   it('cleans up on partial navigation and extension invalidation', async () => {
     let path = '/octo/repo/pull/1/changes';
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
+    const app = await reviewApp({
       pathname: () => path,
     });
 
@@ -591,9 +578,7 @@ describe('review app lifecycle', () => {
   it('activates after partial navigation into a review', async () => {
     let path = '/octo/repo/issues/1';
     document.body.innerHTML = '<main>Issue</main>';
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
+    const app = await reviewApp({
       pathname: () => path,
     });
 
@@ -623,9 +608,7 @@ describe('metadata refresh', () => {
     const readPull = vi.fn()
       .mockReturnValueOnce(failed)
       .mockResolvedValueOnce(loaded);
-    const app = await startReviewApp({
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => immediate,
       refreshDefault: async () => ({ metadata: immediate, changed: false }),
       readPull: signalled(readPull),
@@ -652,9 +635,7 @@ describe('metadata refresh', () => {
     const readPull = vi.fn()
       .mockReturnValueOnce(failed)
       .mockResolvedValueOnce(loaded);
-    const app = await startReviewApp({
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => immediate,
       refreshDefault: async () => ({ metadata: immediate, changed: false }),
       readPull: signalled(readPull),
@@ -684,9 +665,7 @@ describe('metadata refresh', () => {
     const readPull = vi.fn(
       () => new Promise<typeof loaded>((resolve) => { resolvePull = resolve; }),
     );
-    const app = await startReviewApp({
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => immediate,
       refreshDefault: async () => ({ metadata: immediate, changed: false }),
       readPull: signalled(readPull),
@@ -711,9 +690,7 @@ describe('metadata refresh', () => {
     const readPull = vi.fn(async () => {
       throw new Error('offline');
     });
-    const app = await startReviewApp({
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => ({ codeowners: '', attributes: 'src/** group=FromCache' }),
       refreshDefault: async () => ({
         metadata: { codeowners: '', attributes: 'src/** group=FromCache' },
@@ -734,10 +711,7 @@ describe('metadata refresh', () => {
 describe('review app reuse invariants', () => {
   it('keeps classifications after a structure-key rescan', async () => {
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'src/generated.ts linguist-generated\nsrc/** group=Code',
@@ -782,17 +756,11 @@ describe('review app reuse invariants', () => {
       },
     });
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       markFiles: vi.fn(async () => {
         throw new Error('native mark failed');
       }),
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/generated.ts linguist-generated',
-      }),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     await until(() =>
@@ -826,10 +794,7 @@ describe('review app reuse invariants', () => {
 
   it('repairs an owned menu after GitHub replaces its children', async () => {
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
     });
 
     await until(() =>
@@ -864,20 +829,10 @@ describe('fresh filter defaults', () => {
   it('hides generated and viewed files and turns auto-view on for a fresh install', async () => {
     await fakeBrowser.storage.local.clear();
     openMenu();
-    const markFiles = vi.fn(async () => ({
-      requested: 1,
-      completed: ['src/generated.ts'],
-      failed: [],
-    }));
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const markFiles = marked(['src/generated.ts']);
+    const app = await reviewApp({
       markFiles: signalled(markFiles),
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/generated.ts linguist-generated',
-      }),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     await until(() =>
@@ -916,20 +871,10 @@ describe('fresh filter defaults', () => {
       'diffseek:filter-defaults': { hidden: ['viewed', 'generated'], viewed: [] },
     });
     openMenu();
-    const markFiles = vi.fn(async () => ({
-      requested: 1,
-      completed: ['src/generated.ts'],
-      failed: [],
-    }));
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const markFiles = marked(['src/generated.ts']);
+    const app = await reviewApp({
       markFiles: signalled(markFiles),
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/generated.ts linguist-generated',
-      }),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     const viewed = () =>
@@ -996,14 +941,8 @@ describe('fresh filter defaults', () => {
       'diffseek:filter-defaults': { hidden: ['viewed'], viewed: [] },
     });
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/generated.ts linguist-generated',
-      }),
+    const app = await reviewApp({
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     await until(() =>
@@ -1055,15 +994,9 @@ describe('review app interactions', () => {
       return { requested: paths.length, completed: paths, failed: [] };
     });
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       markFiles: signalled(markFiles),
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/generated.ts linguist-generated',
-      }),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     await until(() =>
@@ -1138,12 +1071,9 @@ describe('review app interactions', () => {
       return { requested: paths.length, completed: paths, failed: [] };
     });
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       markFiles: signalled(markFiles),
-      readImmediate: async () => ({ codeowners: '', attributes: 'src/generated.ts linguist-generated' }),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
     const alwaysRead = () => document.querySelector<HTMLButtonElement>('[data-diffseek-always-read]');
     await until(() => expect(alwaysRead()).not.toBeNull());
@@ -1173,10 +1103,7 @@ describe('review app interactions', () => {
       'diffseek:filter-defaults': { hidden: ['viewed'] },
     });
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
     });
 
     const viewed = document.querySelector<HTMLButtonElement>(
@@ -1246,10 +1173,7 @@ describe('review app interactions', () => {
       completed: [],
       failed: ['src/app.ts'],
     });
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
       markFiles: signalled(markFiles),
     });
 
@@ -1288,9 +1212,7 @@ describe('review app interactions', () => {
           finishBatch = resolve;
         }),
     );
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
+    const app = await reviewApp({
       pathname: () => path,
       markFiles: signalled(markFiles),
     });
@@ -1322,21 +1244,9 @@ describe('review app interactions', () => {
   it('starts a new pull request with no inherited filter selection', async () => {
     let path = '/octo/repo/pull/1/changes';
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
+    const app = await reviewApp({
       pathname: () => path,
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/** group=Code',
-      }),
-      refreshDefault: async () => ({
-        metadata: {
-          codeowners: '',
-          attributes: 'src/** group=Code',
-        },
-        changed: false,
-      }),
+      ...metadataSource('src/** group=Code'),
     });
     document
       .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
@@ -1359,21 +1269,8 @@ describe('review app interactions', () => {
 
   it('rolls back presentation when GitHub contracts disappear', async () => {
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/** group=Code',
-      }),
-      refreshDefault: async () => ({
-        metadata: {
-          codeowners: '',
-          attributes: 'src/** group=Code',
-        },
-        changed: false,
-      }),
+    const app = await reviewApp({
+      ...metadataSource('src/** group=Code'),
     });
     document
       .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
@@ -1399,10 +1296,7 @@ describe('review app interactions', () => {
   });
 
   it('reconciles a native viewed state changed only through attributes', async () => {
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
     });
     const viewed = document.querySelector<HTMLButtonElement>(
       '#diff-app button[aria-label="Not Viewed"]',
@@ -1422,21 +1316,8 @@ describe('review app interactions', () => {
 
   it('keeps attribute-generated labels after GitHub loads the diff', async () => {
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
-      readImmediate: async () => ({
-        codeowners: '',
-        attributes: 'src/generated.ts linguist-generated',
-      }),
-      refreshDefault: async () => ({
-        metadata: {
-          codeowners: '',
-          attributes: 'src/generated.ts linguist-generated',
-        },
-        changed: false,
-      }),
+    const app = await reviewApp({
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
     document
       .querySelector<HTMLButtonElement>(
@@ -1466,10 +1347,7 @@ describe('review app interactions', () => {
 
   it('retains observed native owners across diff hydration', async () => {
     openMenu();
-    const app = await startReviewApp({
-      ...inertMetadata,
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
+    const app = await reviewApp({
     });
     document
       .querySelector<HTMLButtonElement>(

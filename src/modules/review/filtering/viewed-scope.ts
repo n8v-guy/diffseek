@@ -1,7 +1,7 @@
 import type { LabelFacet } from '../classification/labels';
 import type { FileRecord, FilterState } from '../model/file';
 
-import { matchesFilters } from './filters';
+import { matchesFacets } from './facets';
 
 export type ViewedMark = 'empty' | 'partial' | 'filled';
 
@@ -36,17 +36,13 @@ export function bucketActionPaths(bucket: CountBucket): string[] {
     : bucket.unreadPaths;
 }
 
-/**
- * Files that pass every active filter except the Viewed filter's hiding.
- * A file GitHub cannot mark is omitted so the circle matches the click.
- */
 /** Tree folders: markable files that pass every filter except Viewed's hiding. */
 export function includeCountedFiles(
   filters: FilterState,
 ): (file: FileRecord) => boolean {
   const counted = filtersIgnoringHides(filters, ['viewed']);
   return (file) =>
-    file.capabilities.viewed && matchesFilters(file, counted);
+    file.capabilities.viewed && matchesFacets(file.labels, counted);
 }
 
 export function fileViewedLabel(viewed: boolean): string {

@@ -1,3 +1,5 @@
+import { isRecord } from '@diffseek/browser/record';
+
 export type PullHeadRequest = {
   repo: string;
   pull: number;
@@ -51,8 +53,4 @@ export async function fetchPullHead(
   const oid = commits.at(-1)?.[1];
   if (!oid) throw new Error('Pull head commit is unavailable');
   return oid;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
 }

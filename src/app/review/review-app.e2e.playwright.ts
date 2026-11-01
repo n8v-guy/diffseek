@@ -1,16 +1,31 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { chromium, expect, test, type BrowserContext } from '@playwright/test';
+import {
+  chromium,
+  expect,
+  test,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 
 let context: BrowserContext;
+let fixtureSource = '';
 const fixturePath = resolve(
   'src/adapters/github/review-page/fixtures/github-pr.html',
 );
 const markAll = 'Mark all viewed';
 const markRest = 'Mark the rest viewed';
+const attributesBody = [
+  'src/** group=Code',
+  'docs/** group=Docs',
+  '*.ts linguist-language=TypeScript',
+  'src/generated.ts linguist-generated',
+].join('\n');
+const filterDefaultsKey = 'diffseek:filter-defaults';
 
 test.beforeAll(async () => {
+  fixtureSource = await readFile(fixturePath, 'utf8');
   const extension = resolve('.output/chrome-mv3');
   context = await chromium.launchPersistentContext('', {
     channel: 'chromium',
@@ -34,12 +49,7 @@ test.beforeAll(async () => {
     if (url.endsWith('/.gitattributes')) {
       await route.fulfill({
         contentType: 'text/plain',
-        body: [
-          'src/** group=Code',
-          'docs/** group=Docs',
-          '*.ts linguist-language=TypeScript',
-          'src/generated.ts linguist-generated',
-        ].join('\n'),
+        body: attributesBody,
       });
     } else if (url.endsWith('/CODEOWNERS') && !url.includes('/.github/')) {
       await route.fulfill({
@@ -55,13 +65,7 @@ test.beforeAll(async () => {
 });
 
 test.beforeEach(async () => {
-  const worker = await extensionWorker();
-  await worker.evaluate(() => {
-    const extension = globalThis as unknown as {
-      chrome: { storage: { local: { clear: () => Promise<void> } } };
-    };
-    return extension.chrome.storage.local.clear();
-  });
+  await clearExtensionStorage();
   await writeFilterDefaults({ hidden: [], viewed: [] });
 });
 
@@ -75,28 +79,17 @@ test.afterAll(async () => {
 
 test('replaces the classic review route with the modern experience', async () => {
   const page = await context.newPage();
-  const fixture = await readFile(
-    fixturePath,
-    'utf8',
-  );
-  await page.route(
+  for (const url of [
     'https://github.com/octo/repo/pull/8/files',
-    async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: instrument(fixture),
-      });
-    },
-  );
-  await page.route(
     'https://github.com/octo/repo/pull/8/changes?new_files_changed=true',
-    async (route) => {
+  ]) {
+    await page.route(url, async (route) => {
       await route.fulfill({
         contentType: 'text/html',
-        body: instrument(fixture),
+        body: instrument(fixtureSource),
       });
-    },
-  );
+    });
+  }
 
   await page.goto('https://github.com/octo/repo/pull/8/files');
 
@@ -107,21 +100,7 @@ test('replaces the classic review route with the modern experience', async () =>
 });
 
 test('filters, updates folder viewed state, and recovers after a rerender', async () => {
-  const page = await context.newPage();
-  const fixture = await readFile(
-    fixturePath,
-    'utf8',
-  );
-  await page.route(
-    'https://github.com/octo/repo/pull/1/changes',
-    async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: instrument(fixture),
-      });
-    },
-  );
-  await page.goto('https://github.com/octo/repo/pull/1/changes');
+  const page = await openPull(1);
 
   await page.evaluate(() => {
     const observer = new MutationObserver(() => {
@@ -306,59 +285,19 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
 });
 
 test('interleaves native and DiffSeek viewed actions in action order', async () => {
-  const page = await context.newPage();
-  const fixture = await readFile(
-    fixturePath,
-    'utf8',
-  );
-  await page.route(
-    'https://github.com/octo/repo/pull/2/changes',
-    async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: instrument(fixture),
-      });
-    },
-  );
-  await page.goto('https://github.com/octo/repo/pull/2/changes');
+  const page = await openPull(2);
   await page.evaluate(() => {
     document.documentElement.dataset.nativeDelay = '75';
   });
 
-  await page.locator('#diff-app button[aria-label="Not Viewed"]').click();
-  await page.locator(`#src [aria-label="${markAll}"]`).click();
-  await expect(
-    page.locator('#diff-generated button[aria-label="Viewed"]'),
-  ).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('#diff-app button[aria-label="Viewed"]').click();
-  await expect(
-    page.locator(`#src [aria-label="${markRest}"]`),
-  ).toBeVisible();
-  await page.locator(`#src [aria-label="${markRest}"]`).click();
-  await expect(
-    page.locator('#diff-app button[aria-label="Viewed"]'),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await markAllViewed(page);
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Visible files in folder marked viewed');
 });
 
 test('does not overwrite a later native action with a pending batch path', async () => {
-  const page = await context.newPage();
-  const fixture = await readFile(
-    fixturePath,
-    'utf8',
-  );
-  await page.route(
-    'https://github.com/octo/repo/pull/7/changes',
-    async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: instrument(fixture),
-      });
-    },
-  );
-  await page.goto('https://github.com/octo/repo/pull/7/changes');
+  const page = await openPull(7);
   await page.evaluate(() => {
     document.documentElement.dataset.nativeDelay = '75';
   });
@@ -386,21 +325,7 @@ test('does not overwrite a later native action with a pending batch path', async
 });
 
 test('drops a pending viewed result after route navigation', async () => {
-  const page = await context.newPage();
-  const fixture = await readFile(
-    fixturePath,
-    'utf8',
-  );
-  await page.route(
-    'https://github.com/octo/repo/pull/3/changes',
-    async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: instrument(fixture),
-      });
-    },
-  );
-  await page.goto('https://github.com/octo/repo/pull/3/changes');
+  const page = await openPull(3);
 
   await page.locator(`#src [aria-label="${markAll}"]`).click();
   await page.evaluate(() => {
@@ -417,21 +342,7 @@ test('drops a pending viewed result after route navigation', async () => {
 });
 
 test('clears native filters before taking over the menu', async () => {
-  const page = await context.newPage();
-  const fixture = await readFile(
-    fixturePath,
-    'utf8',
-  );
-  await page.route(
-    'https://github.com/octo/repo/pull/5/changes',
-    async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: instrument(fixture, true),
-      });
-    },
-  );
-  await page.goto('https://github.com/octo/repo/pull/5/changes');
+  const page = await openPull(5, true);
   await expect(page.locator('html')).toHaveAttribute(
     'data-native-filter-cleared',
     'true',
@@ -640,21 +551,7 @@ test('clears native filters before taking over the menu', async () => {
 });
 
 test('stays idempotent through a deterministic native-extension action storm', async () => {
-  const page = await context.newPage();
-  const fixture = await readFile(
-    fixturePath,
-    'utf8',
-  );
-  await page.route(
-    'https://github.com/octo/repo/pull/4/changes',
-    async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: instrument(fixture),
-      });
-    },
-  );
-  await page.goto('https://github.com/octo/repo/pull/4/changes');
+  const page = await openPull(4);
   await page.getByLabel('Filter options').click();
 
   const code = page.locator(
@@ -711,39 +608,13 @@ test('stays idempotent through a deterministic native-extension action storm', a
   await page.evaluate(() => {
     document.documentElement.dataset.nativeDelay = '75';
   });
-  await page.locator('#diff-app button[aria-label="Not Viewed"]').click();
-  await page.locator(`#src [aria-label="${markAll}"]`).click();
-  await expect(
-    page.locator('#diff-generated button[aria-label="Viewed"]'),
-  ).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('#diff-app button[aria-label="Viewed"]').click();
-  await expect(
-    page.locator(`#src [aria-label="${markRest}"]`),
-  ).toBeVisible();
-  await page.locator(`#src [aria-label="${markRest}"]`).click();
-  await expect(
-    page.locator('#diff-app button[aria-label="Viewed"]'),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await markAllViewed(page);
   await expect(page.locator('[data-diffseek="filters"]')).toHaveCount(1);
   await expect(page.locator('[data-diffseek-filtered-out]')).toHaveCount(0);
 });
 
 test('retains collapsed folders and marks only visible facet files', async () => {
-  const page = await context.newPage();
-  const fixture = await readFile(
-    fixturePath,
-    'utf8',
-  );
-  await page.route(
-    'https://github.com/octo/repo/pull/6/changes',
-    async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: instrument(fixture),
-      });
-    },
-  );
-  await page.goto('https://github.com/octo/repo/pull/6/changes');
+  const page = await openPull(6);
   await page.evaluate(() => {
     const folder = document.getElementById('src');
     const group = document.createElement('ul');
@@ -898,15 +769,7 @@ test('retains collapsed folders and marks only visible facet files', async () =>
 
 test('hides generated and viewed files and auto-views generated for a fresh install, and honors saved preferences', async () => {
   await writeFilterDefaults(null);
-  const page = await context.newPage();
-  const fixture = await readFile(fixturePath, 'utf8');
-  await page.route('https://github.com/octo/repo/pull/9/changes', async (route) => {
-    await route.fulfill({
-      contentType: 'text/html',
-      body: instrument(fixture),
-    });
-  });
-  await page.goto('https://github.com/octo/repo/pull/9/changes');
+  const page = await openPull(9);
   await page.getByLabel('Filter options').click();
 
   const viewed = page.locator(
@@ -989,27 +852,11 @@ test('applies a late gitattributes fetch on a fresh store', async () => {
     await attributesReady;
     await route.fulfill({
       contentType: 'text/plain',
-      body: [
-        'src/** group=Code',
-        'docs/** group=Docs',
-        '*.ts linguist-language=TypeScript',
-        'src/generated.ts linguist-generated',
-      ].join('\n'),
+      body: attributesBody,
     });
   });
   try {
-    const page = await context.newPage();
-    const fixture = await readFile(fixturePath, 'utf8');
-    await page.route(
-      'https://github.com/octo/repo/pull/10/changes',
-      async (route) => {
-        await route.fulfill({
-          contentType: 'text/html',
-          body: instrument(fixture),
-        });
-      },
-    );
-    await page.goto('https://github.com/octo/repo/pull/10/changes');
+    const page = await openPull(10);
     await page.getByLabel('Filter options').click();
     const generated = page.locator(
       '[data-filter-kind="generated"][data-filter-value="true"]',
@@ -1034,6 +881,35 @@ test('applies a late gitattributes fetch on a fresh store', async () => {
   }
 });
 
+async function openPull(pull: number, nativeFilter = false): Promise<Page> {
+  const page = await context.newPage();
+  await page.route(
+    `https://github.com/octo/repo/pull/${pull}/changes`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'text/html',
+        body: instrument(fixtureSource, nativeFilter),
+      });
+    },
+  );
+  await page.goto(`https://github.com/octo/repo/pull/${pull}/changes`);
+  return page;
+}
+
+async function markAllViewed(page: Page): Promise<void> {
+  await page.locator('#diff-app button[aria-label="Not Viewed"]').click();
+  await page.locator(`#src [aria-label="${markAll}"]`).click();
+  await expect(
+    page.locator('#diff-generated button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#diff-app button[aria-label="Viewed"]').click();
+  await expect(page.locator(`#src [aria-label="${markRest}"]`)).toBeVisible();
+  await page.locator(`#src [aria-label="${markRest}"]`).click();
+  await expect(
+    page.locator('#diff-app button[aria-label="Viewed"]'),
+  ).toHaveAttribute('aria-pressed', 'true');
+}
+
 async function extensionWorker() {
   return (
     context.serviceWorkers()[0] ??
@@ -1041,47 +917,66 @@ async function extensionWorker() {
   );
 }
 
-async function writeFilterDefaults(
-  defaults: { hidden: string[]; viewed: string[] } | null,
-): Promise<void> {
+type StoredDefaults = { hidden: string[]; viewed: string[] };
+
+type StorageLocal = {
+  clear: () => Promise<void>;
+  remove: (name: string) => Promise<void>;
+  get: (name: string) => Promise<unknown>;
+  set: (items: Record<string, unknown>) => Promise<void>;
+};
+
+async function storageLocal() {
   const worker = await extensionWorker();
-  if (defaults == null) {
-    await worker.evaluate(() => {
-      const extension = globalThis as unknown as {
-        chrome: {
-          storage: { local: { remove: (key: string) => Promise<void> } };
-        };
-      };
-      return extension.chrome.storage.local.remove('diffseek:filter-defaults');
-    });
-    return;
-  }
-  await worker.evaluate((value) => {
-    const extension = globalThis as unknown as {
-      chrome: {
-        storage: {
-          local: { set: (items: Record<string, unknown>) => Promise<void> };
-        };
-      };
-    };
-    return extension.chrome.storage.local.set({
-      'diffseek:filter-defaults': value,
-    });
-  }, defaults);
+  return worker.evaluateHandle(
+    () =>
+      (
+        globalThis as unknown as {
+          chrome: { storage: { local: StorageLocal } };
+        }
+      ).chrome.storage.local,
+  );
+}
+
+async function clearExtensionStorage(): Promise<void> {
+  const local = await storageLocal();
+  await local.evaluate((storage) => storage.clear());
+  await local.dispose();
+}
+
+async function removeExtensionStorage(): Promise<void> {
+  const local = await storageLocal();
+  await local.evaluate(
+    (storage, key) => storage.remove(key),
+    filterDefaultsKey,
+  );
+  await local.dispose();
+}
+
+async function setExtensionStorage(value: StoredDefaults): Promise<void> {
+  const local = await storageLocal();
+  await local.evaluate(
+    (storage, items) => storage.set(items),
+    { [filterDefaultsKey]: value },
+  );
+  await local.dispose();
 }
 
 async function readStoredFilterDefaults(): Promise<unknown> {
-  const worker = await extensionWorker();
-  return worker.evaluate(() => {
-    const extension = globalThis as unknown as {
-      chrome: {
-        storage: {
-          local: { get: (key: string) => Promise<Record<string, unknown>> };
-        };
-      };
-    };
-    return extension.chrome.storage.local.get('diffseek:filter-defaults');
-  });
+  const local = await storageLocal();
+  const stored = await local.evaluate(
+    (storage, key) => storage.get(key),
+    filterDefaultsKey,
+  );
+  await local.dispose();
+  return stored;
+}
+
+async function writeFilterDefaults(
+  defaults: StoredDefaults | null,
+): Promise<void> {
+  if (defaults == null) await removeExtensionStorage();
+  else await setExtensionStorage(defaults);
 }
 
 function instrument(source: string, startsWithNativeFilter = false): string {

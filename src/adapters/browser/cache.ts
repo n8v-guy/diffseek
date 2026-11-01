@@ -5,6 +5,8 @@ import type {
   RepositoryRef,
 } from '@diffseek/repository-metadata';
 
+import { isRecord } from './record';
+
 export type { RepositoryMetadata, RepositoryRef };
 
 type CacheEntry = RepositoryMetadata & {
@@ -119,8 +121,4 @@ function samePull(
 
 function cacheKey(repository: RepositoryRef): string {
   return `diffseek:metadata:${repository.owner}/${repository.repo}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
 }

@@ -48,7 +48,7 @@ export async function markViewed(
 
   for (const path of paths) {
     if (options.signal?.aborted) break;
-    const resolveButton = () => viewedButtonFor(snapshot, path);
+    const resolveButton = () => snapshot.viewedControl(path);
     const button = resolveButton();
     if (!button) {
       result.failed.push(path);
@@ -240,21 +240,6 @@ function isViewed(button: HTMLButtonElement): boolean {
   return viewedControlState(button) === true;
 }
 
-function viewedButtonFor(
-  snapshot: SupportedSnapshot,
-  path: string,
-): HTMLButtonElement | null {
-  return snapshot.viewedControl(path);
-}
-
-function observationRoot(button: HTMLButtonElement): Element {
-  return (
-    button.closest('[role="region"]') ??
-    button.closest('[data-diff-header-wrapper="true"]') ??
-    button
-  );
-}
-
 function waitForViewedState(
   resolveButton: () => HTMLButtonElement | null,
   button: HTMLButtonElement,
@@ -276,8 +261,12 @@ function waitForViewedState(
       const current = resolveButton();
       if (current && isViewed(current) === viewed) finish(true);
     };
+    const root =
+      button.closest('[role="region"]') ??
+      button.closest('[data-diff-header-wrapper="true"]') ??
+      button;
     const observer = new MutationObserver(check);
-    observer.observe(observationRoot(button), {
+    observer.observe(root, {
       attributes: true,
       childList: true,
       subtree: true,

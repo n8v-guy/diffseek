@@ -1,3 +1,5 @@
+import { isRecord } from '@diffseek/browser/record';
+
 export type RawFileRequest = {
   repo: string;
   ref: string;
@@ -81,8 +83,4 @@ function validSegments(value: string, exact?: number): string[] | null {
     return null;
   }
   return segments;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
 }

@@ -55,3 +55,10 @@ request reviews. GitHub remains the review system and visual authority.
   when the tool requires it.
 - Unit and DOM tests live beside the module they protect. Browser end-to-end
   tests may orchestrate a flow without a matching product module.
+- Viewed circles are drawn over GitHub's icons, never injected into the
+  app-rendered tree; injection makes GitHub rebuild it.
+- A stale session cannot update a later review.
+- Repository file requests name a repository, ref, and path, never an
+  arbitrary URL.
+- Page writes happen only when a value changes, and the owned menu is not
+  rebuilt when nothing it shows has changed.

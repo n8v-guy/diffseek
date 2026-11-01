@@ -1,6 +1,6 @@
 import {
   type FilterState,
-  matchesFilters,
+  matchesFacets,
   ReviewIndex,
 } from '@diffseek/review';
 
@@ -40,7 +40,7 @@ export class ReviewPresenter {
   ): void {
     const matching = new Set(
       snapshot.files
-        .filter((file) => matchesFilters(file, filters))
+        .filter((file) => matchesFacets(file.labels, filters))
         .map((file) => file.path),
     );
 

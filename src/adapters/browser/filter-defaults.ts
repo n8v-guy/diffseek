@@ -1,5 +1,7 @@
 import { browser } from 'wxt/browser';
 
+import { isRecord } from './record';
+
 const rememberedFilterFacets = ['viewed', 'generated'] as const;
 
 export type RememberedFilterFacet =
@@ -56,10 +58,6 @@ function storedDefaults(value: unknown): FilterDefaults {
       : [],
   );
   return { hidden, viewed };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 function isRememberedFilterFacet(
