@@ -1,76 +1,65 @@
 # Agent Guidance
 
-Use the README for the product overview and the contributing guide for the
-codebase shape. The project's structure configuration is the reference for
-where code and tests belong.
+Read the [README](README.md) (product), [CONTEXT.md](CONTEXT.md) (language,
+invariants), [DECISIONS.md](DECISIONS.md) (settled calls), and
+[CONTRIBUTING.md](CONTRIBUTING.md) (codebase shape, tests, hooks, commits).
+Code and test locations are
+[config/project.config.ts](config/project.config.ts).
+
+## Changes
+
+Keep diffs minimal: change only what the task needs, and prefer removing
+lines to adding them. No duplication; a repeated literal has one name.
+Prefer a good variable or function name; comment only the non-obvious why.
+No new dependency unless it is unavoidable. Never make a line longer to save
+a line.
+
+Follow existing patterns, and scope a fix to the call site that owns the
+behavior. Remove code the change orphans, and reuse an existing
+implementation before adding one. Skip a helper, constant, cast, or type
+annotation unless it simplifies the code or tooling requires it, and keep a
+one-off value inline. Prefer the language's shorthand when it is shorter and
+clear. Compare known messages, codes, and identifiers exactly. Follow the
+existing compiler, linter, test, and ignore configuration.
+
+## Tests
+
+Test waits are event-based: a DOM marker, an attribute, or a network
+response. Never sleep, poll, or flush the scheduler. An overall timeout is
+only a failure guard. Test-only constants live in test code, never in docs.
+Product code waits on events, as in
+[Decision D013](DECISIONS.md#d013--wait-on-events-not-timers).
 
 ## Browser testing
 
-- Prefer hidden or headless browser runs for agent-owned testing.
-- Use a visible browser only when the user may take over, or when visual
-  inspection is needed after headless behavior works.
+Prefer a hidden or headless browser. Use a visible browser only when a
+person may take over, or when visual inspection is needed after headless
+behavior works.
 
-## Orient and Implement
+## Git
 
-- Always start from freshly fetched remote state:
-  - work in a separate worktree branched from the latest main, kept in a
-    dedicated per-project worktrees folder;
-  - use a branch prefix that names the agent.
-- Prefer parallel work and delegation to subagents for throughput.
-- Commit the smallest coherent changes that each provide independent value.
-- Rely on the commit hook's automated validation first; run your own
-  validation after it to avoid double runs.
-- [ ] Keep changes small, local, and aligned with existing patterns.
-- [ ] Keep healthy decomposition and encapsulation between apps, packages, and internal modules.
-- [ ] Respect the package or app context from its local README for code changes.
-- [ ] Modify only a minimal necessary set of files.
-- [ ] Keep the implementation leanest possible; the changeset has no verbosity or extra files/modifications.
-- [ ] Always follow the existing compiler, linter, test, and ignore configurations as a hard guardrail.
-- [ ] Always look for paths to remove orphaned/legacy code after introducing adjacent changes.
-- [ ] Always seek existing implementations to replace generated code: in existing libraries or codebase around.
-- [ ] In tests, wait on behavior boundaries, not scheduler flushes.
+The commit message is one line, with no co-authors, trailers, or
+pull-request links. Subject style, and the ban on binary files on any
+branch, are the [commit conventions](CONTRIBUTING.md#commit-conventions).
 
-- [ ] Prefer the slimmest implementation that solves the reported problem directly.
-- [ ] Scope fixes to the narrowest call site or error handler that actually owns the behavior.
-- [ ] Prefer direct modern language expressions, such as optional access to a possibly missing value, when they are sufficient.
-- [ ] Prefer the language's shorthand for optional access, fallbacks, and concise conditionals when it shortens code and improves readability.
-- [ ] Avoid broad or fuzzy matching when a known exact value exists; prefer exact comparisons for runtime messages, codes, and identifiers.
-- [ ] Avoid introducing helper functions, shared policy hooks, constants, casts, or type annotations unless they materially simplify or are required by tooling.
-- [ ] Keep code inline when it stays readable; do not extract one-off values into separate declarations without a clear payoff.
-- [ ] Treat type casts, type assertions, and runtime type checks used for narrowing as strong yellow flags that should trigger a simpler design check first.
+Start from a fresh fetch of the latest main. Work in a separate worktree,
+kept in a dedicated per-project worktrees folder, on a branch whose prefix
+names the agent. Parallelize independent work. Commit the smallest change
+that stands alone, and let the commit hook validate before any further
+check. Push the branch, open a pull request with a concise title and a
+summary of the goal and any caveat, and never merge it. Never force-push or
+rewrite pushed history without explicit owner approval. CI must be green.
+CI stays mechanical; do not propose an AI GitHub Action. After the push, if
+the harness did not already run the same full local check, run it while CI
+runs. Watch the checks until they finish and fix forward on the same branch,
+then self-review: gap versus the ask, leaner options, trade-offs.
 
-## Post-validate commit
+## Review
 
-- After each commit, consider additional validation steps to verify the
-  healthy state.
-- Always push the branch right after, to rely on the push hook's automated
-  validation first.
+Prepare each pull request with a balanced, general-purpose model of your own
+harness. A separate agent then reviews it on the latest Anthropic
+Sonnet-class model, for correctness, regressions, and further cuts toward
+minimalism. The author agent applies that review in a follow-up commit.
 
-### Implementation checklist: push-time attestation
-
-An enforced validation step covers the implementation being pushed. Every
-statement with a checkbox above must remain true for the current branch before
-a push can succeed.
-
-If it fails, fix the flags and try again. Otherwise, create or update a
-ready-for-review PR with a concise title and a summary of goals and caveats.
-
-## Post-validate push
-
-This stage covers the post-push flow: CI, PR sync, readiness, and cleanup. It
-starts after the current branch has been pushed.
-
-- Watch the PR's checks until they finish.
-- Run the full local CI check while CI is in progress.
-
-If either fails, stay on the branch, fix forward, and run the flow again.
-Otherwise, self-review:
-  - Summarize the gap between the initial request and the current implementation.
-  - List suggestions that could make the changeset leaner and simpler.
-  - Highlight trade-offs that were made, with their pros and cons.
-
-## Post-merge learning loop
-
-- If CI failed during the PR, summarize the root cause and the prevention path.
-- If review requested simplification, update this guidance when the lesson applies broadly.
-- If validation missed a real issue, improve automation instead of relying on memory.
+A CI failure gets a cause and a prevention. A general review lesson updates
+this guidance. A validation miss updates the automation.
