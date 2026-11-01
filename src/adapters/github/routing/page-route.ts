@@ -9,7 +9,17 @@ export function isReviewFilesPath(pathname: string): boolean {
   return reviewFromPath(pathname) != null;
 }
 
-export function changesPathFromClassic(pathname: string): string | null {
+/**
+ * GitHub sends visitors who cannot use the changes route back to
+ * `/files?new_files_changed=true`; redirecting again would loop.
+ */
+export function changesPathFromClassic(
+  pathname: string,
+  search = '',
+): string | null {
+  if (new URLSearchParams(search).get('new_files_changed') === 'true') {
+    return null;
+  }
   const match = pathname.match(
     /^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/files\/?$/,
   );

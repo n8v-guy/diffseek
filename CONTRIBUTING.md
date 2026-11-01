@@ -232,25 +232,35 @@ DIFFSEEK_GITHUB_STORAGE_STATE=.cache/github-storage.json pnpm test:e2e:live
 ```
 
 It runs repeated cold, warm, and hot samples against `sha-tm/diffseek-test-data#1`
-by default (`DIFFSEEK_LIVE_SAMPLES`, default 3). Every live test seeds filter
+by default (`DIFFSEEK_LIVE_SAMPLES` sets how many). Every live test seeds filter
 defaults with auto-view off, so runs never mark the fixture's generated files
 viewed on GitHub; setup then marks all of its viewed files not viewed. Cold
-clears extension storage, then writes an explicit shown filter preference so a fresh-install hide default
-does not collapse the file list, and loads the PR. Warm is a reload. Hot clicks
-Conversation, then Files changed. Each sample records time to the first
-DiffSeek control, time from the Filter click until the DiffSeek menu is
-visible, and time until the generated-facet denominator shows the full
-classified total. It also records reconcile passes, DiffSeek DOM mutations, and
-GitHub file-tree or diff-panel rebuilds (removed rows that come back). Cold
-and warm must stay at 0. Hot ignores that mass-removal rule and fails only when
-a tree row or diff panel removed after the first DiffSeek control is still
-gone 500 ms later. The job summary includes raw removed and re-added counts.
-The cold sample also toggles the viewed filter and marks one file row viewed.
-An empty sample set fails. Duration ceilings are about three times a measured
-local median (first render 12s/10s/8s, menu 6s, panels 27s/24s/22s) with
-optional `DIFFSEEK_LIVE_BUDGET_*` overrides. Results are written to
+clears extension storage, then writes an explicit shown filter preference so a
+fresh-install hide default does not collapse the file list, and loads the PR.
+Warm is a reload. Hot clicks Conversation, then Files changed. Each sample
+records time to the first DiffSeek control, time from the Filter click until
+the DiffSeek menu is visible, and time until the generated-facet denominator
+shows the full classified total. It also records reconcile passes, DiffSeek DOM
+mutations, and GitHub file-tree or diff-panel rebuilds (removed rows that come
+back). Cold and warm expect exactly GitHub's own per-load redraw (GitHub
+currently redraws the tree and panels on every page load), so none or an extra
+one fails; revisit when GitHub stops. Hot ignores the mass-removal rule; it
+waits until every row removed after the first DiffSeek control is back and
+fails on any that came back late or never did. The job summary includes raw
+removed and re-added counts. The cold sample also toggles the viewed filter and
+marks one file row viewed. An empty sample set fails. Median durations are
+checked against limits: one shared panel cutoff for cold, warm, and hot at
+about 1.5× the CI cold median, first render and menu open as looser ceilings,
+with optional `DIFFSEEK_LIVE_BUDGET_*` overrides; the values live in
+`src/app/review/live-perf.helpers.ts`. Results are written to
 `.cache/live-perf-latest.json`, the job summary, and a `live-perf` artifact.
 Override the target with `DIFFSEEK_LIVE_PR_URL`.
+
+Live e2e waits are event-based (`src/app/review/live-wait.ts`: in-page
+MutationObserver conditions, navigation events); timeouts are failure guards
+only, never pacing. GitHub server-renders the Filter options button and swaps
+in an interactive client copy shortly after load, so the menu is opened only
+once that copy is present (Primer `anchor-name` style or a React `onClick`).
 
 `pnpm check:ci` runs the quality checks and the production build together.
 

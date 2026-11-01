@@ -44,4 +44,16 @@ describe('changesPathFromClassic', () => {
     expect(changesPathFromClassic('/owner/repo/pull/42/changes')).toBeNull();
     expect(changesPathFromClassic('/owner/repo/pull/42/files/one')).toBeNull();
   });
+
+  it('stops when GitHub already sent the visitor back from the changes route', () => {
+    expect(
+      changesPathFromClassic(
+        '/owner/repo/pull/42/files',
+        '?new_files_changed=true',
+      ),
+    ).toBeNull();
+    expect(
+      changesPathFromClassic('/owner/repo/pull/42/files', '?w=1'),
+    ).toBe('/owner/repo/pull/42/changes?new_files_changed=true');
+  });
 });
