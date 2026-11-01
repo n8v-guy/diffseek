@@ -32,13 +32,8 @@ export async function onlySplitLayout({ beforeShot, afterShot, beforeCrop, after
       { x: 960, y: 10, text: 'After “only”', size: 25.5, center: true },
     ],
     notes: [
-      // Each label stays inside its own half, right of the menu. The "only"
-      // leader rises over the empty end of the Owners title, and the "all"
-      // leader runs level, so neither crosses a count.
       { target: onlyBox, shape: 'rect', at: [Math.round(onlyBox.x + onlyBox.w + 100), Math.round(onlyBox.y - 68)], within: [0, 640], exit: 'top', title: 'only', body: 'Just this owner, group or format.' },
       { target: allBox, shape: 'rect', at: [Math.round(allBox.x + allBox.w + 40), Math.round(allBox.y + allBox.h / 2)], middle: true, within: [640, outWidth], title: 'all', body: 'The whole section again.' },
-      // Level with the icon, right of the menu: below the After tag and
-      // above the "all" label.
       { target: resetBox, shape: 'rect', at: [Math.round(resetBox.x + resetBox.w + 28), Math.round(resetBox.y + resetBox.h / 2)], middle: true, within: [640, outWidth], title: 'Restore all sections' },
     ],
   });
@@ -49,14 +44,6 @@ export async function viewedBadgesLayout({ shot, boxes }: ViewedBadgesCapture): 
   const menuAt: [number, number] = [Math.round(boxes.menu.x + boxes.menu.w + 34), Math.round(boxes.circle.y + 20)];
   const ringOf = (box: Box): Ring => ({ cx: box.x + box.w / 2, cy: box.y + box.h / 2, r: Math.max(box.w, box.h) / 2 + 6 });
   const folderRing = ringOf(boxes.folder);
-  // The third label sits over the tree, just left of the menu, between the
-  // PaymentMethodsPage.test.tsx row and the featureFlags.ts row (tree rows are
-  // 32 CSS px apart), so it only hides the tail of one file name. Both arrows
-  // are single straight segments. The one to the folder ring leaves the
-  // label's top right and climbs through the blank space right of the names,
-  // under the File tree label. The one to the menu badge leaves the label's
-  // right edge and crosses the menu in the empty gap between the App and
-  // Config rows, under the web-platform count.
   const clickAt: [number, number] = [Math.round(boxes.menu.x - 262), Math.round(boxes.folder.y + 236)];
   await compose('03-viewed-badges.png', {
     layers: [{ shot, left: 0, width: outWidth, crop: 0 }],

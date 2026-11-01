@@ -162,41 +162,23 @@ function positionNote(
   label.style.top = `${Math.round(top)}px`;
 }
 
-/**
- * Arrows from a label to rings drawn by other notes. A route leaves the
- * label's top or left edge, follows its elbows, and ends on the ring's edge:
- * level if the last elbow is level with the ring, else aimed at its centre.
- */
 function drawRoutes(paint: Paint, routes: Route[], label: HTMLElement): void {
   const rect = label.getBoundingClientRect();
   for (const route of routes) {
     const { cx, cy, r } = route.ring;
-    const via = route.via ?? [];
-    const start = routeStart(paint, rect, route, via);
-    const last = via.at(-1) ?? start;
-    const dy = last[1] - cy;
-    let end: Point;
-    if (via.length > 0 && Math.abs(dy) < r) {
-      end = [cx - Math.sign(cx - last[0]) * Math.sqrt(r * r - dy * dy), last[1]];
-    } else {
-      const length = Math.hypot(cx - last[0], cy - last[1]) || 1;
-      end = [cx - ((cx - last[0]) / length) * r, cy - ((cy - last[1]) / length) * r];
-    }
+    const start = routeStart(paint, rect, route);
+    const span = Math.hypot(cx - start[0], cy - start[1]) || 1;
+    const end: Point = [cx - ((cx - start[0]) / span) * r, cy - ((cy - start[1]) / span) * r];
     const tip = 3;
-    const length = Math.hypot(end[0] - last[0], end[1] - last[1]) || 1;
-    const tipEnd: Point = [end[0] - ((end[0] - last[0]) / length) * tip, end[1] - ((end[1] - last[1]) / length) * tip];
-    const points = [start, ...via, tipEnd];
-    drawShape(paint, 'polyline', { points: points.map((point) => point.join(',')).join(' '), fill: 'none', stroke: paint.accent, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+    const length = Math.hypot(end[0] - start[0], end[1] - start[1]) || 1;
+    const tipEnd: Point = [end[0] - ((end[0] - start[0]) / length) * tip, end[1] - ((end[1] - start[1]) / length) * tip];
+    drawShape(paint, 'polyline', { points: [start, tipEnd].map((point) => point.join(',')).join(' '), fill: 'none', stroke: paint.accent, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
     drawDot(paint, start);
-    drawArrowhead(paint, last, end);
+    drawArrowhead(paint, start, end);
   }
 }
 
-/**
- * An offset pins the start: px from the label's left on the top edge, or
- * from its top on the right edge.
- */
-function routeStart(paint: Paint, rect: DOMRect, route: Route, via: Point[]): Point {
+function routeStart(paint: Paint, rect: DOMRect, route: Route): Point {
   const { corner } = paint;
   const { cx, cy } = route.ring;
   if (route.offset !== undefined) {
@@ -204,22 +186,18 @@ function routeStart(paint: Paint, rect: DOMRect, route: Route, via: Point[]): Po
     if (route.from === 'top') return [rect.left + route.offset, rect.top];
   }
   if (route.from === 'left') {
-    return [rect.left, Math.max(rect.top + corner, Math.min(via[0]?.[1] ?? cy, rect.bottom - corner))];
+    return [rect.left, Math.max(rect.top + corner, Math.min(cy, rect.bottom - corner))];
   }
   return [cx < rect.left + corner ? rect.left + corner : Math.min(cx, rect.right - corner), rect.top];
 }
 
 function drawTarget(paint: Paint, note: Note, t: Box, label: HTMLElement): void {
-  if (note.inside) {
-    drawShape(paint, 'rect', { x: t.x, y: t.y, width: t.w, height: t.h, rx: 8, fill: 'none', stroke: paint.accent, 'stroke-width': 2.5 });
-    return;
-  }
   const rect = label.getBoundingClientRect();
   const cx = t.x + t.w / 2;
   const cy = t.y + t.h / 2;
   const anchor = edgeAnchor(paint, rect, cx, cy);
   const start = note.shape === 'ring'
-    ? ringStart(paint, note, t, anchor)
+    ? ringStart(paint, t, anchor)
     : rectStart(paint, note, t, anchor);
   drawShape(paint, 'line', { x1: start[0], y1: start[1], x2: anchor[0], y2: anchor[1], stroke: paint.accent, 'stroke-width': 2, 'stroke-linecap': 'round' });
   drawDot(paint, anchor);
@@ -228,13 +206,13 @@ function drawTarget(paint: Paint, note: Note, t: Box, label: HTMLElement): void 
   if (note.target2) drawSourceBox(paint, note.target2, rect);
 }
 
-function ringStart(paint: Paint, note: Note, t: Box, anchor: Point): Point {
+function ringStart(paint: Paint, t: Box, anchor: Point): Point {
   const cx = t.x + t.w / 2;
   const cy = t.y + t.h / 2;
   const dx = anchor[0] - cx;
   const dy = anchor[1] - cy;
   const length = Math.hypot(dx, dy) || 1;
-  const r = note.ring ?? Math.max(t.w, t.h) / 2 + 6;
+  const r = Math.max(t.w, t.h) / 2 + 6;
   drawShape(paint, 'circle', { cx, cy, r, fill: 'none', stroke: paint.accent, 'stroke-width': 2.5 });
   return [cx + (dx / length) * r, cy + (dy / length) * r];
 }

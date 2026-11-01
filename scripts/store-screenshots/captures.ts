@@ -5,7 +5,6 @@ import {
   clipWidth,
   menuSelector,
   outHeight,
-  treeItemSelector,
   type Box,
   type Clip,
   type Shot,
@@ -38,7 +37,7 @@ import { expandTo, ownAction, treeRow } from './tree.ts';
 
 const pressed = 'aria-pressed';
 
-export type NoiseCutCapture = { shot: Shot; signs: Box; pillBox: Box; menuBox: Box; treeRows: Array<Box & { id: string }> };
+export type NoiseCutCapture = { shot: Shot; signs: Box; pillBox: Box; menuBox: Box };
 export type OnlySplitCapture = {
   beforeShot: Shot;
   afterShot: Shot;
@@ -74,22 +73,8 @@ export async function noiseCut(page: Page): Promise<NoiseCutCapture> {
   const signs = await signBox(page, ['viewed', 'generated'], clip);
   const pillBox = await outBox(pill, clip, 0, 0);
   const menuBox = await outBox(page.locator(menuSelector), clip, 0, 0);
-  // Tree rows on screen, so the labels can be placed clear of them.
-  const treeRows: NoiseCutCapture['treeRows'] = [];
-  const rows = await page.evaluate((item) =>
-    [...document.querySelectorAll(item)].map((node) => {
-      const content = node.querySelector('.PRIVATE_TreeView-item-content') ?? node;
-      const rect = content.getBoundingClientRect();
-      const text = node.querySelector('.PRIVATE_TreeView-item-content-text') ?? content;
-      const range = document.createRange();
-      range.selectNodeContents(text);
-      const ink = range.getBoundingClientRect();
-      return { x: rect.x, y: rect.y, width: Math.max(0, ink.right - rect.x), height: rect.height, id: node.id };
-    }), treeItemSelector);
-  for (const box of rows) treeRows.push({ ...(await outBox(box, clip, 0, 0)), id: box.id });
-  console.log('shot 1 menu:', JSON.stringify(menuBox), 'signs:', JSON.stringify(signs));
   const shot = await shoot(page, clip);
-  return { shot, signs, pillBox, menuBox, treeRows };
+  return { shot, signs, pillBox, menuBox };
 }
 
 /** Output box around the "−" / "✓" signs (a ::before) on the given facet rows. */
@@ -176,7 +161,6 @@ async function expectOnlyAllHovered(page: Page): Promise<void> {
       paymentsOnly: paymentsOnly && getComputedStyle(paymentsOnly).opacity,
     };
   }, menuSelector);
-  console.log('after hover:', JSON.stringify(state));
   if (state.busy.length > 0 || !state.allHovered || state.paymentsOnly !== '0') {
     throw new Error(`Only the "all" pill should look hovered: ${JSON.stringify(state)}`);
   }
@@ -220,7 +204,6 @@ export async function viewedBadges(page: Page): Promise<ViewedBadgesCapture> {
     menu: await outBox(page.locator(menuSelector), clip, 0, 0),
     tree: await outBox(page.locator('[role="tree"]'), clip, 0, 0),
   };
-  console.log('badges:', await (await ownAction(folder)).getAttribute('title'), '|', await web.getAttribute('title'));
   await expectNoToast(page);
   const shot = await shoot(page, clip);
   return { shot, boxes };

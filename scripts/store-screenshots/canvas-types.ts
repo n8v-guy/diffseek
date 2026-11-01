@@ -6,7 +6,6 @@ export type Route = {
   from: 'left' | 'right' | 'top';
   offset?: number;
   ring: Ring;
-  via?: Point[];
 };
 export type Note = {
   id?: string;
@@ -14,8 +13,6 @@ export type Note = {
   target2?: Box;
   arrow?: boolean;
   shape?: 'rect' | 'ring';
-  ring?: number;
-  inside?: boolean;
   at: Point;
   align?: 'center' | 'right';
   middle?: boolean;
