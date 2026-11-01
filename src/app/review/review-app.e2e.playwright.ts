@@ -471,7 +471,7 @@ test('clears native filters before taking over the menu', async () => {
   ).toBeVisible();
   await expect(
     page.locator(
-      '[data-filter-kind="groups"][data-filter-value="No type"]',
+      '[data-filter-kind="groups"][data-filter-value="No groups"]',
     ),
   ).toBeVisible();
   await expect(
@@ -503,6 +503,15 @@ test('clears native filters before taking over the menu', async () => {
     );
   expect(new Set(onlyColumns.map(Math.round)).size).toBe(1);
   await ownerOnly.click();
+  await page.locator('#diff-app').hover();
+  await expect(ownerRow).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(ownerOnly).toHaveCSS('opacity', '1');
+  await expect(ownerOnly).toHaveCSS('background-color', 'rgb(59, 46, 131)');
+  await ownerOnly.evaluate((button) => {
+    button.blur();
+    button.focus({ focusVisible: true });
+  });
+  await expect(ownerRow).toHaveCSS('background-color', 'rgb(228, 220, 255)');
   await expect(
     page.locator(
       '[data-filter-kind="owners"]:not([data-filter-value="@pull-source"])',

@@ -122,6 +122,6 @@ export function isFallbackFacetValue(
   return (
     (facet === 'owners' && value === 'Unmapped') ||
     (facet === 'languages' && value === 'No extension') ||
-    (facet === 'groups' && value === 'No type')
+    (facet === 'groups' && value === 'No groups')
   );
 }

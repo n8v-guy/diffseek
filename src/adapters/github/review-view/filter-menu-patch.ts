@@ -4,6 +4,7 @@ import {
   menuRowModels,
 } from './filter-menu-model';
 import { hasTransientExclusions } from './filter-reset';
+import { onlyFocusApplied } from './filter-shortcuts';
 import { configureViewedAction } from './menu-viewed-action';
 
 const filtersRootSelector = '[data-diffseek="filters"]';
@@ -76,6 +77,21 @@ function patchAlwaysRead(
   return true;
 }
 
+function patchOnly(
+  rowElement: HTMLElement,
+  row: ReturnType<typeof menuRowModels>[number],
+): boolean {
+  const only = rowElement.querySelector<HTMLButtonElement>('[data-filter-only]');
+  const values = row.onlyValues;
+  if (!values) return only == null;
+  if (!only) return false;
+  only.setAttribute(
+    'aria-pressed',
+    String(onlyFocusApplied(row.value, values, row.excluded)),
+  );
+  return true;
+}
+
 function patchRow(
   button: HTMLButtonElement | undefined,
   row: ReturnType<typeof menuRowModels>[number],
@@ -85,6 +101,7 @@ function patchRow(
   if (!(rowElement instanceof HTMLElement)) return false;
   applyCheckedState(button, row);
   if (!patchAlwaysRead(rowElement, row)) return false;
+  if (!patchOnly(rowElement, row)) return false;
   button.disabled = row.disabled === true;
   if (row.disabled) {
     button.setAttribute('aria-disabled', 'true');

@@ -149,19 +149,20 @@
   white-space: nowrap;
 }
 
+.diffseek-menu-only[aria-pressed='true'],
 .diffseek-menu-always-read[aria-pressed='true'] {
-  background: var(--diffseek-accent);
+  background: var(--diffseek-foreground);
   color: var(--diffseek-background);
   opacity: 1;
   pointer-events: auto;
 }
 
 .diffseek-menu-row:hover .diffseek-menu-only,
-.diffseek-menu-row:focus-within .diffseek-menu-only,
+.diffseek-menu-row:has(:focus-visible) .diffseek-menu-only,
 .diffseek-menu-row:hover .diffseek-menu-always-read,
-.diffseek-menu-row:focus-within .diffseek-menu-always-read,
+.diffseek-menu-row:has(:focus-visible) .diffseek-menu-always-read,
 .diffseek-menu-section-title:hover .diffseek-menu-all,
-.diffseek-menu-section-title:focus-within .diffseek-menu-all {
+.diffseek-menu-section-title:has(:focus-visible) .diffseek-menu-all {
   opacity: 1;
   pointer-events: auto;
 }
@@ -222,7 +223,7 @@
 }
 
 .diffseek-menu-row:hover,
-.diffseek-menu-row:focus-within {
+.diffseek-menu-row:has(:focus-visible) {
   background: var(--diffseek-hover);
 }
 
