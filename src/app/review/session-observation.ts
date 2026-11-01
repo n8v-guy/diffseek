@@ -5,6 +5,7 @@ import {
   viewedControlState,
 } from '@diffseek/github/review-page/page-adapter';
 import {
+  afterCurrentTask,
   filterMenus,
   isNativeMutation,
 } from '@diffseek/github/review-view/review-ui';
@@ -246,9 +247,10 @@ export type PanelScheduleOptions = {
 };
 
 export type PanelReconcileSchedule = {
-  timer: number | null;
-  delayMs: number;
-  scheduled: boolean;
+  /** Cancels the queued pass; null when nothing is queued. */
+  cancel: (() => void) | null;
+  /** The queued pass runs as the next task rather than at the next frame. */
+  immediate: boolean;
 };
 
 const ariaLabelAttribute = 'aria-label';
@@ -303,36 +305,41 @@ export function pageNodesChanged(
   );
 }
 
+/**
+ * Immediate passes run as the next task. Coalesced passes (streamed tree and
+ * panel structure) run once at the next animation frame, so a burst of
+ * mutations inside one frame costs one pass and lands before that frame
+ * paints. No timers: the browser's frame is the batching event.
+ */
 export function queuePanelReconcile(
   state: PanelReconcileSchedule,
   root: Document,
   options: PanelScheduleOptions,
   run: () => void,
 ): void {
-  const view = root.defaultView;
-  const delayMs = options.immediate || !options.coalesce ? 0 : 64;
-  // Never let a coalesced stream tick postpone an already-queued immediate flush.
-  if (state.scheduled && state.delayMs === 0 && delayMs > 0) return;
-  if (view && state.timer != null) view.clearTimeout(state.timer);
-  state.scheduled = true;
-  state.delayMs = delayMs;
+  const immediate = options.immediate === true || options.coalesce !== true;
+  // A queued pass that runs at least as soon already covers this request.
+  if (state.cancel && (state.immediate || !immediate)) return;
+  state.cancel?.();
+  state.immediate = immediate;
   const fire = () => {
-    state.scheduled = false;
-    state.delayMs = 0;
-    state.timer = null;
+    state.cancel = null;
+    state.immediate = false;
     run();
   };
-  if (view) state.timer = view.setTimeout(fire, delayMs);
-  else queueMicrotask(fire);
+  const view = root.defaultView;
+  if (immediate || !view) {
+    state.cancel = afterCurrentTask(fire);
+    return;
+  }
+  const frame = view.requestAnimationFrame(fire);
+  state.cancel = () => view.cancelAnimationFrame(frame);
 }
 
-export function cancelPanelReconcile(
-  state: PanelReconcileSchedule,
-  view: Window | null,
-): void {
-  if (state.timer == null) return;
-  view?.clearTimeout(state.timer);
-  state.timer = null;
+export function cancelPanelReconcile(state: PanelReconcileSchedule): void {
+  state.cancel?.();
+  state.cancel = null;
+  state.immediate = false;
 }
 
 function isImmediateRecord(record: MutationRecord): boolean {

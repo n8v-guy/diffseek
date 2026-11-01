@@ -165,3 +165,20 @@ gives no reasons, hover text, or paths.
 **Why:** Names and counts made messages long and hard to scan, and the tree
 and menu already show what changed. **Cost:** A failure no longer says which
 files failed; the circles and checkboxes show what is still unmarked.
+
+## D013 — Wait on events, not timers
+
+**Decision:** Product code waits on page events: the mutation or attribute
+change that confirms a native click, an animation frame to batch streamed tree
+and panel changes, a batch's own completion, and the reviewer's next input.
+Timers remain only as failure guards for things nothing signals: a native
+click GitHub ignores and a request that hangs. Notifications follow the same
+rule: progress is replaced by its outcome, and other notifications stay until
+the next pointer press, key press, or wheel scroll, or a newer notification.
+They let clicks through so they never cover a GitHub control.
+
+**Why:** Fixed delays are either too short on slow machines or wasted time on
+fast ones, and they hide what the code is actually waiting for. **Cost:** A
+streamed page can get one reconcile pass per frame instead of one per quiet
+period, and a background tab defers coalesced passes until it is shown. A
+notification no longer disappears on its own while the reviewer only reads.

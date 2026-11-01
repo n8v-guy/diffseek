@@ -19,6 +19,7 @@ import { mountFilterMenu } from '@diffseek/github/review-view/filter-menu';
 import { ReviewPresenter } from '@diffseek/github/review-view/presenter';
 import {
   afterNextPaint,
+  dismissSnackbar,
   filterMenus,
   menuNeedsRemount,
   removeInjected,
@@ -106,9 +107,8 @@ export class ReviewSession {
   private readonly onNativeClick: (event: MouseEvent) => void;
   private snapshot: SupportedSnapshot | null = null;
   private readonly scheduleState: PanelReconcileSchedule = {
-    timer: null,
-    delayMs: 0,
-    scheduled: false,
+    cancel: null,
+    immediate: false,
   };
   private reconciling = false;
   private dirty = false;
@@ -183,7 +183,8 @@ export class ReviewSession {
       return;
     }
     this.reconciling = true;
-    this.scheduleState.scheduled = false;
+    // This pass reads the whole page, so a queued pass has nothing left to do.
+    cancelPanelReconcile(this.scheduleState);
     try {
       do {
         this.dirty = false;
@@ -203,7 +204,7 @@ export class ReviewSession {
     this.observer.disconnect();
     this.discoveryObserver.disconnect();
     this.observedRoots.clear();
-    cancelPanelReconcile(this.scheduleState, this.options.root.defaultView);
+    cancelPanelReconcile(this.scheduleState);
     this.clearInjected();
   }
 
@@ -334,7 +335,7 @@ export class ReviewSession {
 
   private batch(target: ViewedTarget, viewed: boolean, paths: string[]): void {
     if (!this.snapshot) return;
-    showBatchStarted(this.options.root, target, viewed);
+    const progress = showBatchStarted(this.options.root, target, viewed);
     void this.actionExecutor
       .enqueue({
         reviewKey: this.options.review.key,
@@ -343,8 +344,8 @@ export class ReviewSession {
         paths,
       })
       .then((result) => {
-        if (!result || this.lifecycle.signal.aborted) return;
-        showBatchResult(this.options.root, target, viewed, result);
+        if (!result || this.lifecycle.signal.aborted) return dismissSnackbar(progress);
+        showBatchResult(this.options.root, target, viewed, result, progress);
         this.schedule();
       });
   }
@@ -357,7 +358,7 @@ export class ReviewSession {
   private enqueueDefaultViewed(paths: string[]): void {
     for (const path of paths) this.defaultViewedAttempts.add(path);
     this.defaultViewedInFlight += 1;
-    showBatchStarted(this.options.root, 'auto-view', true);
+    const progress = showBatchStarted(this.options.root, 'auto-view', true);
     void this.actionExecutor
       .enqueue({
         reviewKey: this.options.review.key,
@@ -369,7 +370,8 @@ export class ReviewSession {
       .then((result) => {
         this.defaultViewedInFlight = Math.max(0, this.defaultViewedInFlight - 1);
         if (this.lifecycle.signal.aborted) return;
-        if (result) showBatchResult(this.options.root, 'auto-view', true, result);
+        if (result) showBatchResult(this.options.root, 'auto-view', true, result, progress);
+        else dismissSnackbar(progress);
         this.reconcile();
       });
   }

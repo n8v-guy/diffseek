@@ -38,6 +38,7 @@ export function rawFileUrl(request: RawFileRequest): string {
   ].join('/');
 }
 
+/** Failure guard only: a hung request never settles and nothing signals it. */
 const rawFileTimeoutMs = 20_000;
 
 export async function fetchRawFile(

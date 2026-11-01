@@ -69,25 +69,33 @@ describe('panel reconcile scheduling', () => {
     expect(scheduleForMutations(opened)).toEqual({ immediate: true });
   });
 
-  it('keeps a coalesced flush on a 64ms timer while the filter menu is open', async () => {
-    vi.useFakeTimers();
+  it('runs a coalesced burst once at the next frame and an immediate flush first', async () => {
     document.body.innerHTML =
       '<ul role="menu" aria-label="Filter options"></ul>';
-    const state: PanelReconcileSchedule = {
-      timer: null,
-      delayMs: 0,
-      scheduled: false,
-    };
+    const state: PanelReconcileSchedule = { cancel: null, immediate: false };
     let runs = 0;
-    queuePanelReconcile(state, document, { coalesce: true }, () => {
+    const run = () => {
       runs += 1;
-    });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(runs).toBe(0);
-    await vi.advanceTimersByTimeAsync(63);
-    expect(runs).toBe(0);
-    await vi.advanceTimersByTimeAsync(1);
+    };
+    queuePanelReconcile(state, document, { coalesce: true }, run);
+    queuePanelReconcile(state, document, { coalesce: true }, run);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(runs).toBe(1);
+
+    queuePanelReconcile(state, document, { coalesce: true }, run);
+    queuePanelReconcile(state, document, { immediate: true }, run);
+    queuePanelReconcile(state, document, { coalesce: true }, run);
+    await new Promise((resolve) => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => {
+        channel.port1.close();
+        resolve(null);
+      };
+      channel.port2.postMessage(null);
+    });
+    expect(runs).toBe(2);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(runs).toBe(2);
   });
 
   it('detects a replaced file tree or diff region node', () => {

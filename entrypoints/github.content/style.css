@@ -318,6 +318,7 @@ span.diffseek-menu-count {
   flex-direction: column;
   gap: 0.5rem;
   max-width: min(28rem, calc(100vw - 2rem));
+  pointer-events: none;
   position: fixed;
   right: 1rem;
   top: 1rem;

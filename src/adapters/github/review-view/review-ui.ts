@@ -6,8 +6,6 @@ import {
   type ViewedTarget,
 } from '../review-page/viewed-actions';
 
-const snackbarDurationMs = 7_000;
-
 export function menuNeedsRemount(menu: HTMLElement): boolean {
   if (menu.dataset.diffseekMenuOwned !== 'true') return true;
   if (!menu.querySelector(':scope > [data-diffseek="filters"]')) return true;
@@ -57,12 +55,31 @@ export function removeInjected(root: Document): void {
   }
 }
 
+/** Resolves in the first task after the next frame, i.e. once it painted. */
 export function afterNextPaint(root: Document): Promise<void> {
   const view = root.defaultView;
   if (!view) return Promise.resolve();
   return new Promise((resolve) => {
-    view.requestAnimationFrame(() => view.setTimeout(resolve, 0));
+    view.requestAnimationFrame(() => afterCurrentTask(resolve));
   });
+}
+
+/**
+ * Runs `run` as the next task (a MessageChannel message, not a 0 ms timer).
+ * Returns a cancel function.
+ */
+export function afterCurrentTask(run: () => void): () => void {
+  const channel = new MessageChannel();
+  let live = true;
+  channel.port1.onmessage = () => {
+    channel.port1.close();
+    if (live) run();
+  };
+  channel.port2.postMessage(null);
+  return () => {
+    live = false;
+    channel.port1.close();
+  };
 }
 
 export function showUnavailable(root: Document, reason: string): void {
@@ -125,13 +142,14 @@ function batchMessages(target: ViewedTarget, viewed: boolean): BatchMessages {
   return (viewed ? markMessages : unmarkMessages)[target];
 }
 
+/** Returns the progress toast so its batch's outcome can replace it. */
 export function showBatchStarted(
   root: Document,
   target: ViewedTarget,
   viewed: boolean,
-): void {
+): HTMLElement | null {
   const { progress } = batchMessages(target, viewed);
-  if (progress) showSnackbar(root, progress);
+  return progress ? showSnackbar(root, progress, 'progress') : null;
 }
 
 export function showBatchResult(
@@ -139,9 +157,27 @@ export function showBatchResult(
   target: ViewedTarget,
   viewed: boolean,
   result: ActionResult,
+  progress: HTMLElement | null = null,
 ): void {
   const messages = batchMessages(target, viewed);
-  showSnackbar(root, result.failed.length > 0 ? messages.failed : messages.done);
+  const message = result.failed.length > 0 ? messages.failed : messages.done;
+  if (progress?.isConnected) {
+    // Replace in place so the live region announces the outcome.
+    dismissStatusSnackbars(root, false);
+    progress.dataset.diffseekSnackbarKind = 'status';
+    progress.textContent = message;
+    progress.parentElement?.append(progress);
+    return;
+  }
+  showSnackbar(root, message);
+}
+
+/** A batch that was cancelled has no outcome; drop its progress toast. */
+export function dismissSnackbar(snackbar: HTMLElement | null): void {
+  if (!snackbar) return;
+  const stack = snackbar.parentElement;
+  snackbar.remove();
+  if (stack?.childElementCount === 0) stack.remove();
 }
 
 export function showRememberedFilterDefault(
@@ -167,7 +203,19 @@ export function showAlwaysRead(root: Document, enabled: boolean): void {
   );
 }
 
-function showSnackbar(root: Document, message: string): void {
+/**
+ * Toasts have no timer. A progress toast lasts until its batch finishes. Any
+ * other toast lasts until the reviewer next presses a pointer or key or scrolls
+ * with the wheel, or until a newer toast replaces it. Toasts let clicks through
+ * (CSS), so one never covers a GitHub control.
+ */
+function showSnackbar(
+  root: Document,
+  message: string,
+  kind: 'progress' | 'status' = 'status',
+): HTMLElement {
+  dismissStatusSnackbars(root, false);
+  listenForDismissal(root);
   let stack = root.querySelector<HTMLElement>(
     '[data-diffseek="snackbars"]',
   );
@@ -179,13 +227,32 @@ function showSnackbar(root: Document, message: string): void {
   }
   const snackbar = root.createElement('div');
   snackbar.dataset.diffseek = 'snackbar';
+  snackbar.dataset.diffseekSnackbarKind = kind;
   snackbar.setAttribute('role', 'status');
   snackbar.textContent = message;
   stack.append(snackbar);
-  setTimeout(() => {
-    snackbar.remove();
-    if (stack?.childElementCount === 0) stack.remove();
-  }, snackbarDurationMs);
+  return snackbar;
+}
+
+const dismissingDocuments = new WeakSet<Document>();
+
+function listenForDismissal(root: Document): void {
+  if (dismissingDocuments.has(root)) return;
+  dismissingDocuments.add(root);
+  // Capture phase: runs before the click that may show the next toast.
+  const dismiss = () => dismissStatusSnackbars(root, true);
+  root.addEventListener('pointerdown', dismiss, true);
+  root.addEventListener('keydown', dismiss, true);
+  root.addEventListener('wheel', dismiss, { capture: true, passive: true });
+}
+
+function dismissStatusSnackbars(root: Document, removeEmptyStack: boolean): void {
+  for (const snackbar of root.querySelectorAll<HTMLElement>(
+    '[data-diffseek="snackbar"][data-diffseek-snackbar-kind="status"]',
+  )) {
+    if (removeEmptyStack) dismissSnackbar(snackbar);
+    else snackbar.remove();
+  }
 }
 
 export function isNativeMutation(record: MutationRecord): boolean {
