@@ -11,6 +11,17 @@ import { ReviewPresenter } from './presenter';
 
 const filters = (): FilterState => emptyFacetExclusions();
 
+function excludingConfig() {
+  const snapshot = scanPage(document);
+  if (!snapshot.supported) throw new Error(snapshot.reason);
+  snapshot.files
+    .find((file) => file.path === 'config/app.json')
+    ?.labels.push({ facet: 'groups', value: 'Config' });
+  const state = filters();
+  state.get('groups')?.add('Config');
+  return { snapshot, state, presenter: new ReviewPresenter() };
+}
+
 function restoreOnClick(button: HTMLButtonElement): void {
   button.addEventListener('click', () => {
     button.setAttribute('aria-label', 'Collapse file');
@@ -71,14 +82,7 @@ describe('ReviewPresenter', () => {
   });
 
   it('collapses and mutes non-matching diffs, then restores its own changes', async () => {
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    snapshot.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
-    const presenter = new ReviewPresenter();
-    const state = filters();
-    state.get('groups')?.add('Config');
+    const { snapshot, state, presenter } = excludingConfig();
 
     presenter.apply(snapshot, state);
     expect(
@@ -106,16 +110,10 @@ describe('ReviewPresenter', () => {
   });
 
   it('preserves a file the user had already collapsed', () => {
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    snapshot.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
-    const collapse = snapshot.collapseControl('config/app.json');
-    collapse?.setAttribute('aria-label', 'Expand file');
-    const presenter = new ReviewPresenter();
-    const state = filters();
-    state.get('groups')?.add('Config');
+    const { snapshot, state, presenter } = excludingConfig();
+    snapshot
+      .collapseControl('config/app.json')
+      ?.setAttribute('aria-label', 'Expand file');
 
     presenter.apply(snapshot, state);
     presenter.clear(snapshot);
@@ -131,21 +129,11 @@ describe('ReviewPresenter', () => {
   it('does not claim a collapse that GitHub failed to apply', () => {
     const snapshot = scanPage(document);
     if (!snapshot.supported) throw new Error(snapshot.reason);
-    snapshot.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
     const collapse = snapshot.collapseControl('config/app.json');
     if (!collapse) throw new Error('Missing fixture binding');
     collapse.replaceWith(collapse.cloneNode(true));
 
-    const rescanned = scanPage(document);
-    if (!rescanned.supported) throw new Error(rescanned.reason);
-    rescanned.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
-    const presenter = new ReviewPresenter();
-    const state = filters();
-    state.get('groups')?.add('Config');
+    const { snapshot: rescanned, state, presenter } = excludingConfig();
     presenter.apply(rescanned, state);
 
     const ignoredButton = rescanned.collapseControl('config/app.json');
@@ -179,14 +167,7 @@ describe('ReviewPresenter', () => {
         );
       });
     });
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    snapshot.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
-    const presenter = new ReviewPresenter();
-    const state = filters();
-    state.get('groups')?.add('Config');
+    const { snapshot, state, presenter } = excludingConfig();
 
     presenter.apply(snapshot, state);
     await Promise.resolve();
@@ -212,14 +193,7 @@ describe('ReviewPresenter', () => {
         detached.replaceWith(replacement);
       }, 0);
     });
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    snapshot.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
-    const presenter = new ReviewPresenter();
-    const state = filters();
-    state.get('groups')?.add('Config');
+    const { snapshot, state, presenter } = excludingConfig();
 
     presenter.apply(snapshot, state);
     await untilDom(() => {
@@ -240,14 +214,7 @@ describe('ReviewPresenter', () => {
   });
 
   it('reconciles when a user expands an actively filtered file', async () => {
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    snapshot.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
-    const presenter = new ReviewPresenter();
-    const state = filters();
-    state.get('groups')?.add('Config');
+    const { snapshot, state, presenter } = excludingConfig();
 
     presenter.apply(snapshot, state);
     await Promise.resolve();
@@ -272,14 +239,7 @@ describe('ReviewPresenter', () => {
       clicks += 1;
     });
 
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    snapshot.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
-    const presenter = new ReviewPresenter();
-    const state = filters();
-    state.get('groups')?.add('Config');
+    const { snapshot, state, presenter } = excludingConfig();
 
     presenter.apply(snapshot, state);
     await untilDom(() => {
@@ -297,15 +257,9 @@ describe('ReviewPresenter', () => {
     document
       .querySelector('#diff-config button[aria-label="Collapse file"]')
       ?.remove();
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    snapshot.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
-    const state = filters();
-    state.get('groups')?.add('Config');
+    const { snapshot, state, presenter } = excludingConfig();
 
-    new ReviewPresenter().apply(snapshot, state);
+    presenter.apply(snapshot, state);
 
     expect(document.getElementById('config/app.json')?.hidden).toBe(false);
     expect(
@@ -318,15 +272,9 @@ describe('ReviewPresenter', () => {
       .getElementById('docs/readme.md')
       ?.querySelector('a[href^="#diff-"]')
       ?.setAttribute('href', '#diff-');
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    snapshot.files
-      .find((file) => file.path === 'config/app.json')
-      ?.labels.push({ facet: 'groups', value: 'Config' });
-    const state = filters();
-    state.get('groups')?.add('Config');
+    const { snapshot, state, presenter } = excludingConfig();
 
-    new ReviewPresenter().apply(snapshot, state);
+    presenter.apply(snapshot, state);
 
     expect(snapshot.unavailable.get('docs/readme.md')).toBe('Invalid diff anchor');
     expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   dismissSnackbar,
@@ -12,8 +12,11 @@ import {
 } from './review-ui';
 
 describe('review status UI', () => {
-  it('announces a snackbar in the live region', () => {
+  beforeEach(() => {
     document.body.innerHTML = '<main></main>';
+  });
+
+  it('announces a snackbar in the live region', () => {
     showBatchStarted(document, 'folder', true);
     const stack = document.querySelector('[data-diffseek="snackbars"]');
     const snackbar = document.querySelector('[data-diffseek="snackbar"]');
@@ -25,7 +28,6 @@ describe('review status UI', () => {
   });
 
   it('gives every batch distinct messages, with no progress for a single file', () => {
-    document.body.innerHTML = '<main></main>';
     const done = { requested: 1, completed: ['a.ts'], failed: [] };
     const failed = { requested: 1, completed: [], failed: ['a.ts'] };
     const shown: string[] = [];
@@ -87,7 +89,6 @@ describe('review status UI', () => {
     target?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
   it('turns progress into its outcome in place, and a newer toast replaces it', () => {
-    document.body.innerHTML = '<main></main>';
     const progress = showBatchStarted(document, 'category', true);
     showHideNow(document);
     expect(snackbars()).toEqual([
@@ -116,7 +117,6 @@ describe('review status UI', () => {
 
   it('keeps a toast for the minimum time, then hides it on the next input', () => {
     vi.useFakeTimers();
-    document.body.innerHTML = '<main></main>';
     showHideNow(document);
 
     vi.advanceTimersByTime(4_999);
@@ -134,7 +134,6 @@ describe('review status UI', () => {
 
   it('restarts the minimum when progress turns into its outcome', () => {
     vi.useFakeTimers();
-    document.body.innerHTML = '<main></main>';
     const progress = showBatchStarted(document, 'folder', true);
     vi.advanceTimersByTime(10_000);
     press(document.body);
@@ -157,7 +156,6 @@ describe('review status UI', () => {
 
   it('closes a clicked toast at once, progress included', () => {
     vi.useFakeTimers();
-    document.body.innerHTML = '<main></main>';
     press(showBatchStarted(document, 'folder', true));
     expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
 
@@ -167,7 +165,6 @@ describe('review status UI', () => {
   });
 
   it('drops the progress toast of a batch with no outcome', () => {
-    document.body.innerHTML = '<main></main>';
     dismissSnackbar(showBatchStarted(document, 'folder', false));
     expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
   });
@@ -200,8 +197,6 @@ describe('review status UI', () => {
   });
 
   it('announces remembered filter defaults entering and leaving', () => {
-    document.body.innerHTML = '<main></main>';
-
     showRememberedFilterDefault(document, 'hidden');
     showRememberedFilterDefault(document, 'shown');
     showHideNow(document);
