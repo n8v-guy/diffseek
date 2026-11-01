@@ -98,7 +98,7 @@ function textOrder(left: string, right: string): number {
 
 function facetSortGroup(facet: LabelFacet, label: FileLabel): number {
   if (isFallbackFacetValue(facet, label.value)) return 2;
-  if (facet === 'languages' && !label.mapped) return 1;
+  if (facet === 'languages' && !label.fromLinguistLanguage) return 1;
   return 0;
 }
 

@@ -22,7 +22,7 @@ export type LabelFacet = (typeof labelFacets)[number];
 export type FileLabel = {
   facet: LabelFacet;
   value: string;
-  mapped?: boolean;
+  fromLinguistLanguage?: boolean;
 };
 
 export type LabelContext = {
@@ -67,7 +67,11 @@ const ownerLabelSource: LabelSource = {
 const languageLabelSource: LabelSource = {
   prepare: () => ({ file, attributes }) => [
     attributes.language
-      ? { facet: 'languages', value: attributes.language, mapped: true }
+      ? {
+          facet: 'languages',
+          value: attributes.language,
+          fromLinguistLanguage: true,
+        }
       : {
           facet: 'languages',
           value: file.extension?.slice(1) ?? 'No extension',

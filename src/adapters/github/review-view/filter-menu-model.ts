@@ -49,21 +49,31 @@ export type MenuRowModel = {
   onViewed?: (viewed: boolean, paths: string[]) => void;
 };
 
-export function menuRowModels(options: FilterMenuOptions): MenuRowModel[] {
+export type MenuSectionModel = {
+  heading?: string;
+  rows: MenuRowModel[];
+};
+
+export function menuRowModels(options: FilterMenuOptions): MenuSectionModel[] {
   const labelSets = options.files.map((file) => file.labels);
-  const rows: MenuRowModel[] = [
+  const sections: MenuSectionModel[] = [
     {
-      ...(projectFacet('viewed', options.files, options.filters).get('true') ??
-        emptyProjection()),
-      facet: 'viewed',
-      label: 'Viewed files',
-      value: 'true',
-      excluded: selection(options.filters, 'viewed'),
-      filterDefaults: options.filterDefaults,
-      onChange: options.onChange,
-      onFilterDefaultChange: options.onFilterDefaultChange,
-      onAlwaysReadChange: options.onAlwaysReadChange,
-      onViewed: options.onViewed,
+      rows: [
+        {
+          ...(projectFacet('viewed', options.files, options.filters).get(
+            'true',
+          ) ?? emptyProjection()),
+          facet: 'viewed',
+          label: 'Viewed files',
+          value: 'true',
+          excluded: selection(options.filters, 'viewed'),
+          filterDefaults: options.filterDefaults,
+          onChange: options.onChange,
+          onFilterDefaultChange: options.onFilterDefaultChange,
+          onAlwaysReadChange: options.onAlwaysReadChange,
+          onViewed: options.onViewed,
+        },
+      ],
     },
   ];
   const generated = projectFacet(
@@ -72,18 +82,22 @@ export function menuRowModels(options: FilterMenuOptions): MenuRowModel[] {
     options.filters,
   ).get('true');
   if (generated && generated.total > 0) {
-    rows.push({
-      ...generated,
-      facet: 'generated',
-      label: 'Generated files',
-      value: 'true',
-      excluded: selection(options.filters, 'generated'),
-      filterDefaults: options.filterDefaults,
-      disabled: options.generatedDefaultBusy === true,
-      onChange: options.onChange,
-      onFilterDefaultChange: options.onFilterDefaultChange,
-      onAlwaysReadChange: options.onAlwaysReadChange,
-      onViewed: options.onViewed,
+    sections.push({
+      rows: [
+        {
+          ...generated,
+          facet: 'generated',
+          label: 'Generated files',
+          value: 'true',
+          excluded: selection(options.filters, 'generated'),
+          filterDefaults: options.filterDefaults,
+          disabled: options.generatedDefaultBusy === true,
+          onChange: options.onChange,
+          onFilterDefaultChange: options.onFilterDefaultChange,
+          onAlwaysReadChange: options.onAlwaysReadChange,
+          onViewed: options.onViewed,
+        },
+      ],
     });
   }
   for (const definition of facetDefinitions.filter(
@@ -108,6 +122,7 @@ export function menuRowModels(options: FilterMenuOptions): MenuRowModel[] {
     const ownerPrefix =
       definition.facet === 'owners' ? sharedOwnerPrefix(values) : null;
     const excluded = selection(options.filters, definition.facet);
+    const rows: MenuRowModel[] = [];
     for (const value of values) {
       rows.push({
         ...(projections.get(value) ?? emptyProjection()),
@@ -125,8 +140,9 @@ export function menuRowModels(options: FilterMenuOptions): MenuRowModel[] {
         onViewed: options.onViewed,
       });
     }
+    sections.push({ heading: definition.heading, rows });
   }
-  return rows;
+  return sections;
 }
 
 function selection(filters: FilterState, facet: LabelFacet): Set<string> {

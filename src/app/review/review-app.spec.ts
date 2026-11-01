@@ -22,12 +22,8 @@ const inertMetadata = {
 };
 const changesPath = '/octo/repo/pull/1/changes';
 
-function meta(attributes: string, codeowners = '') {
-  return { codeowners, attributes };
-}
-
-function held(attributes: string, codeowners = '') {
-  const metadata = meta(attributes, codeowners);
+function metadataSource(attributes: string) {
+  const metadata = { ...emptyMetadata, attributes };
   return {
     readImmediate: async () => metadata,
     refreshDefault: async () => ({ metadata, changed: false }),
@@ -423,7 +419,7 @@ describe('review app lifecycle', () => {
 
   it('reconciles menu recreation, filtering, and a replaced tree', async () => {
     const app = await reviewApp({
-      ...held('src/** group=Code'),
+      ...metadataSource('src/** group=Code'),
     });
 
     await nextReconcile(openMenu);
@@ -462,7 +458,7 @@ describe('review app lifecycle', () => {
 
   it('re-collapses a filtered file after GitHub expands it', async () => {
     const app = await reviewApp({
-      ...held('src/** group=Code'),
+      ...metadataSource('src/** group=Code'),
     });
     openMenu();
     const codeFilter = '[data-filter-kind="groups"][data-filter-value="Code"]';
@@ -500,7 +496,7 @@ describe('review app lifecycle', () => {
     tree?.prepend(folder);
     openMenu();
     const app = await reviewApp({
-      ...held('src/** group=Code'),
+      ...metadataSource('src/** group=Code'),
     });
 
     await nextReconcile(() => {
@@ -764,7 +760,7 @@ describe('review app reuse invariants', () => {
       markFiles: vi.fn(async () => {
         throw new Error('native mark failed');
       }),
-      ...held('src/generated.ts linguist-generated'),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     await until(() =>
@@ -836,7 +832,7 @@ describe('fresh filter defaults', () => {
     const markFiles = marked(['src/generated.ts']);
     const app = await reviewApp({
       markFiles: signalled(markFiles),
-      ...held('src/generated.ts linguist-generated'),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     await until(() =>
@@ -878,7 +874,7 @@ describe('fresh filter defaults', () => {
     const markFiles = marked(['src/generated.ts']);
     const app = await reviewApp({
       markFiles: signalled(markFiles),
-      ...held('src/generated.ts linguist-generated'),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     const viewed = () =>
@@ -946,7 +942,7 @@ describe('fresh filter defaults', () => {
     });
     openMenu();
     const app = await reviewApp({
-      ...held('src/generated.ts linguist-generated'),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     await until(() =>
@@ -1000,7 +996,7 @@ describe('review app interactions', () => {
     openMenu();
     const app = await reviewApp({
       markFiles: signalled(markFiles),
-      ...held('src/generated.ts linguist-generated'),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
 
     await until(() =>
@@ -1077,7 +1073,7 @@ describe('review app interactions', () => {
     openMenu();
     const app = await reviewApp({
       markFiles: signalled(markFiles),
-      ...held('src/generated.ts linguist-generated'),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
     const alwaysRead = () => document.querySelector<HTMLButtonElement>('[data-diffseek-always-read]');
     await until(() => expect(alwaysRead()).not.toBeNull());
@@ -1250,7 +1246,7 @@ describe('review app interactions', () => {
     openMenu();
     const app = await reviewApp({
       pathname: () => path,
-      ...held('src/** group=Code'),
+      ...metadataSource('src/** group=Code'),
     });
     document
       .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
@@ -1274,7 +1270,7 @@ describe('review app interactions', () => {
   it('rolls back presentation when GitHub contracts disappear', async () => {
     openMenu();
     const app = await reviewApp({
-      ...held('src/** group=Code'),
+      ...metadataSource('src/** group=Code'),
     });
     document
       .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
@@ -1321,7 +1317,7 @@ describe('review app interactions', () => {
   it('keeps attribute-generated labels after GitHub loads the diff', async () => {
     openMenu();
     const app = await reviewApp({
-      ...held('src/generated.ts linguist-generated'),
+      ...metadataSource('src/generated.ts linguist-generated'),
     });
     document
       .querySelector<HTMLButtonElement>(

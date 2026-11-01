@@ -261,18 +261,17 @@ function waitForViewedState(
       const current = resolveButton();
       if (current && isViewed(current) === viewed) finish(true);
     };
-    const observer = new MutationObserver(check);
-    observer.observe(
+    const root =
       button.closest('[role="region"]') ??
-        button.closest('[data-diff-header-wrapper="true"]') ??
-        button,
-      {
-        attributes: true,
-        childList: true,
-        subtree: true,
-        attributeFilter: ['aria-label', 'aria-pressed'],
-      },
-    );
+      button.closest('[data-diff-header-wrapper="true"]') ??
+      button;
+    const observer = new MutationObserver(check);
+    observer.observe(root, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+      attributeFilter: ['aria-label', 'aria-pressed'],
+    });
     // Failure guard only: success is the attribute change above; nothing
     // signals a click GitHub ignored.
     const timeout = setTimeout(() => finish(false), timeoutMs);

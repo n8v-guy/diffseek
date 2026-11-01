@@ -28,16 +28,16 @@ src/app.test.ts linguist-generated
       expect.arrayContaining([
         { facet: 'groups', value: 'code' },
         { facet: 'owners', value: '@team' },
-        { facet: 'languages', value: 'TypeScript', mapped: true },
+        { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
         { facet: 'statuses', value: 'added' },
         { facet: 'generated', value: 'true' },
       ]),
     );
     expect(languageLabels(files[0]!)).toEqual([
-      { facet: 'languages', value: 'TypeScript', mapped: true },
+      { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
     ]);
     expect(languageLabels(files[1]!)).toEqual([
-      { facet: 'languages', value: 'TypeScript', mapped: true },
+      { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
     ]);
   });
 
@@ -56,7 +56,7 @@ src/app.test.ts linguist-generated
     });
 
     expect(languageLabels(files[0]!)).toEqual([
-      { facet: 'languages', value: 'TypeScript', mapped: true },
+      { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
     ]);
     expect(languageLabels(files[1]!)).toEqual([
       { facet: 'languages', value: 'MJS' },

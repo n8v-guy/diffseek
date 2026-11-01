@@ -65,7 +65,7 @@ test.beforeAll(async () => {
 });
 
 test.beforeEach(async () => {
-  await extensionStorage('clear');
+  await clearExtensionStorage();
   await writeFilterDefaults({ hidden: [], viewed: [] });
 });
 
@@ -290,7 +290,7 @@ test('interleaves native and DiffSeek viewed actions in action order', async () 
     document.documentElement.dataset.nativeDelay = '75';
   });
 
-  await markSeen(page);
+  await markAllViewed(page);
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Visible files in folder marked viewed');
@@ -608,7 +608,7 @@ test('stays idempotent through a deterministic native-extension action storm', a
   await page.evaluate(() => {
     document.documentElement.dataset.nativeDelay = '75';
   });
-  await markSeen(page);
+  await markAllViewed(page);
   await expect(page.locator('[data-diffseek="filters"]')).toHaveCount(1);
   await expect(page.locator('[data-diffseek-filtered-out]')).toHaveCount(0);
 });
@@ -896,7 +896,7 @@ async function openPull(pull: number, nativeFilter = false): Promise<Page> {
   return page;
 }
 
-async function markSeen(page: Page): Promise<void> {
+async function markAllViewed(page: Page): Promise<void> {
   await page.locator('#diff-app button[aria-label="Not Viewed"]').click();
   await page.locator(`#src [aria-label="${markAll}"]`).click();
   await expect(
@@ -919,47 +919,64 @@ async function extensionWorker() {
 
 type StoredDefaults = { hidden: string[]; viewed: string[] };
 
-async function extensionStorage(
-  operation: 'clear' | 'remove' | 'get' | 'set',
-  value?: StoredDefaults,
-): Promise<unknown> {
+type StorageLocal = {
+  clear: () => Promise<void>;
+  remove: (name: string) => Promise<void>;
+  get: (name: string) => Promise<unknown>;
+  set: (items: Record<string, unknown>) => Promise<void>;
+};
+
+async function storageLocal() {
   const worker = await extensionWorker();
-  return worker.evaluate(
-    async ({ operation, value, key }) => {
-      const local = (
+  return worker.evaluateHandle(
+    () =>
+      (
         globalThis as unknown as {
-          chrome: {
-            storage: {
-              local: {
-                clear: () => Promise<void>;
-                remove: (name: string) => Promise<void>;
-                get: (name: string) => Promise<unknown>;
-                set: (items: Record<string, unknown>) => Promise<void>;
-              };
-            };
-          };
+          chrome: { storage: { local: StorageLocal } };
         }
-      ).chrome.storage.local;
-      if (operation === 'clear') return local.clear();
-      if (operation === 'remove') return local.remove(key);
-      if (operation === 'set') return local.set({ [key]: value });
-      return local.get(key);
-    },
-    { operation, value, key: filterDefaultsKey },
+      ).chrome.storage.local,
   );
+}
+
+async function clearExtensionStorage(): Promise<void> {
+  const local = await storageLocal();
+  await local.evaluate((storage) => storage.clear());
+  await local.dispose();
+}
+
+async function removeExtensionStorage(): Promise<void> {
+  const local = await storageLocal();
+  await local.evaluate(
+    (storage, key) => storage.remove(key),
+    filterDefaultsKey,
+  );
+  await local.dispose();
+}
+
+async function setExtensionStorage(value: StoredDefaults): Promise<void> {
+  const local = await storageLocal();
+  await local.evaluate(
+    (storage, items) => storage.set(items),
+    { [filterDefaultsKey]: value },
+  );
+  await local.dispose();
+}
+
+async function readStoredFilterDefaults(): Promise<unknown> {
+  const local = await storageLocal();
+  const stored = await local.evaluate(
+    (storage, key) => storage.get(key),
+    filterDefaultsKey,
+  );
+  await local.dispose();
+  return stored;
 }
 
 async function writeFilterDefaults(
   defaults: StoredDefaults | null,
 ): Promise<void> {
-  await extensionStorage(
-    defaults == null ? 'remove' : 'set',
-    defaults ?? undefined,
-  );
-}
-
-async function readStoredFilterDefaults(): Promise<unknown> {
-  return extensionStorage('get');
+  if (defaults == null) await removeExtensionStorage();
+  else await setExtensionStorage(defaults);
 }
 
 function instrument(source: string, startsWithNativeFilter = false): string {

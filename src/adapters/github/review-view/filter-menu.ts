@@ -1,5 +1,3 @@
-import { facetDefinitions } from '@diffseek/review';
-
 import {
   applyCheckedState,
   cycleFilterDefault,
@@ -57,20 +55,13 @@ export function mountFilterMenu(
   content.className = 'diffseek-menu-content';
   root.append(content);
 
-  const sections: MenuRowModel[][] = [];
-  for (const row of menuRowModels(options)) {
-    if (row.facet === 'viewed' || row.facet === 'generated') {
-      appendItem(content, row);
+  for (const block of menuRowModels(options)) {
+    if (!block.heading) {
+      for (const row of block.rows) appendItem(content, row);
       continue;
     }
-    const current = sections.at(-1);
-    if (current?.[0]?.facet === row.facet) current.push(row);
-    else sections.push([row]);
-  }
-  if (sections.length > 0) appendSeparator(content);
-  for (const [index, rows] of sections.entries()) {
-    appendSection(content, rows);
-    if (index < sections.length - 1) appendSeparator(content);
+    appendSeparator(content);
+    appendSection(content, block.heading, block.rows);
   }
   if (hasTransientExclusions(options.filters, options.filterDefaults)) {
     appendResetFilters(root, options);
@@ -85,12 +76,12 @@ export function mountFilterMenu(
   }
 }
 
-function appendSection(root: HTMLElement, rows: MenuRowModel[]): void {
+function appendSection(
+  root: HTMLElement,
+  heading: string,
+  rows: MenuRowModel[],
+): void {
   const first = rows[0];
-  const heading = facetDefinitions.find(
-    (definition) => definition.facet === first?.facet,
-  )?.heading;
-  if (!first || heading == null) return;
   const section = document.createElement('section');
   section.className = 'diffseek-menu-section';
   const titleRow = document.createElement('div');
@@ -98,7 +89,7 @@ function appendSection(root: HTMLElement, rows: MenuRowModel[]): void {
   const title = document.createElement('h3');
   title.textContent = heading;
   titleRow.append(title);
-  if (first.excluded.size > 0) {
+  if (first && first.excluded.size > 0) {
     titleRow.append(
       sectionAllAction({
         excluded: first.excluded,

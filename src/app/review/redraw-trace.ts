@@ -157,21 +157,23 @@ function noteRows(
     for (const node of record.removedNodes) collectIds(node, selector, removed);
   }
   const rebuilt = countRebuilt(removed, added, pending, now);
-  const tree = kind === 'tree';
-  const ledger = tree ? trace.treeSettle : trace.panelSettle;
+  const ledger = kind === 'tree' ? trace.treeSettle : trace.panelSettle;
   noteReturns(ledger, removed, added, now);
-  if (tree) trace.treeRowsRemoved += removed.size;
-  else trace.panelsRemoved += removed.size;
-  if (tree) {
+  if (kind === 'tree') {
+    trace.treeRowsRemoved += removed.size;
     trace.treeRowsReadded = ledger.readded;
     trace.treeNetLoss = ledger.netLoss;
-  } else {
-    trace.panelsReadded = ledger.readded;
-    trace.panelNetLoss = ledger.netLoss;
+    if (rebuilt >= rebuildRows || removed.size >= massRemoval) {
+      trace.treeRebuilds += 1;
+    }
+    return;
   }
-  if (rebuilt < rebuildRows && removed.size < massRemoval) return;
-  if (tree) trace.treeRebuilds += 1;
-  else trace.panelRebuilds += 1;
+  trace.panelsRemoved += removed.size;
+  trace.panelsReadded = ledger.readded;
+  trace.panelNetLoss = ledger.netLoss;
+  if (rebuilt >= rebuildRows || removed.size >= massRemoval) {
+    trace.panelRebuilds += 1;
+  }
 }
 
 function noteReturns(

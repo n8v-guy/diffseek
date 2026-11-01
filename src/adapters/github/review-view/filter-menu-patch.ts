@@ -1,6 +1,7 @@
 import { applyCheckedState } from './filter-default-state';
 import {
   type FilterMenuOptions,
+  type MenuRowModel,
   menuRowModels,
 } from './filter-menu-model';
 import { hasTransientExclusions } from './filter-reset';
@@ -29,7 +30,7 @@ export function patchFilterMenu(
 ): boolean {
   const root = menu.querySelector<HTMLElement>(filtersRootSelector);
   if (!root) return false;
-  const rows = menuRowModels(options);
+  const rows = menuRowModels(options).flatMap((section) => section.rows);
   const buttons = [
     ...root.querySelectorAll<HTMLButtonElement>(
       '[data-filter-kind][data-filter-value]',
@@ -70,7 +71,7 @@ export function patchFilterMenu(
 
 function patchAlwaysRead(
   rowElement: HTMLElement,
-  row: ReturnType<typeof menuRowModels>[number],
+  row: MenuRowModel,
 ): boolean {
   const alwaysRead = rowElement.querySelector<HTMLButtonElement>(
     '[data-diffseek-always-read]',
@@ -93,7 +94,7 @@ function patchAlwaysRead(
 
 function patchOnly(
   rowElement: HTMLElement,
-  row: ReturnType<typeof menuRowModels>[number],
+  row: MenuRowModel,
 ): boolean {
   const only = rowElement.querySelector<HTMLButtonElement>('[data-filter-only]');
   const values = row.onlyValues;
@@ -108,7 +109,7 @@ function patchOnly(
 
 function patchRow(
   button: HTMLButtonElement | undefined,
-  row: ReturnType<typeof menuRowModels>[number],
+  row: MenuRowModel,
 ): boolean {
   if (!button) return false;
   const rowElement = button.closest('.diffseek-menu-row');

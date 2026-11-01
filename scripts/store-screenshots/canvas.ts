@@ -162,6 +162,7 @@ function positionNote(
   label.style.top = `${Math.round(top)}px`;
 }
 
+// A route leaves the label edge named by `from` and aims at the ring centre.
 function drawRoutes(paint: Paint, routes: Route[], label: HTMLElement): void {
   const rect = label.getBoundingClientRect();
   for (const route of routes) {
@@ -178,6 +179,10 @@ function drawRoutes(paint: Paint, routes: Route[], label: HTMLElement): void {
   }
 }
 
+/**
+ * Offset pins the start: px from the label's left on the top edge, or
+ * from its top on the right edge.
+ */
 function routeStart(paint: Paint, rect: DOMRect, route: Route): Point {
   const { corner } = paint;
   const { cx, cy } = route.ring;
