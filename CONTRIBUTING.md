@@ -42,6 +42,7 @@ Product code waits on events, not time: DOM mutations, attribute changes,
 animation frames, user input, and settled promises. A timer is allowed only as
 a failure guard where nothing signals that the awaited thing will never happen
 (a native click GitHub ignores, a hung request), never to pace or batch work.
+The one exception is the minimum time a notification stays up.
 - `ReviewIndex` construction is covered for large file lists without quadratic
   growth.
 - Live e2e checks cold, warm, and hot durations, reconcile passes, DOM
@@ -53,10 +54,11 @@ a failure guard where nothing signals that the awaited thing will never happen
 - Each pull request owns a disposable review session.
 - GitHub's rendered DOM is authoritative.
 - Native actions execute in invocation order and re-resolve current controls.
-- Notifications have no timer. A batch's progress notification is replaced by
-  its outcome; any other notification stays until the reviewer's next pointer
-  press, key press, or wheel scroll, or until a newer one replaces it.
-  Clicking a notification closes it.
+- A batch's progress notification turns into its outcome in place. Any other
+  notification stays up for a minimum time; after that, the reviewer's next
+  click on the page, key press, or wheel scroll hides it. Input during the
+  minimum does not count. A newer notification replaces it at any time, and
+  clicking a notification closes it at once.
 - Metadata levels replace one another; they are never merged.
 - File labels are independent from filter selection.
 - Stale generations cannot update a later review.

@@ -6,6 +6,9 @@ import {
   type ViewedTarget,
 } from '../review-page/viewed-actions';
 
+/** The one product timer that paces UI: the shortest time a toast stays up. */
+const snackbarMinimumMs = 5_000;
+
 export function menuNeedsRemount(menu: HTMLElement): boolean {
   if (menu.dataset.diffseekMenuOwned !== 'true') return true;
   if (!menu.querySelector(':scope > [data-diffseek="filters"]')) return true;
@@ -163,9 +166,9 @@ export function showBatchResult(
   const message = result.failed.length > 0 ? messages.failed : messages.done;
   if (progress?.isConnected) {
     // Replace in place so the live region announces the outcome.
-    dismissStatusSnackbars(root, false);
-    progress.dataset.diffseekSnackbarKind = 'status';
+    replaceStatusSnackbars(root);
     progress.textContent = message;
+    settleAfterMinimum(progress);
     progress.parentElement?.append(progress);
     return;
   }
@@ -204,17 +207,18 @@ export function showAlwaysRead(root: Document, enabled: boolean): void {
 }
 
 /**
- * Toasts have no timer. A progress toast lasts until its batch finishes. Any
- * other toast lasts until the reviewer next presses a pointer or key or scrolls
- * with the wheel, or until a newer toast replaces it. Pressing a toast closes
- * it, a progress toast too.
+ * A progress toast lasts until its batch finishes and then turns into the
+ * outcome in place. Any other toast stays up for a minimum time; after that,
+ * the reviewer's next click on the page, key press, or wheel scroll hides it.
+ * Input before the minimum does not count and is not queued. A newer toast
+ * replaces it at any time, and clicking a toast closes it at once.
  */
 function showSnackbar(
   root: Document,
   message: string,
   kind: 'progress' | 'status' = 'status',
 ): HTMLElement {
-  dismissStatusSnackbars(root, false);
+  replaceStatusSnackbars(root);
   listenForDismissal(root);
   let stack = root.querySelector<HTMLElement>(
     '[data-diffseek="snackbars"]',
@@ -231,7 +235,17 @@ function showSnackbar(
   snackbar.setAttribute('role', 'status');
   snackbar.textContent = message;
   stack.append(snackbar);
+  if (kind === 'status') settleAfterMinimum(snackbar);
   return snackbar;
+}
+
+function settleAfterMinimum(snackbar: HTMLElement): void {
+  snackbar.dataset.diffseekSnackbarKind = 'status';
+  delete snackbar.dataset.diffseekSnackbarSettled;
+  const view = snackbar.ownerDocument.defaultView;
+  view?.setTimeout(() => {
+    if (snackbar.isConnected) snackbar.dataset.diffseekSnackbarSettled = 'true';
+  }, snackbarMinimumMs);
 }
 
 const dismissingDocuments = new WeakSet<Document>();
@@ -240,12 +254,18 @@ function listenForDismissal(root: Document): void {
   if (dismissingDocuments.has(root)) return;
   dismissingDocuments.add(root);
   // Capture phase: runs before the click that may show the next toast.
-  const dismiss = () => dismissStatusSnackbars(root, true);
+  const dismiss = () => {
+    for (const snackbar of root.querySelectorAll<HTMLElement>(
+      '[data-diffseek="snackbar"][data-diffseek-snackbar-settled="true"]',
+    )) {
+      dismissSnackbar(snackbar);
+    }
+  };
   root.addEventListener(
     'pointerdown',
     (event) => {
-      // Pressing a toast closes it, progress included; anywhere else closes
-      // only finished toasts.
+      // Clicking a toast closes it at once, progress included; a click
+      // anywhere else hides only toasts past their minimum time.
       const target = event.target;
       const toast =
         target instanceof Element
@@ -260,12 +280,12 @@ function listenForDismissal(root: Document): void {
   root.addEventListener('wheel', dismiss, { capture: true, passive: true });
 }
 
-function dismissStatusSnackbars(root: Document, removeEmptyStack: boolean): void {
+/** A newer toast replaces finished ones; the live region stays mounted. */
+function replaceStatusSnackbars(root: Document): void {
   for (const snackbar of root.querySelectorAll<HTMLElement>(
     '[data-diffseek="snackbar"][data-diffseek-snackbar-kind="status"]',
   )) {
-    if (removeEmptyStack) dismissSnackbar(snackbar);
-    else snackbar.remove();
+    snackbar.remove();
   }
 }
 

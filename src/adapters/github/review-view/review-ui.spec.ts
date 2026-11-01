@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   dismissSnackbar,
@@ -77,22 +77,23 @@ describe('review status UI', () => {
     ).toBe('DiffSeek unavailable. No file tree on this page');
   });
 
-  it('replaces a progress toast with its outcome and keeps it with no timer', () => {
-    document.body.innerHTML = '<main></main>';
-    const snackbars = () =>
-      [
-        ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
-      ].map((item) => item.textContent);
+  afterEach(() => vi.useRealTimers());
 
+  const snackbars = () =>
+    [
+      ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
+    ].map((item) => item.textContent);
+  const press = (target: Element | null | undefined) =>
+    target?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+  it('turns progress into its outcome in place, and a newer toast replaces it', () => {
+    document.body.innerHTML = '<main></main>';
     const progress = showBatchStarted(document, 'category', true);
     showHideNow(document);
     expect(snackbars()).toEqual([
       'Marking all files in category viewed…',
       'Hidden',
     ]);
-
-    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    expect(snackbars()).toEqual(['Marking all files in category viewed…']);
 
     showBatchResult(
       document,
@@ -109,18 +110,55 @@ describe('review status UI', () => {
     expect(
       document.querySelector<HTMLElement>('[data-diffseek="snackbar"]')?.title,
     ).toBe('');
+    showAlwaysRead(document, false);
+    expect(snackbars()).toEqual(['Auto-view off']);
+  });
 
+  it('keeps a toast for the minimum time, then hides it on the next input', () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<main></main>';
+    showHideNow(document);
+
+    vi.advanceTimersByTime(4_999);
+    press(document.body);
     document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+    document.body.dispatchEvent(new Event('wheel', { bubbles: true }));
+    expect(snackbars()).toEqual(['Hidden']);
+
+    // Early input is not queued: the toast stays until input after the minimum.
+    vi.advanceTimersByTime(1);
+    expect(snackbars()).toEqual(['Hidden']);
+    document.body.dispatchEvent(new Event('wheel', { bubbles: true }));
     expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
   });
 
-  it('closes a toast the reviewer presses, progress included', () => {
+  it('restarts the minimum when progress turns into its outcome', () => {
+    vi.useFakeTimers();
     document.body.innerHTML = '<main></main>';
-    const press = (target: Element | null | undefined) =>
-      target?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-
     const progress = showBatchStarted(document, 'folder', true);
-    press(progress);
+    vi.advanceTimersByTime(10_000);
+    press(document.body);
+    expect(snackbars()).toEqual(['Marking visible files in folder viewed…']);
+
+    showBatchResult(
+      document,
+      'folder',
+      true,
+      { requested: 2, completed: ['a.ts', 'b.ts'], failed: [] },
+      progress,
+    );
+    vi.advanceTimersByTime(4_999);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+    expect(snackbars()).toEqual(['Visible files in folder marked viewed']);
+    vi.advanceTimersByTime(1);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+    expect(snackbars()).toEqual([]);
+  });
+
+  it('closes a clicked toast at once, progress included', () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<main></main>';
+    press(showBatchStarted(document, 'folder', true));
     expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
 
     showHideNow(document);

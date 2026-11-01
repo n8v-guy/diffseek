@@ -172,13 +172,15 @@ files failed; the circles and checkboxes show what is still unmarked.
 change that confirms a native click, an animation frame to batch streamed tree
 and panel changes, a batch's own completion, and the reviewer's next input.
 Timers remain only as failure guards for things nothing signals: a native
-click GitHub ignores and a request that hangs. Notifications follow the same
-rule: progress is replaced by its outcome, and other notifications stay until
-the next pointer press, key press, or wheel scroll, or a newer notification.
-Clicking a notification closes it, including a progress one.
+click GitHub ignores and a request that hangs. Notifications are the one
+deliberate exception: progress turns into its outcome in place, and any other
+notification stays up for a minimum time, after which the next click on the
+page, key press, or wheel scroll hides it. Input during the minimum does not
+count. A newer notification replaces it, and clicking it closes it at once.
 
 **Why:** Fixed delays are either too short on slow machines or wasted time on
 fast ones, and they hide what the code is actually waiting for. **Cost:** A
 streamed page can get one reconcile pass per frame instead of one per quiet
 period, and a background tab defers coalesced passes until it is shown. A
-notification no longer disappears on its own while the reviewer only reads.
+notification no longer disappears on its own while the reviewer only reads,
+and the minimum is a timer: it reads the same on every machine.
