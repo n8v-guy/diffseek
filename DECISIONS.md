@@ -175,7 +175,7 @@ Timers remain only as failure guards for things nothing signals: a native
 click GitHub ignores and a request that hangs. Notifications follow the same
 rule: progress is replaced by its outcome, and other notifications stay until
 the next pointer press, key press, or wheel scroll, or a newer notification.
-They let clicks through so they never cover a GitHub control.
+Clicking a notification closes it, including a progress one.
 
 **Why:** Fixed delays are either too short on slow machines or wasted time on
 fast ones, and they hide what the code is actually waiting for. **Cost:** A

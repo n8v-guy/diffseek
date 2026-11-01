@@ -114,6 +114,20 @@ describe('review status UI', () => {
     expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
   });
 
+  it('closes a toast the reviewer presses, progress included', () => {
+    document.body.innerHTML = '<main></main>';
+    const press = (target: Element | null | undefined) =>
+      target?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    const progress = showBatchStarted(document, 'folder', true);
+    press(progress);
+    expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
+
+    showHideNow(document);
+    press(document.querySelector('[data-diffseek="snackbar"]'));
+    expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
+  });
+
   it('drops the progress toast of a batch with no outcome', () => {
     document.body.innerHTML = '<main></main>';
     dismissSnackbar(showBatchStarted(document, 'folder', false));

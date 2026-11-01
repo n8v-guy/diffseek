@@ -206,8 +206,8 @@ export function showAlwaysRead(root: Document, enabled: boolean): void {
 /**
  * Toasts have no timer. A progress toast lasts until its batch finishes. Any
  * other toast lasts until the reviewer next presses a pointer or key or scrolls
- * with the wheel, or until a newer toast replaces it. Toasts let clicks through
- * (CSS), so one never covers a GitHub control.
+ * with the wheel, or until a newer toast replaces it. Pressing a toast closes
+ * it, a progress toast too.
  */
 function showSnackbar(
   root: Document,
@@ -241,7 +241,21 @@ function listenForDismissal(root: Document): void {
   dismissingDocuments.add(root);
   // Capture phase: runs before the click that may show the next toast.
   const dismiss = () => dismissStatusSnackbars(root, true);
-  root.addEventListener('pointerdown', dismiss, true);
+  root.addEventListener(
+    'pointerdown',
+    (event) => {
+      // Pressing a toast closes it, progress included; anywhere else closes
+      // only finished toasts.
+      const target = event.target;
+      const toast =
+        target instanceof Element
+          ? target.closest<HTMLElement>('[data-diffseek="snackbar"]')
+          : null;
+      dismissSnackbar(toast);
+      dismiss();
+    },
+    true,
+  );
   root.addEventListener('keydown', dismiss, true);
   root.addEventListener('wheel', dismiss, { capture: true, passive: true });
 }

@@ -56,6 +56,7 @@ a failure guard where nothing signals that the awaited thing will never happen
 - Notifications have no timer. A batch's progress notification is replaced by
   its outcome; any other notification stays until the reviewer's next pointer
   press, key press, or wheel scroll, or until a newer one replaces it.
+  Clicking a notification closes it.
 - Metadata levels replace one another; they are never merged.
 - File labels are independent from filter selection.
 - Stale generations cannot update a later review.

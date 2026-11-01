@@ -291,6 +291,12 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
   await expect(
     page.locator('#diff-app button[aria-label="Not Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'false');
+  const unmarked = page.locator('[data-diffseek="snackbar"]', {
+    hasText: 'Visible files in folder unmarked',
+  });
+  await expect(unmarked).toBeVisible();
+  await unmarked.click();
+  await expect(page.locator('[data-diffseek="snackbars"]')).toHaveCount(0);
 
   await page.evaluate(() => {
     const tree = document.querySelector('[role="tree"]');
