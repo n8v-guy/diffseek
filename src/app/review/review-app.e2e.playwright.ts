@@ -291,6 +291,12 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
   await expect(
     page.locator('#diff-app button[aria-label="Not Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'false');
+  const unmarked = page.locator('[data-diffseek="snackbar"]', {
+    hasText: 'Visible files in folder unmarked',
+  });
+  await expect(unmarked).toBeVisible();
+  await unmarked.click();
+  await expect(page.locator('[data-diffseek="snackbars"]')).toHaveCount(0);
 
   await page.evaluate(() => {
     const tree = document.querySelector('[role="tree"]');
@@ -369,9 +375,11 @@ test('does not overwrite a later native action with a pending batch path', async
   await expect(
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
   ).toBeVisible();
-  await expect(
-    page.locator('[data-diffseek="snackbar"]').last(),
-  ).toContainText('Visible files in folder marked viewed');
+  // The reviewer's own clicks may already have dismissed the outcome toast.
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-toast-log',
+    /^Visible files in folder marked viewed$/m,
+  );
   await expect(
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'false');
@@ -783,14 +791,14 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'true');
-  await expect(
-    page.locator('[data-diffseek="snackbar"]', {
-      hasText: 'Marking all files in category viewed…',
-    }),
-  ).toBeVisible();
-  await expect(
-    page.locator('[data-diffseek="snackbar"]').last(),
-  ).toContainText('All files in category marked viewed');
+  // The progress toast is replaced in place by the outcome.
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-toast-log',
+    /^Marking all files in category viewed…\nAll files in category marked viewed$/m,
+  );
+  await expect(page.locator('[data-diffseek="snackbar"]')).toHaveText([
+    'All files in category marked viewed',
+  ]);
 
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
   await expect(codeViewed).toHaveAttribute('aria-label', markRest);
@@ -1085,6 +1093,20 @@ function instrument(source: string, startsWithNativeFilter = false): string {
           : ''
       }
     <script>
+      // Every toast text ever shown: toasts are replaced or dismissed by
+      // later events, so assertions read the history, not the screen.
+      const toastLog = [];
+      new MutationObserver(() => {
+        for (const toast of document.querySelectorAll('[data-diffseek="snackbar"]')) {
+          if (toastLog.at(-1) === toast.textContent) continue;
+          toastLog.push(toast.textContent);
+          document.documentElement.dataset.toastLog = toastLog.join('\\n');
+        }
+      }).observe(document.documentElement, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
       document.documentElement.dataset.nativeActions = 'idle';
       let pendingNativeActions = 0;
       let nativeJsChecked = true;

@@ -330,5 +330,6 @@ span.diffseek-menu-count {
   border-radius: 0.375rem;
   box-shadow: var(--shadow-resting-medium, 0 8px 24px #8c959f33);
   color: var(--diffseek-foreground);
+  cursor: pointer;
   padding: 0.625rem 0.875rem;
 }

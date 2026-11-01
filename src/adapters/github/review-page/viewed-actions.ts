@@ -16,6 +16,9 @@ import {
   viewedControlState,
 } from './page-adapter';
 
+/** How long a native click may go unanswered before it counts as ignored. */
+const ignoredClickGuardMs = 1_500;
+
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 export type ActionResult = {
@@ -65,7 +68,7 @@ export async function markViewed(
       resolveButton,
       button,
       viewed,
-      options.timeoutMs ?? 1_500,
+      options.timeoutMs ?? ignoredClickGuardMs,
       options.signal,
     );
     button.click();
@@ -280,6 +283,8 @@ function waitForViewedState(
       subtree: true,
       attributeFilter: ['aria-label', 'aria-pressed'],
     });
+    // Failure guard only: success is the attribute change above; nothing
+    // signals a click GitHub ignored.
     const timeout = setTimeout(() => finish(false), timeoutMs);
     const abort = () => finish(false);
     signal?.addEventListener('abort', abort, { once: true });

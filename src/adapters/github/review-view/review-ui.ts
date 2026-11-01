@@ -6,7 +6,8 @@ import {
   type ViewedTarget,
 } from '../review-page/viewed-actions';
 
-const snackbarDurationMs = 7_000;
+/** The one product timer that paces UI: the shortest time a toast stays up. */
+const snackbarMinimumMs = 5_000;
 
 export function menuNeedsRemount(menu: HTMLElement): boolean {
   if (menu.dataset.diffseekMenuOwned !== 'true') return true;
@@ -57,12 +58,31 @@ export function removeInjected(root: Document): void {
   }
 }
 
+/** Resolves in the first task after the next frame, i.e. once it painted. */
 export function afterNextPaint(root: Document): Promise<void> {
   const view = root.defaultView;
   if (!view) return Promise.resolve();
   return new Promise((resolve) => {
-    view.requestAnimationFrame(() => view.setTimeout(resolve, 0));
+    view.requestAnimationFrame(() => afterCurrentTask(resolve));
   });
+}
+
+/**
+ * Runs `run` as the next task (a MessageChannel message, not a 0 ms timer).
+ * Returns a cancel function.
+ */
+export function afterCurrentTask(run: () => void): () => void {
+  const channel = new MessageChannel();
+  let live = true;
+  channel.port1.onmessage = () => {
+    channel.port1.close();
+    if (live) run();
+  };
+  channel.port2.postMessage(null);
+  return () => {
+    live = false;
+    channel.port1.close();
+  };
 }
 
 export function showUnavailable(root: Document, reason: string): void {
@@ -125,13 +145,14 @@ function batchMessages(target: ViewedTarget, viewed: boolean): BatchMessages {
   return (viewed ? markMessages : unmarkMessages)[target];
 }
 
+/** Returns the progress toast so its batch's outcome can replace it. */
 export function showBatchStarted(
   root: Document,
   target: ViewedTarget,
   viewed: boolean,
-): void {
+): HTMLElement | null {
   const { progress } = batchMessages(target, viewed);
-  if (progress) showSnackbar(root, progress);
+  return progress ? showSnackbar(root, progress, 'progress') : null;
 }
 
 export function showBatchResult(
@@ -139,9 +160,27 @@ export function showBatchResult(
   target: ViewedTarget,
   viewed: boolean,
   result: ActionResult,
+  progress: HTMLElement | null = null,
 ): void {
   const messages = batchMessages(target, viewed);
-  showSnackbar(root, result.failed.length > 0 ? messages.failed : messages.done);
+  const message = result.failed.length > 0 ? messages.failed : messages.done;
+  if (progress?.isConnected) {
+    // Replace in place so the live region announces the outcome.
+    replaceStatusSnackbars(root);
+    progress.textContent = message;
+    settleAfterMinimum(progress);
+    progress.parentElement?.append(progress);
+    return;
+  }
+  showSnackbar(root, message);
+}
+
+/** A batch that was cancelled has no outcome; drop its progress toast. */
+export function dismissSnackbar(snackbar: HTMLElement | null): void {
+  if (!snackbar) return;
+  const stack = snackbar.parentElement;
+  snackbar.remove();
+  if (stack?.childElementCount === 0) stack.remove();
 }
 
 export function showRememberedFilterDefault(
@@ -167,7 +206,20 @@ export function showAlwaysRead(root: Document, enabled: boolean): void {
   );
 }
 
-function showSnackbar(root: Document, message: string): void {
+/**
+ * A progress toast lasts until its batch finishes and then turns into the
+ * outcome in place. Any other toast stays up for a minimum time; after that,
+ * the reviewer's next click on the page, key press, or wheel scroll hides it.
+ * Input before the minimum does not count and is not queued. A newer toast
+ * replaces it at any time, and clicking a toast closes it at once.
+ */
+function showSnackbar(
+  root: Document,
+  message: string,
+  kind: 'progress' | 'status' = 'status',
+): HTMLElement {
+  replaceStatusSnackbars(root);
+  listenForDismissal(root);
   let stack = root.querySelector<HTMLElement>(
     '[data-diffseek="snackbars"]',
   );
@@ -179,13 +231,62 @@ function showSnackbar(root: Document, message: string): void {
   }
   const snackbar = root.createElement('div');
   snackbar.dataset.diffseek = 'snackbar';
+  snackbar.dataset.diffseekSnackbarKind = kind;
   snackbar.setAttribute('role', 'status');
   snackbar.textContent = message;
   stack.append(snackbar);
-  setTimeout(() => {
+  if (kind === 'status') settleAfterMinimum(snackbar);
+  return snackbar;
+}
+
+function settleAfterMinimum(snackbar: HTMLElement): void {
+  snackbar.dataset.diffseekSnackbarKind = 'status';
+  delete snackbar.dataset.diffseekSnackbarSettled;
+  const view = snackbar.ownerDocument.defaultView;
+  view?.setTimeout(() => {
+    if (snackbar.isConnected) snackbar.dataset.diffseekSnackbarSettled = 'true';
+  }, snackbarMinimumMs);
+}
+
+const dismissingDocuments = new WeakSet<Document>();
+
+function listenForDismissal(root: Document): void {
+  if (dismissingDocuments.has(root)) return;
+  dismissingDocuments.add(root);
+  // Capture phase: runs before the click that may show the next toast.
+  const dismiss = () => {
+    for (const snackbar of root.querySelectorAll<HTMLElement>(
+      '[data-diffseek="snackbar"][data-diffseek-snackbar-settled="true"]',
+    )) {
+      dismissSnackbar(snackbar);
+    }
+  };
+  root.addEventListener(
+    'pointerdown',
+    (event) => {
+      // Clicking a toast closes it at once, progress included; a click
+      // anywhere else hides only toasts past their minimum time.
+      const target = event.target;
+      const toast =
+        target instanceof Element
+          ? target.closest<HTMLElement>('[data-diffseek="snackbar"]')
+          : null;
+      dismissSnackbar(toast);
+      dismiss();
+    },
+    true,
+  );
+  root.addEventListener('keydown', dismiss, true);
+  root.addEventListener('wheel', dismiss, { capture: true, passive: true });
+}
+
+/** A newer toast replaces finished ones; the live region stays mounted. */
+function replaceStatusSnackbars(root: Document): void {
+  for (const snackbar of root.querySelectorAll<HTMLElement>(
+    '[data-diffseek="snackbar"][data-diffseek-snackbar-kind="status"]',
+  )) {
     snackbar.remove();
-    if (stack?.childElementCount === 0) stack.remove();
-  }, snackbarDurationMs);
+  }
 }
 
 export function isNativeMutation(record: MutationRecord): boolean {

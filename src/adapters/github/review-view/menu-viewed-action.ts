@@ -45,13 +45,14 @@ export function configureViewedAction(
   action: HTMLButtonElement,
   options: MenuViewedActionOptions,
 ): void {
-  action.dataset.viewedFacet = options.facet;
-  action.dataset.viewedValue = options.value;
+  // Write only what changed: menus are refreshed on every reconcile pass.
+  setChanged(action, 'data-viewed-facet', options.facet);
+  setChanged(action, 'data-viewed-value', options.value);
   const label = scopeViewedLabel(options.viewedCount, options.counted);
-  action.setAttribute('aria-label', label);
+  setChanged(action, 'aria-label', label);
   const pressed = scopeAriaPressed(options.viewedCount, options.counted);
-  action.setAttribute('aria-pressed', pressed);
-  action.title = label;
+  setChanged(action, 'aria-pressed', pressed);
+  setChanged(action, 'title', label);
   action.classList.toggle(
     'diffseek-viewed-partial',
     pressed === 'mixed' && action.classList.contains('diffseek-menu-viewed-action'),
@@ -69,4 +70,8 @@ export function configureViewedAction(
     if (options.disabled) return;
     options.onViewed(markViewed, options.paths);
   };
+}
+
+function setChanged(element: Element, name: string, value: string): void {
+  if (element.getAttribute(name) !== value) element.setAttribute(name, value);
 }

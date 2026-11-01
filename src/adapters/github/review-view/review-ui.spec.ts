@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  dismissSnackbar,
   removeInjected,
   showAlwaysRead,
   showBatchResult,
@@ -27,19 +28,24 @@ describe('review status UI', () => {
     document.body.innerHTML = '<main></main>';
     const done = { requested: 1, completed: ['a.ts'], failed: [] };
     const failed = { requested: 1, completed: [], failed: ['a.ts'] };
+    const shown: string[] = [];
+    const note = () => {
+      const last = [
+        ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
+      ].at(-1);
+      if (last?.textContent) shown.push(last.textContent);
+    };
     for (const target of ['file', 'folder', 'category', 'auto-view'] as const) {
       for (const viewed of target === 'auto-view' ? [true] : [true, false]) {
-        showBatchStarted(document, target, viewed);
+        if (showBatchStarted(document, target, viewed)) note();
         showBatchResult(document, target, viewed, done);
+        note();
         showBatchResult(document, target, viewed, failed);
+        note();
       }
     }
 
-    expect(
-      [
-        ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
-      ].map((item) => item.textContent),
-    ).toEqual([
+    expect(shown).toEqual([
       'File marked viewed',
       "Couldn't mark file viewed. Try again.",
       'File unmarked',
@@ -73,36 +79,97 @@ describe('review status UI', () => {
 
   afterEach(() => vi.useRealTimers());
 
-  it('stacks older snackbars above newer ones and expires each after seven seconds', () => {
+  const snackbars = () =>
+    [
+      ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
+    ].map((item) => item.textContent);
+  const press = (target: Element | null | undefined) =>
+    target?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+  it('turns progress into its outcome in place, and a newer toast replaces it', () => {
+    document.body.innerHTML = '<main></main>';
+    const progress = showBatchStarted(document, 'category', true);
+    showHideNow(document);
+    expect(snackbars()).toEqual([
+      'Marking all files in category viewed…',
+      'Hidden',
+    ]);
+
+    showBatchResult(
+      document,
+      'category',
+      true,
+      {
+        requested: 3,
+        completed: ['src/ok.ts'],
+        failed: ['src/app.ts', 'docs/readme.md'],
+      },
+      progress,
+    );
+    expect(snackbars()).toEqual(["Couldn't mark files viewed. Try again."]);
+    expect(
+      document.querySelector<HTMLElement>('[data-diffseek="snackbar"]')?.title,
+    ).toBe('');
+    showAlwaysRead(document, false);
+    expect(snackbars()).toEqual(['Auto-view off']);
+  });
+
+  it('keeps a toast for the minimum time, then hides it on the next input', () => {
     vi.useFakeTimers();
     document.body.innerHTML = '<main></main>';
+    showHideNow(document);
 
-    showBatchStarted(document, 'category', true);
-    vi.advanceTimersByTime(1_000);
+    vi.advanceTimersByTime(4_999);
+    press(document.body);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+    document.body.dispatchEvent(new Event('wheel', { bubbles: true }));
+    expect(snackbars()).toEqual(['Hidden']);
 
-    showBatchResult(document, 'category', true, {
-      requested: 3,
-      completed: ['src/ok.ts'],
-      failed: ['src/app.ts', 'docs/readme.md'],
-    });
+    // Early input is not queued: the toast stays until input after the minimum.
+    vi.advanceTimersByTime(1);
+    expect(snackbars()).toEqual(['Hidden']);
+    document.body.dispatchEvent(new Event('wheel', { bubbles: true }));
+    expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
+  });
 
-    const snackbars = () => [
-      ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
-    ];
-    expect(snackbars().map((item) => item.textContent)).toEqual([
-      'Marking all files in category viewed…',
-      "Couldn't mark files viewed. Try again.",
-    ]);
-    expect(snackbars()[1]?.title).toBe('');
+  it('restarts the minimum when progress turns into its outcome', () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<main></main>';
+    const progress = showBatchStarted(document, 'folder', true);
+    vi.advanceTimersByTime(10_000);
+    press(document.body);
+    expect(snackbars()).toEqual(['Marking visible files in folder viewed…']);
 
-    vi.advanceTimersByTime(6_000);
-    expect(snackbars().map((item) => item.textContent)).toEqual([
-      "Couldn't mark files viewed. Try again.",
-    ]);
-    vi.advanceTimersByTime(1_000);
-    expect(
-      document.querySelector('[data-diffseek="snackbars"]'),
-    ).toBeNull();
+    showBatchResult(
+      document,
+      'folder',
+      true,
+      { requested: 2, completed: ['a.ts', 'b.ts'], failed: [] },
+      progress,
+    );
+    vi.advanceTimersByTime(4_999);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+    expect(snackbars()).toEqual(['Visible files in folder marked viewed']);
+    vi.advanceTimersByTime(1);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+    expect(snackbars()).toEqual([]);
+  });
+
+  it('closes a clicked toast at once, progress included', () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<main></main>';
+    press(showBatchStarted(document, 'folder', true));
+    expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
+
+    showHideNow(document);
+    press(document.querySelector('[data-diffseek="snackbar"]'));
+    expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
+  });
+
+  it('drops the progress toast of a batch with no outcome', () => {
+    document.body.innerHTML = '<main></main>';
+    dismissSnackbar(showBatchStarted(document, 'folder', false));
+    expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
   });
 
   it('removes injected actions without touching native file icons', () => {
@@ -141,18 +208,13 @@ describe('review status UI', () => {
     showAlwaysRead(document, true);
     showAlwaysRead(document, false);
 
+    // Each newer toast replaces the one before it.
     expect(
       [
         ...document.querySelectorAll<HTMLElement>(
           '[data-diffseek="snackbar"]',
         ),
       ].map((item) => item.textContent),
-    ).toEqual([
-      'Always hidden',
-      'Shown',
-      'Hidden',
-      'Auto-view on: generated files get marked viewed',
-      'Auto-view off',
-    ]);
+    ).toEqual(['Auto-view off']);
   });
 });

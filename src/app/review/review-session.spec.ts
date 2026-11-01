@@ -38,7 +38,7 @@ describe('review session stream batching', () => {
     viewed?.setAttribute('aria-pressed', 'true');
     await Promise.resolve();
     expect(reconciles).toBe(0);
-    await vi.advanceTimersByTimeAsync(0);
+    await nextTask();
     expect(reconciles).toBe(1);
     expect(
       document
@@ -46,18 +46,16 @@ describe('review session stream batching', () => {
         ?.getAttribute('aria-label'),
     ).toBe('Unmark');
 
+    // A burst inside one task costs one pass, at the next frame.
     for (let index = 0; index < 5; index += 1) {
       const region = document.createElement('div');
       region.id = `diff-stream-${index}`;
       region.setAttribute('role', 'region');
       document.body.append(region);
       await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(10);
     }
     expect(reconciles).toBe(1);
-    await vi.advanceTimersByTimeAsync(53);
-    expect(reconciles).toBe(1);
-    await vi.advanceTimersByTimeAsync(1);
+    await nextFrame();
     expect(reconciles).toBe(2);
 
     for (let index = 5; index < 8; index += 1) {
@@ -67,9 +65,8 @@ describe('review session stream batching', () => {
       document.body.append(region);
       await Promise.resolve();
     }
-    await vi.advanceTimersByTimeAsync(63);
     expect(reconciles).toBe(2);
-    await vi.advanceTimersByTimeAsync(1);
+    await nextFrame();
     expect(reconciles).toBe(3);
 
     app.stop();
@@ -99,15 +96,16 @@ describe('redraw budget', () => {
       '<ul role="menu" aria-label="Filter options"><li role="menuitem">Native</li></ul>',
     );
     counts.ignore(false);
-    await settle(0);
+    await nextTask();
     const menu = counts.snapshot();
 
     const host = document.getElementById('diff-host');
+    const frames = countFrames();
     for (let index = 0; index < 80; index += 1) {
       counts.ignore(true);
       host?.append(regionNode(index));
       counts.ignore(false);
-      await settle(10);
+      await nextTask();
       for (let noise = 0; noise < 3; noise += 1) {
         counts.ignore(true);
         const line = document.createElement('span');
@@ -116,11 +114,12 @@ describe('redraw budget', () => {
         host?.lastElementChild?.append(line);
         line.classList.add('highlighted');
         counts.ignore(false);
-        await settle(10);
+        await nextTask();
       }
     }
-    await settle(64);
+    await nextFrame();
     const streamed = counts.snapshot();
+    const streamFrames = frames.stop();
 
     document
       .querySelector<HTMLButtonElement>('[data-filter-kind="viewed"]')
@@ -135,7 +134,7 @@ describe('redraw budget', () => {
     viewed?.setAttribute('aria-label', 'Viewed');
     viewed?.setAttribute('aria-pressed', 'true');
     counts.ignore(false);
-    await settle(0);
+    await nextTask();
     const marked = counts.snapshot();
 
     const report = {
@@ -148,11 +147,12 @@ describe('redraw budget', () => {
     };
     expect(report.load.reconciles).toBe(1);
     expect(report.menu.reconciles).toBe(1);
-    expect(report.stream.reconciles).toBeLessThanOrEqual(2);
+    // At most one pass per frame the stream spanned; diff lines add none.
+    expect(report.stream.reconciles).toBeLessThanOrEqual(streamFrames);
     expect(report.stream.domMutations).toBeLessThanOrEqual(500);
     expect(report.toggle.reconciles).toBe(1);
     expect(report.mark.reconciles).toBe(1);
-    expect(report.total.reconciles).toBeLessThanOrEqual(6);
+    expect(report.total.reconciles).toBeLessThanOrEqual(streamFrames + 4);
     expect(report.total.domMutations).toBeLessThanOrEqual(550);
     expect(report.total.treeRebuilds).toBe(0);
     expect(report.total.panelRebuilds).toBe(0);
@@ -330,10 +330,39 @@ function regionNode(index: number): HTMLElement {
   return region;
 }
 
-async function settle(ms: number): Promise<void> {
+/** Lets observer callbacks queue their pass, then runs the next task. */
+async function nextTask(): Promise<void> {
   await flush();
-  await vi.advanceTimersByTimeAsync(ms);
+  await new Promise<void>((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}
+
+async function nextFrame(): Promise<void> {
   await flush();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function countFrames(): { stop: () => number } {
+  let frames = 0;
+  let live = true;
+  const tick = () => {
+    if (!live) return;
+    frames += 1;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  return {
+    stop: () => {
+      live = false;
+      return frames;
+    },
+  };
 }
 
 async function flush(): Promise<void> {

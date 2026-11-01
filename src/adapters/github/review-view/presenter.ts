@@ -6,6 +6,9 @@ import {
 
 import { fileToggleAction, type PageSnapshot } from '../review-page/page-adapter';
 
+/** How long a native click may go unanswered before it counts as ignored. */
+const ignoredClickGuardMs = 1_500;
+
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 type CollapseAction = NonNullable<ReturnType<typeof fileToggleAction>>;
 type Locator = {
@@ -240,7 +243,9 @@ export class ReviewPresenter {
         subtree: true,
         attributeFilter: ['aria-label', 'aria-labelledby', 'class'],
       });
-      const timeout = setTimeout(() => finish(false), 1_500);
+      // Failure guard only: GitHub may ignore a click (e.g. on a control it is
+      // about to replace) and nothing signals that. Success is the mutation.
+      const timeout = setTimeout(() => finish(false), ignoredClickGuardMs);
       signal.addEventListener('abort', abort, { once: true });
       queueMicrotask(check);
     });
