@@ -1,6 +1,6 @@
 # DiffSeek for GitHub: cut the noise in big PRs
 
-Generated files are hidden and auto-viewed. Filter one slice at a time, mark it viewed in one click and watch progress fill up.
+Filter one slice at a time, mark it viewed in one click and watch progress fill up. Generated files are hidden and auto-viewed.
 
 Open a PR and see only what's left to review. Generated files and files you've already viewed are hidden from the start; one click in the filter menu brings them back.
 
