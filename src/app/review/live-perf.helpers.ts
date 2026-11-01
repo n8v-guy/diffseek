@@ -1,5 +1,3 @@
-import { isRecord } from '@diffseek/browser/record';
-
 import { type RedrawCounts } from './redraw-trace';
 
 export type { RedrawCounts };
@@ -335,6 +333,10 @@ function readCookie(cookie: unknown, index: number): CookieLike {
         ? sameSite
         : undefined,
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function numberEnv(value: string | undefined, fallback: number): number {
