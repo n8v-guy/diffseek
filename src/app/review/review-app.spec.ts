@@ -451,7 +451,7 @@ describe('review app lifecycle', () => {
           '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
         )
         ?.getAttribute('aria-label'),
-    ).toBe('Mark as not viewed');
+    ).toBe('Unmark all');
 
     await nextReconcile(() => {
       const button = document.querySelector<HTMLButtonElement>(
@@ -466,7 +466,7 @@ describe('review app lifecycle', () => {
           '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
         )
         ?.getAttribute('aria-label'),
-    ).toBe('Mark 1 remaining in Code as viewed (2 of 3 viewed)');
+    ).toBe('Mark the rest viewed');
     expect(
       document
         .querySelector(
@@ -1103,7 +1103,7 @@ describe('review app interactions', () => {
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
         ?.textContent,
-    ).toBe('Files shown');
+    ).toBe('Shown');
 
     document
       .querySelector<HTMLButtonElement>(
@@ -1133,7 +1133,7 @@ describe('review app interactions', () => {
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
         ?.textContent,
-    ).toBe('Files hidden on every PR');
+    ).toBe('Always hidden');
     app.stop();
   });
 
@@ -1321,7 +1321,7 @@ describe('review app interactions', () => {
         document
           .querySelector('#src\\/app\\.ts [data-diffseek-viewed-action]')
           ?.getAttribute('aria-label'),
-      ).toBe('Mark as not viewed');
+      ).toBe('Unmark');
     });
     app.stop();
   });

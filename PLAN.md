@@ -106,8 +106,8 @@ after native or extension actions.
   - Keep one equal minimal inset outside the colored block.
   - Avoid JavaScript measurement and GitHub popup internals.
 - [x] Overlay every file/folder icon with an always-visible viewed action.
-  - Partial folders offer an eclipse and `Mark N remaining as viewed`.
-  - Fully viewed scopes offer `Mark as not viewed`.
+  - Partial folders offer an eclipse and a generic "mark the rest" label.
+  - Fully viewed scopes offer a generic "unmark all" label.
   - GitHub diff controls remain the source of truth.
 - [x] Replace inline batch status with a fixed top-right snackbar stack.
   - Emit starting and completion/failure notifications.

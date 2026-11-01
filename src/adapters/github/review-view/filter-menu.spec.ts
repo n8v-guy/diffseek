@@ -435,17 +435,17 @@ describe('mountFilterMenu', () => {
       '[data-diffseek-menu-count-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
     );
     expect(action?.title).toBe(
-      'Mark 2 remaining in Modified as viewed (0 of 2 viewed)',
+      'Mark all viewed',
     );
     expect(counter?.title).toBe(
-      'Mark 2 remaining in Modified as viewed (0 of 2 viewed)',
+      'Mark all viewed',
     );
     expect(action?.getAttribute('aria-pressed')).toBe('false');
     const tests = element.querySelector<HTMLButtonElement>(
       '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Tests"]',
     );
     expect(tests?.title).toBe(
-      'Mark 1 remaining in Tests as viewed (0 of 1 viewed)',
+      'Mark all viewed',
     );
     counter?.click();
     expect(onViewed).toHaveBeenCalledWith(
@@ -478,8 +478,8 @@ describe('mountFilterMenu', () => {
     const counter = element.querySelector<HTMLButtonElement>(
       '[data-diffseek-menu-count-action][data-viewed-facet="generated"][data-viewed-value="true"]',
     );
-    expect(action?.title).toBe('Mark as not viewed');
-    expect(counter?.title).toBe('Mark as not viewed');
+    expect(action?.title).toBe('Unmark all');
+    expect(counter?.title).toBe('Unmark all');
     counter?.click();
     expect(onViewed).toHaveBeenCalledWith(
       false,
@@ -529,10 +529,10 @@ describe('mountFilterMenu', () => {
     );
     expect(counter?.textContent).toBe('1/2');
     expect(action?.title).toBe(
-      'Mark 1 remaining in @owner as viewed (1 of 2 viewed)',
+      'Mark the rest viewed',
     );
     expect(counter?.title).toBe(
-      'Mark 1 remaining in @owner as viewed (1 of 2 viewed)',
+      'Mark the rest viewed',
     );
     expect(action?.getAttribute('aria-pressed')).toBe('mixed');
     expect(action?.classList.contains('diffseek-viewed-partial')).toBe(true);
@@ -672,7 +672,7 @@ describe('filter menu in-place patch', () => {
     );
     const pill = row?.querySelector('[data-diffseek-always-read]');
     expect(counter?.textContent).toBe('0/1');
-    expect(action?.title).toBe('Mark as not viewed');
+    expect(action?.title).toBe('Unmark all');
     expect(action?.getAttribute('aria-pressed')).toBe('true');
     expect(action?.classList.contains('diffseek-viewed-partial')).toBe(false);
     expect(pill).not.toBeNull();

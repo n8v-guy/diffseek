@@ -78,11 +78,11 @@ export function removeUnavailable(root: Document): void {
   root.querySelector('[data-diffseek="unavailable"]')?.remove();
 }
 
-type BatchMessages = { progress: string; done: string; failed: string };
+/** A single file has no progress message; its checkbox answers at once. */
+type BatchMessages = { progress?: string; done: string; failed: string };
 
 const markMessages: Record<ViewedTarget, BatchMessages> = {
   file: {
-    progress: 'Marking file viewed…',
     done: 'File marked viewed',
     failed: "Couldn't mark file viewed. Try again.",
   },
@@ -105,7 +105,6 @@ const markMessages: Record<ViewedTarget, BatchMessages> = {
 
 const unmarkMessages: Record<ViewedTarget, BatchMessages> = {
   file: {
-    progress: 'Unmarking file…',
     done: 'File unmarked',
     failed: "Couldn't unmark file. Try again.",
   },
@@ -131,7 +130,8 @@ export function showBatchStarted(
   target: ViewedTarget,
   viewed: boolean,
 ): void {
-  showSnackbar(root, batchMessages(target, viewed).progress);
+  const { progress } = batchMessages(target, viewed);
+  if (progress) showSnackbar(root, progress);
 }
 
 export function showBatchResult(
@@ -150,12 +150,12 @@ export function showRememberedFilterDefault(
 ): void {
   showSnackbar(
     root,
-    state === 'hidden' ? 'Files hidden on every PR' : 'Files shown',
+    state === 'hidden' ? 'Always hidden' : 'Shown',
   );
 }
 
 export function showHideNow(root: Document): void {
-  showSnackbar(root, 'Files hidden on this page');
+  showSnackbar(root, 'Hidden');
 }
 
 export function showAlwaysRead(root: Document, enabled: boolean): void {

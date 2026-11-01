@@ -10,7 +10,6 @@ export type MenuViewedActionOptions = {
   onViewed: (viewed: boolean, paths: string[]) => void;
   paths: string[];
   value: string;
-  scope: string;
   counted: number;
   viewedCount: number;
   disabled?: boolean;
@@ -48,11 +47,7 @@ export function configureViewedAction(
 ): void {
   action.dataset.viewedFacet = options.facet;
   action.dataset.viewedValue = options.value;
-  const label = scopeViewedLabel(
-    options.viewedCount,
-    options.counted,
-    options.scope,
-  );
+  const label = scopeViewedLabel(options.viewedCount, options.counted);
   action.setAttribute('aria-label', label);
   const pressed = scopeAriaPressed(options.viewedCount, options.counted);
   action.setAttribute('aria-pressed', pressed);

@@ -40,16 +40,9 @@ describe('viewed scope', () => {
     expect(scopeAriaPressed(0, 20)).toBe('false');
     expect(scopeAriaPressed(12, 20)).toBe('mixed');
     expect(scopeAriaPressed(20, 20)).toBe('true');
-    expect(scopeViewedLabel(12, 20)).toBe(
-      'Mark 8 remaining as viewed (12 of 20 viewed)',
-    );
-    expect(scopeViewedLabel(12, 38, 'payments')).toBe(
-      'Mark 26 remaining in payments as viewed (12 of 38 viewed)',
-    );
-    expect(scopeViewedLabel(0, 3)).toBe(
-      'Mark 3 remaining as viewed (0 of 3 viewed)',
-    );
-    expect(scopeViewedLabel(20, 20)).toBe('Mark as not viewed');
+    expect(scopeViewedLabel(0, 3)).toBe('Mark all viewed');
+    expect(scopeViewedLabel(12, 20)).toBe('Mark the rest viewed');
+    expect(scopeViewedLabel(20, 20)).toBe('Unmark all');
   });
 
   it('counts files hidden only by the viewed filter', () => {

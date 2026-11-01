@@ -23,7 +23,7 @@ describe('review status UI', () => {
     );
   });
 
-  it('gives every batch a distinct progress, done, and retry message', () => {
+  it('gives every batch distinct messages, with no progress for a single file', () => {
     document.body.innerHTML = '<main></main>';
     const done = { requested: 1, completed: ['a.ts'], failed: [] };
     const failed = { requested: 1, completed: [], failed: ['a.ts'] };
@@ -40,10 +40,8 @@ describe('review status UI', () => {
         ...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]'),
       ].map((item) => item.textContent),
     ).toEqual([
-      'Marking file viewed…',
       'File marked viewed',
       "Couldn't mark file viewed. Try again.",
-      'Unmarking file…',
       'File unmarked',
       "Couldn't unmark file. Try again.",
       'Marking visible files in folder viewed…',
@@ -113,7 +111,7 @@ describe('review status UI', () => {
         <li data-diffseek-native-hidden="true" hidden>Native</li>
         <li data-diffseek="filters"></li>
       </ul>
-      <span class="diffseek-viewed-icon-anchor" data-diffseek-viewed-action="true" aria-pressed="false" aria-label="Mark as viewed" title="Mark as viewed">
+      <span class="diffseek-viewed-icon-anchor" data-diffseek-viewed-action="true" aria-pressed="false" aria-label="Mark viewed" title="Mark viewed">
         <svg class="octicon"></svg>
       </span>
     `;
@@ -150,9 +148,9 @@ describe('review status UI', () => {
         ),
       ].map((item) => item.textContent),
     ).toEqual([
-      'Files hidden on every PR',
-      'Files shown',
-      'Files hidden on this page',
+      'Always hidden',
+      'Shown',
+      'Hidden',
       'Auto-view on: generated files get marked viewed',
       'Auto-view off',
     ]);

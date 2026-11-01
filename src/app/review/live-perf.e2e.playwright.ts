@@ -465,7 +465,7 @@ async function clearViewedFiles(page: Page): Promise<void> {
   const action = page.locator(viewedFacetAction);
   if ((await action.count()) === 0) return;
   const label = await action.getAttribute('aria-label', { timeout: 5_000 });
-  if (label !== 'Mark as not viewed') return;
+  if (label !== 'Unmark all') return;
   await action.click();
   await untilDom(
     page,

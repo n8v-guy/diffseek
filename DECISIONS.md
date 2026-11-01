@@ -157,8 +157,9 @@ files and marked them viewed is read as always hide plus auto-view.
 
 **Decision:** Notifications name only the kind of change, never a file,
 folder, category, or repository, and carry no counts. Each starts with a
-capital letter. A viewed batch shows progress when it starts and a completion
-when it ends. A failure, partial or full, asks the reviewer to try again and
+capital letter. A multi-file viewed batch shows progress when it starts and a
+completion when it ends; a single file shows only the completion. Circle
+tooltips follow the same rule: one short generic label per state. A failure, partial or full, asks the reviewer to try again and
 gives no reasons, hover text, or paths.
 
 **Why:** Names and counts made messages long and hard to scan, and the tree

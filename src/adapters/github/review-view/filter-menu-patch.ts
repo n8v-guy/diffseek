@@ -109,7 +109,6 @@ function patchRow(
       facet: row.facet,
       onViewed,
       paths: row.paths,
-      scope: row.label,
       value: row.value,
       viewedCount: row.viewedCount,
     };

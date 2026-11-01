@@ -50,18 +50,17 @@ export function includeCountedFiles(
 }
 
 export function fileViewedLabel(viewed: boolean): string {
-  return viewed ? 'Mark as not viewed' : 'Mark as viewed';
+  return viewed ? 'Unmark' : 'Mark viewed';
 }
 
-export function scopeViewedLabel(
-  viewed: number,
-  counted: number,
-  name?: string,
-): string {
-  if (viewedMark(viewed, counted) === 'filled') return fileViewedLabel(true);
-  const remaining = counted - viewed;
-  const where = name ? ` in ${name}` : '';
-  return `Mark ${remaining} remaining${where} as viewed (${viewed} of ${counted} viewed)`;
+const scopeViewedLabels: Record<ViewedMark, string> = {
+  empty: 'Mark all viewed',
+  partial: 'Mark the rest viewed',
+  filled: 'Unmark all',
+};
+
+export function scopeViewedLabel(viewed: number, counted: number): string {
+  return scopeViewedLabels[viewedMark(viewed, counted)];
 }
 
 export function scopeAriaPressed(

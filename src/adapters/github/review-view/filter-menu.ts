@@ -290,7 +290,6 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
       facet: options.facet,
       onViewed,
       paths: options.paths,
-      scope: options.label,
       total: options.total,
       value: options.value,
       viewedCount: options.viewedCount,
