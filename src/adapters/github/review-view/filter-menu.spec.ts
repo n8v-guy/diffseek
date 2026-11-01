@@ -823,13 +823,49 @@ describe('generated auto-view', () => {
   });
 });
 
+describe('filter menu only focus', () => {
+  it('presses the only pill whose focus is applied and updates it in place', () => {
+    const element = menu();
+    const state = filters();
+    const render = () => {
+      mountFilterMenu(element, {
+        files,
+        filters: state,
+        onChange: render,
+        onViewed: vi.fn(),
+      });
+    };
+    const only = (value: string) =>
+      element.querySelector<HTMLButtonElement>(
+        `.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="${value}"]) [data-filter-only]`,
+      );
+
+    render();
+    expect(only('Tests')?.getAttribute('aria-pressed')).toBe('false');
+    expect(only('Docs')?.getAttribute('aria-pressed')).toBe('false');
+
+    only('Tests')?.click();
+    expect(state.get('groups')).toEqual(new Set(['Docs']));
+    expect(only('Tests')?.getAttribute('aria-pressed')).toBe('true');
+    expect(only('Docs')?.getAttribute('aria-pressed')).toBe('false');
+
+    const testsOnly = only('Tests');
+    state.get('groups')?.delete('Docs');
+    state.get('groups')?.add('Tests');
+    render();
+    expect(only('Tests')).toBe(testsOnly);
+    expect(testsOnly?.getAttribute('aria-pressed')).toBe('false');
+    expect(only('Docs')?.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
 describe('filter menu fallback sections', () => {
   it('hides sections whose only choice is their fallback', () => {
     const element = menu();
     const fallbackOnly: FileRecord = {
       ...files[2]!,
       labels: [
-        { facet: 'groups', value: 'No type' },
+        { facet: 'groups', value: 'No groups' },
         { facet: 'owners', value: 'Unmapped' },
         { facet: 'languages', value: 'No extension' },
         { facet: 'generated', value: 'false' },
@@ -849,6 +885,7 @@ describe('filter menu fallback sections', () => {
       ),
     ).toEqual(['Change status']);
     expect(element.textContent).not.toContain('No owner');
+    expect(element.textContent).not.toContain('No groups');
     expect(element.textContent).not.toContain('No type');
     expect(element.textContent).not.toContain('No extension');
   });
@@ -859,7 +896,7 @@ describe('filter menu fallback sections', () => {
     const untyped: FileRecord = {
       ...files[2]!,
       labels: [
-        { facet: 'groups', value: 'No type' },
+        { facet: 'groups', value: 'No groups' },
         { facet: 'owners', value: 'Unmapped' },
         { facet: 'languages', value: 'No extension' },
         { facet: 'generated', value: 'false' },
@@ -873,15 +910,19 @@ describe('filter menu fallback sections', () => {
       onChange: vi.fn(),
     });
 
-    expect(
+    const label = (facet: string, value: string) =>
       element.querySelector(
-        '[data-filter-kind="groups"][data-filter-value="No type"]',
-      ),
-    ).not.toBeNull();
+        `[data-filter-kind="${facet}"][data-filter-value="${value}"] span`,
+      )?.textContent;
+    expect(label('groups', 'No groups')).toBe('No groups');
+    expect(label('owners', 'Unmapped')).toBe('No owner');
+    expect(label('languages', 'No extension')).toBe('No extension');
+    expect(element.textContent).not.toContain('No type');
+    expect(element.textContent).not.toContain('No types');
     expect(
       [
         ...element.querySelectorAll('[data-filter-kind="groups"]'),
       ].map((item) => item.getAttribute('data-filter-value')),
-    ).toEqual(['Tests', 'No type']);
+    ).toEqual(['Tests', 'No groups']);
   });
 });

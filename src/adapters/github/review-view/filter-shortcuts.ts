@@ -3,6 +3,17 @@ export type FilterShortcutOptions = {
   onChange: () => void;
 };
 
+export function onlyFocusApplied(
+  value: string,
+  values: readonly string[],
+  excluded: ReadonlySet<string>,
+): boolean {
+  return (
+    !excluded.has(value) &&
+    values.every((entry) => entry === value || excluded.has(entry))
+  );
+}
+
 export function itemOnlyAction(
   options: FilterShortcutOptions & {
     label: string;
@@ -15,6 +26,12 @@ export function itemOnlyAction(
   action.className = 'diffseek-menu-only';
   action.dataset.filterOnly = 'true';
   action.setAttribute('aria-label', `Show only ${options.label}`);
+  action.setAttribute(
+    'aria-pressed',
+    String(
+      onlyFocusApplied(options.value, options.values, options.excluded),
+    ),
+  );
   action.textContent = 'only';
   action.addEventListener('click', () => {
     options.excluded.clear();

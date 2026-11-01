@@ -100,14 +100,14 @@ src/app.test.ts linguist-generated
     });
   });
 
-  it('labels files without a repository group as No type', () => {
+  it('labels files without a repository group as No groups', () => {
     const files = [file('misc/notes.txt', '.txt')];
 
     labelFiles(files, { attributes: [], codeowners: [] });
 
     expect(files[0]?.labels).toContainEqual({
       facet: 'groups',
-      value: 'No type',
+      value: 'No groups',
     });
   });
 

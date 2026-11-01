@@ -57,7 +57,7 @@ describe('filter facets', () => {
         { facet: 'owners', value: '@zeta' },
         { facet: 'owners', value: '@Alpha' },
         { facet: 'owners', value: '@beta' },
-        { facet: 'groups', value: 'No type' },
+        { facet: 'groups', value: 'No groups' },
         { facet: 'groups', value: 'Tests' },
         { facet: 'groups', value: 'Code' },
       ],
@@ -80,7 +80,7 @@ describe('filter facets', () => {
     expect(facetChoices('groups', choices, selected)).toEqual([
       'Code',
       'Tests',
-      'No type',
+      'No groups',
     ]);
   });
 });

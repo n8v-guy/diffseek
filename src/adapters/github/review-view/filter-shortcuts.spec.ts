@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   itemOnlyAction,
+  onlyFocusApplied,
   sectionAllAction,
 } from './filter-shortcuts';
 
@@ -18,10 +19,18 @@ describe('filter shortcuts', () => {
       values: ['@docs', '@owner', 'Unmapped'],
     });
 
+    expect(action.getAttribute('aria-pressed')).toBe('false');
+    expect(onlyFocusApplied('@owner', ['@docs', '@owner', 'Unmapped'], excluded)).toBe(
+      false,
+    );
+
     action.click();
 
     expect(excluded).toEqual(new Set(['@docs', 'Unmapped']));
     expect(otherFacet).toEqual(new Set(['Tests']));
+    expect(onlyFocusApplied('@owner', ['@docs', '@owner', 'Unmapped'], excluded)).toBe(
+      true,
+    );
     expect(onChange).toHaveBeenCalledOnce();
   });
 

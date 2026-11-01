@@ -4,6 +4,6 @@ export const groupLabelSource: LabelSource = {
   prepare: () => ({ attributes }) =>
     [{
       facet: 'groups',
-      value: attributes.group ?? 'No type',
+      value: attributes.group ?? 'No groups',
     }],
 };
