@@ -70,9 +70,11 @@ export function defaultLivePerfBudgets(
     coldFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S, 12),
     warmFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S, 10),
     hotFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S, 8),
-    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, 20),
-    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, 20),
-    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, 22),
+    // Panel limits: about 1.5x the pooled CI median of 5 event-based runs
+    // (15 samples each, 2026-11-01), rounded up to whole seconds.
+    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, 16),
+    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, 17),
+    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, 9),
     menuOpenSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MENU_S, 6),
     reconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_RECONCILES, 500),
     domMutations: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MUTATIONS, 12_000),
