@@ -27,7 +27,7 @@ export default defineConfig({
   },
   manifestVersion: 3,
   manifest: {
-    name: 'DiffSeek: auto-hide PR noise + rich filters for GitHub',
+    name: 'DiffSeek for GitHub: cut the noise in big PRs',
     description:
       'Fast, lightweight GitHub PR filter by file groups, formats and CODEOWNERS. Focus on one slice, mark folders viewed at once.',
     version: manifestVersion(packageVersion, branchCommitCount),

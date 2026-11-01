@@ -1,4 +1,4 @@
-# DiffSeek: auto-hide PR noise + rich filters for GitHub
+# DiffSeek for GitHub: cut the noise in big PRs
 
 Fast, lightweight GitHub PR filter by file groups, formats and CODEOWNERS. Focus on one slice, mark folders viewed at once.
 
