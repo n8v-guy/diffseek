@@ -644,8 +644,29 @@ test('stays idempotent through a deterministic native-extension action storm', a
     '[data-filter-kind="groups"][data-filter-value="Code"]',
   );
   await code.click();
+  // Resolve on the events themselves: GitHub expands the file, then DiffSeek
+  // collapses it again.
+  await page.evaluate(() => {
+    (window as unknown as { recollapsed: Promise<void> }).recollapsed = new Promise((resolve) => {
+      let expanded = false;
+      const observer = new MutationObserver(() => {
+        const label = document.querySelector('#diff-app button')?.getAttribute('aria-label');
+        if (label === 'Collapse file') expanded = true;
+        else if (expanded && label === 'Expand file') {
+          observer.disconnect();
+          resolve();
+        }
+      });
+      observer.observe(document.getElementById('diff-app')!, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['aria-label'],
+      });
+    });
+  });
   await page.locator('#diff-app button[aria-label="Expand file"]').click();
-  await page.waitForTimeout(50);
+  await page.evaluate(() => (window as unknown as { recollapsed: Promise<void> }).recollapsed);
   await expect(
     page.locator('#diff-app button[aria-label="Expand file"]'),
   ).toHaveCount(1);
