@@ -63,6 +63,9 @@ export type CookieLike = {
   sameSite?: 'Strict' | 'Lax' | 'None';
 };
 
+/** Shared cold/warm/hot panels cutoff: ceil(1.5x the pooled CI cold median over 5 runs). */
+const panelsLimitSeconds = 16;
+
 export function defaultLivePerfBudgets(
   env: NodeJS.ProcessEnv = process.env,
 ): LivePerfBudgets {
@@ -70,9 +73,9 @@ export function defaultLivePerfBudgets(
     coldFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S, 12),
     warmFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S, 10),
     hotFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S, 8),
-    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, 45),
-    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, 45),
-    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, 22),
+    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, panelsLimitSeconds),
+    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, panelsLimitSeconds),
+    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, panelsLimitSeconds),
     menuOpenSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MENU_S, 6),
     reconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_RECONCILES, 500),
     domMutations: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MUTATIONS, 12_000),

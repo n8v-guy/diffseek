@@ -30,6 +30,12 @@ import {
   type LivePerfScenario,
   type RedrawCounts,
 } from './live-perf.helpers';
+import {
+  installLiveWaits,
+  tagFilterButton,
+  untilAttribute,
+  untilDom,
+} from './live-wait';
 
 const liveEnabled = process.env.DIFFSEEK_LIVE_E2E === '1';
 const livePrUrl = process.env.DIFFSEEK_LIVE_PR_URL ?? defaultLivePrUrl;
@@ -43,7 +49,6 @@ const viewedFacetAction =
 const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
 const stepTimeout = 20_000;
 const panelsTimeout = 90_000;
-const hotSettleMs = 500;
 // Fresh-install hiding without auto-view, which would mark the fixture's
 // generated files viewed on GitHub. Unit tests cover the auto-view default.
 const hideDefaults = { hidden: ['viewed', 'generated'], viewed: [] };
@@ -87,6 +92,7 @@ describeLive('live DiffSeek performance', () => {
       );
     }
     await context.addCookies(parseStorageCookies(raw));
+    await installLiveWaits(context);
     // Auto-view would mark the fixture's generated files viewed on GitHub.
     await writeShownDefaults(context);
     const setup = await context.newPage();
@@ -168,10 +174,7 @@ describeLive('live DiffSeek performance', () => {
     await writeDefaults(context, hideDefaults);
     const page = await context.newPage();
     await page.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByLabel('Filter options')).toBeVisible({
-      timeout: panelsTimeout,
-    });
-    await openFilterMenu(page);
+    await openFilterMenu(page, panelsTimeout);
     const viewed = page.locator(viewedToggle);
     const generated = page.locator(
       '[data-filter-kind="generated"][data-filter-value="true"]',
@@ -179,27 +182,24 @@ describeLive('live DiffSeek performance', () => {
     const generatedCount = page.locator(
       '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
     );
-    await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
-    await expect(generated).toHaveAttribute('aria-checked', 'mixed', {
-      timeout: panelsTimeout,
-    });
-    await expect(generatedCount).toHaveText(
-      new RegExp(`^0/${expectedGeneratedTotal}$`),
-      { timeout: panelsTimeout },
-    );
+    const generatedToggle = '[data-filter-kind="generated"][data-filter-value="true"]';
+    const generatedCountSelector =
+      '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count';
+    await untilDom(page, { kind: 'attr', selector: viewedToggle, name: 'aria-checked', value: 'mixed' }, stepTimeout, 'viewed toggle mixed');
+    await untilDom(page, { kind: 'attr', selector: generatedToggle, name: 'aria-checked', value: 'mixed' }, panelsTimeout, 'generated toggle mixed');
+    await untilDom(page, { kind: 'text', selector: generatedCountSelector, pattern: `^0/${expectedGeneratedTotal}$` }, panelsTimeout, 'generated count hidden');
     await expect(page.locator('[data-diffseek-always-read]')).toHaveAttribute(
       'aria-pressed',
       'false',
+      { timeout: 0 },
     );
 
     await viewed.click();
-    await expect(viewed).toHaveAttribute('aria-checked', 'true');
+    await untilDom(page, { kind: 'attr', selector: viewedToggle, name: 'aria-checked', value: 'true' }, stepTimeout, 'viewed toggle on');
     await generated.click();
-    await expect(generated).toHaveAttribute('aria-checked', 'true');
-    await expect(generatedCount).toHaveText(
-      generatedIndexedText(expectedGeneratedTotal),
-      { timeout: panelsTimeout },
-    );
+    await untilDom(page, { kind: 'attr', selector: generatedToggle, name: 'aria-checked', value: 'true' }, stepTimeout, 'generated toggle on');
+    await untilDom(page, { kind: 'text', selector: generatedCountSelector, pattern: `^${generatedIndexedText(expectedGeneratedTotal)}$` }, panelsTimeout, 'generated count shown');
+    void generatedCount;
     await page.close();
   });
 });
@@ -221,21 +221,24 @@ async function measureReview(
 ): Promise<LivePerfSample> {
   const started = Date.now();
   await navigate();
-  await expect(page.locator('[data-diffseek-viewed-action]').first()).toBeVisible({
-    timeout: panelsTimeout,
-  });
+  await untilDom(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
   const firstRenderSeconds = await renderSeconds(page, started);
   // GitHub removes and restores panels on this navigation. Hot starts
-  // counting here and later fails only on rows still missing after 500 ms.
+  // counting here and later fails on rows back after 500 ms or never back.
   if (scenario === 'hot') await resetRedraws(page);
   const menuOpenSeconds = await openFilterMenu(page);
-  await expect(page.locator(generatedCounter)).toHaveText(
-    generatedCategorizedPattern(expectedGeneratedTotal),
-    { timeout: panelsTimeout },
+  await untilDom(
+    page,
+    { kind: 'text', selector: generatedCounter, pattern: generatedCategorizedPattern(expectedGeneratedTotal).source },
+    panelsTimeout,
+    'generated counter categorized',
   );
   const panelsSeconds = secondsBetween(started);
   if (scenario === 'hot') {
-    await page.waitForTimeout(hotSettleMs);
+    // Wait for every removed row to return (event), not a fixed delay. The
+    // trace still timestamps returns: one back after 500 ms is a net loss.
+    // A row that never returns trips the guard and is then counted as lost.
+    await untilDom(page, { kind: 'trace-settled' }, stepTimeout, 'hot rows returned').catch(() => undefined);
     await page.evaluate(() => {
       document.dispatchEvent(new Event('diffseek-redraw-settle'));
     });
@@ -262,9 +265,7 @@ async function runToggle(page: Page): Promise<RedrawCounts> {
   await openFilterMenu(page);
   const before = await readRedraws(page);
   await page.locator(viewedToggle).click({ timeout: stepTimeout });
-  await expect
-    .poll(async () => (await readRedraws(page)).reconciles, { timeout: stepTimeout })
-    .toBeGreaterThan(before.reconciles);
+  await untilDom(page, { kind: 'dataset-above', key: 'diffseekReconciles', value: before.reconciles }, stepTimeout, 'toggle reconcile');
   return subtractCounts(await readRedraws(page), before);
 }
 
@@ -280,7 +281,7 @@ async function runMark(page: Page): Promise<RedrawCounts> {
       has: page.locator('[data-diffseek-viewed-action][aria-pressed="false"]'),
     })
     .first();
-  await expect(row).toBeVisible({ timeout: stepTimeout });
+  await untilDom(page, { kind: 'unviewed-file-row' }, stepTimeout, 'unviewed file row');
   const action = await row.evaluateHandle((element) => {
     return (
       [...element.querySelectorAll<HTMLElement>('[data-diffseek-viewed-action]')].find(
@@ -293,34 +294,26 @@ async function runMark(page: Page): Promise<RedrawCounts> {
   const target = action.asElement();
   if (!target) throw new Error('No unviewed file row to mark');
   await target.click({ timeout: stepTimeout });
-  await expect
-    .poll(() => target.getAttribute('aria-pressed'), { timeout: stepTimeout })
-    .toBe('true');
+  await untilAttribute(target, 'aria-pressed', 'true', stepTimeout, 'file marked viewed');
   await action.dispose();
   return subtractCounts(await readRedraws(page), before);
 }
 
 async function showConversation(page: Page): Promise<void> {
   const conversation = page.getByRole('link', { name: /^Conversation/ });
-  await expect(conversation.first(), `Conversation link missing at ${page.url()}`).toBeVisible({
-    timeout: stepTimeout,
-  });
+  await untilDom(page, { kind: 'link-prefix', prefix: 'Conversation' }, stepTimeout, `Conversation link missing at ${page.url()}`);
   await conversation.first().click({ timeout: stepTimeout });
-  await expect(page).toHaveURL(/\/pull\/\d+(?:[?#].*)?$/, { timeout: stepTimeout });
-  await expect(page.locator('[data-diffseek-viewed-action]')).toHaveCount(0, {
-    timeout: stepTimeout,
-  });
+  await page.waitForURL(/\/pull\/\d+(?:[?#].*)?$/, { timeout: stepTimeout });
+  await untilDom(page, { kind: 'absent', selector: '[data-diffseek-viewed-action]' }, stepTimeout, 'DiffSeek controls gone');
 }
 
 async function showFiles(page: Page): Promise<void> {
+  await untilDom(page, { kind: 'present', selector: '#prs-files-anchor-tab, a[href*="/changes"], a[href$="/files"]' }, stepTimeout, `Files changed link missing at ${page.url()}`);
   const anchored = page.locator('#prs-files-anchor-tab');
   const files =
     (await anchored.count()) > 0
       ? anchored.first()
       : page.getByRole('link', { name: 'Files changed' }).first();
-  await expect(files, `Files changed link missing at ${page.url()}`).toBeVisible({
-    timeout: stepTimeout,
-  });
   await files.click({ timeout: stepTimeout });
 }
 
@@ -382,45 +375,38 @@ function subtractCounts(after: RedrawCounts, before: RedrawCounts): RedrawCounts
 }
 
 async function assertAuthenticatedReview(page: Page): Promise<void> {
-  await expect(
-    page.getByRole('link', { name: 'Sign in', exact: true }),
+  expect(
+    await page.getByRole('link', { name: 'Sign in', exact: true }).count(),
     'GitHub session from DIFFSEEK_GITHUB_STORAGE_STATE is not authenticated',
-  ).toHaveCount(0, { timeout: stepTimeout });
-  await expect(page).toHaveURL(/\/changes(\?|$)/, { timeout: stepTimeout });
-  await expect(page.locator('[data-diffseek-viewed-action]').first()).toBeVisible({
-    timeout: panelsTimeout,
-  });
-  await expect(page.getByLabel('Filter options')).toBeVisible({
-    timeout: stepTimeout,
-  });
+  ).toBe(0);
+  await page.waitForURL(/\/changes(\?|$)/, { timeout: stepTimeout });
+  await untilDom(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
+  await untilDom(page, { kind: 'filter-button-ready' }, stepTimeout, 'Filter options button interactive');
 }
 
-async function openFilterMenu(page: Page): Promise<number> {
+async function openFilterMenu(page: Page, guardMs = stepTimeout): Promise<number> {
   const filters = page.locator('[data-diffseek="filters"]');
+  if ((await filters.count()) > 0) return 0;
+  // GitHub server-renders this button and later swaps in a client-rendered
+  // copy; clicks on the server copy do nothing. Wait for the interactive copy.
+  await untilDom(page, { kind: 'filter-button-ready' }, guardMs, 'Filter options button interactive');
   const button = page.getByRole('button', { name: 'Filter options' });
-  await expect(button).toBeVisible({ timeout: stepTimeout });
-  let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    if ((await filters.count()) > 0) return 0;
     await dismissCompactLinePopover(page);
+    await tagFilterButton(page);
     const started = Date.now();
     await button.click({ timeout: stepTimeout });
-    try {
-      await expect(filters).toHaveCount(1, { timeout: stepTimeout });
-      return secondsBetween(started);
-    } catch (error) {
-      lastError = error;
-    }
+    // Re-click only on an event: GitHub replaced the button under the click.
+    const outcome = await untilDom(page, { kind: 'filter-menu-or-replaced' }, stepTimeout, 'Filter menu did not open');
+    if (outcome === 'open') return secondsBetween(started);
   }
-  throw lastError instanceof Error ? lastError : new Error('Filter menu did not open');
+  throw new Error('Filter options button kept being replaced');
 }
 
 async function closeFilterMenu(page: Page): Promise<void> {
   if ((await page.locator('[data-diffseek="filters"]').count()) === 0) return;
   await page.keyboard.press('Escape');
-  await expect(page.locator('[data-diffseek="filters"]')).toHaveCount(0, {
-    timeout: stepTimeout,
-  });
+  await untilDom(page, { kind: 'absent', selector: '[data-diffseek="filters"]' }, stepTimeout, 'filter menu closed');
 }
 
 async function dismissCompactLinePopover(page: Page): Promise<void> {
@@ -481,9 +467,10 @@ async function clearViewedFiles(page: Page): Promise<void> {
   const label = await action.getAttribute('aria-label', { timeout: 5_000 });
   if (label !== 'Mark as not viewed') return;
   await action.click();
-  await expect(
-    page.locator('[data-diffseek="snackbar"]').filter({
-      hasText: /^Marked .+ as not viewed/,
-    }),
-  ).toBeVisible({ timeout: 300_000 });
+  await untilDom(
+    page,
+    { kind: 'text', selector: '[data-diffseek="snackbar"]', pattern: '^Marked .+ as not viewed' },
+    300_000,
+    'not-viewed snackbar',
+  );
 }
