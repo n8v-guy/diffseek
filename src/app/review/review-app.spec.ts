@@ -53,6 +53,89 @@ async function nextReconcile(action: () => void): Promise<void> {
   await ready;
 }
 
+const calls = new EventTarget();
+
+/** Wraps an injected dependency so each call is an event `until` re-checks on. */
+function signalled<Args extends unknown[], Result>(
+  fn: (...args: Args) => Result,
+): (...args: Args) => Result {
+  return (...args) => {
+    const result = fn(...args);
+    calls.dispatchEvent(new Event('call'));
+    return result;
+  };
+}
+
+/**
+ * Resolves once `check` stops throwing. Re-checks on DOM mutations, session
+ * reconciles, injected-dependency calls, and extension storage changes instead
+ * of polling; the timeout
+ * only fails a wait whose event never comes.
+ */
+async function until(
+  check: () => unknown,
+  guardMs = 4_000,
+): Promise<void> {
+  let lastError: unknown;
+  const passes = async () => {
+    try {
+      await check();
+      return true;
+    } catch (error) {
+      lastError = error;
+      return false;
+    }
+  };
+  if (await passes()) return;
+  await new Promise<void>((resolve, reject) => {
+    let running = false;
+    let rerun = false;
+    let done = false;
+    const finish = () => {
+      done = true;
+      observer.disconnect();
+      document.removeEventListener('diffseek-reconciled', recheck);
+      fakeBrowser.storage.onChanged.removeListener(recheck);
+      calls.removeEventListener('call', recheck);
+      clearTimeout(timer);
+    };
+    const recheck = () => {
+      if (done) return;
+      if (running) {
+        rerun = true;
+        return;
+      }
+      running = true;
+      void (async () => {
+        do {
+          rerun = false;
+          if (await passes()) {
+            finish();
+            resolve();
+            break;
+          }
+        } while (rerun && !done);
+        running = false;
+      })();
+    };
+    const observer = new MutationObserver(recheck);
+    observer.observe(document, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    document.addEventListener('diffseek-reconciled', recheck);
+    fakeBrowser.storage.onChanged.addListener(recheck);
+    calls.addEventListener('call', recheck);
+    const timer = setTimeout(() => {
+      finish();
+      reject(lastError instanceof Error ? lastError : new Error('until: condition never held'));
+    }, guardMs);
+    recheck();
+  });
+}
+
 beforeEach(async () => {
   fakeBrowser.reset();
   await fakeBrowser.storage.local.set({
@@ -144,8 +227,8 @@ describe('review app lifecycle', () => {
         codeowners: '',
         attributes: 'src/** group=cached',
       }),
-      refreshDefault,
-      readPull,
+      refreshDefault: signalled(refreshDefault),
+      readPull: signalled(readPull),
     });
 
     expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull();
@@ -155,10 +238,10 @@ describe('review app lifecycle', () => {
       codeowners: '',
       attributes: 'src/** group=pull',
     });
-    await vi.waitFor(() =>
+    await until(() =>
       expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(),
     );
-    await vi.waitFor(() => expect(refreshDefault).toHaveBeenCalledOnce());
+    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
     resolveDefault?.({
       metadata: {
         codeowners: '',
@@ -166,7 +249,7 @@ describe('review app lifecycle', () => {
       },
       changed: true,
     });
-    await vi.waitFor(async () => {
+    await until(async () => {
       const stored = await fakeBrowser.storage.local.get(
         'diffseek:metadata:octo/repo',
       );
@@ -196,10 +279,10 @@ describe('review app lifecycle', () => {
       refreshDefault: async () => {
         throw new Error('default unavailable');
       },
-      readPull,
+      readPull: signalled(readPull),
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(),
     );
     expect(readPull).toHaveBeenCalledWith(
@@ -232,13 +315,13 @@ describe('review app lifecycle', () => {
         },
         changed: true,
       }),
-      readPull,
+      readPull: signalled(readPull),
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(),
     );
-    await vi.waitFor(() => expect(setSpy).toHaveBeenCalled());
+    await until(() => expect(setSpy).toHaveBeenCalled());
     expect(readPull).toHaveBeenCalledWith(
       expect.objectContaining({ pull: 1 }),
       { codeowners: '', attributes: 'src/** group=cached' },
@@ -270,7 +353,7 @@ describe('review app lifecycle', () => {
       }),
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document
           .querySelector(
@@ -300,7 +383,7 @@ describe('review app lifecycle', () => {
         codeowners: '*.ts @cached',
         attributes: 'src/** group=Code',
       }),
-      refreshDefault,
+      refreshDefault: signalled(refreshDefault),
     });
 
     const filters = document.querySelector('[data-diffseek="filters"]');
@@ -382,20 +465,22 @@ describe('review app lifecycle', () => {
         changed: false,
       }),
     });
-    await nextReconcile(openMenu);
-    document
-      .querySelector<HTMLElement>(
-        '[data-filter-kind="groups"][data-filter-value="Code"]',
-      )
-      ?.click();
-    const button = document.querySelector<HTMLButtonElement>(
-      '#diff-app button[aria-label="Expand file"]',
+    openMenu();
+    const codeFilter = '[data-filter-kind="groups"][data-filter-value="Code"]';
+    await until(() => expect(document.querySelector(codeFilter)).not.toBeNull());
+    document.querySelector<HTMLElement>(codeFilter)?.click();
+    await until(() =>
+      expect(
+        document.querySelector('#diff-app button[aria-label="Expand file"]'),
+      ).not.toBeNull(),
     );
-    expect(button).not.toBeNull();
-    button?.setAttribute('aria-label', 'Collapse file');
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(document.querySelector('#diff-app button')?.getAttribute('aria-label')).toBe(
-      'Expand file',
+    document
+      .querySelector<HTMLButtonElement>('#diff-app button[aria-label="Expand file"]')
+      ?.setAttribute('aria-label', 'Collapse file');
+    await until(() =>
+      expect(document.querySelector('#diff-app button')?.getAttribute('aria-label')).toBe(
+        'Expand file',
+      ),
     );
     app.stop();
   });
@@ -439,19 +524,21 @@ describe('review app lifecycle', () => {
       group.remove();
     });
 
-    expect(folder.hidden).toBe(false);
-    expect(
-      document.querySelector(
-        '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Code"]) .diffseek-menu-count',
-      )?.textContent,
-    ).toContain('3');
-    expect(
-      document
-        .querySelector(
-          '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
-        )
-        ?.getAttribute('aria-label'),
-    ).toBe('Unmark all');
+    await until(() => {
+      expect(folder.hidden).toBe(false);
+      expect(
+        document.querySelector(
+          '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Code"]) .diffseek-menu-count',
+        )?.textContent,
+      ).toContain('3');
+      expect(
+        document
+          .querySelector(
+            '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
+          )
+          ?.getAttribute('aria-label'),
+      ).toBe('Unmark all');
+    });
 
     await nextReconcile(() => {
       const button = document.querySelector<HTMLButtonElement>(
@@ -460,20 +547,22 @@ describe('review app lifecycle', () => {
       button?.setAttribute('aria-label', 'Not Viewed');
       button?.setAttribute('aria-pressed', 'false');
     });
-    expect(
-      document
-        .querySelector(
-          '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
-        )
-        ?.getAttribute('aria-label'),
-    ).toBe('Mark the rest viewed');
-    expect(
-      document
-        .querySelector(
-          '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
-        )
-        ?.getAttribute('aria-pressed'),
-    ).toBe('mixed');
+    await until(() => {
+      expect(
+        document
+          .querySelector(
+            '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
+          )
+          ?.getAttribute('aria-label'),
+      ).toBe('Mark the rest viewed');
+      expect(
+        document
+          .querySelector(
+            '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
+          )
+          ?.getAttribute('aria-pressed'),
+      ).toBe('mixed');
+    });
     app.stop();
   });
 
@@ -539,16 +628,16 @@ describe('metadata refresh', () => {
       pathname: () => '/octo/repo/pull/1/changes',
       readImmediate: async () => immediate,
       refreshDefault: async () => ({ metadata: immediate, changed: false }),
-      readPull,
+      readPull: signalled(readPull),
     });
-    await vi.waitFor(() => expect(readPull).toHaveBeenCalledOnce());
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
     await failed.catch(() => undefined);
     expect(document.querySelector('[data-filter-kind="generated"]')).toBeNull();
 
     openMenu();
     app.reconcile();
-    await vi.waitFor(() => expect(readPull).toHaveBeenCalledTimes(2));
-    await vi.waitFor(() =>
+    await until(() => expect(readPull).toHaveBeenCalledTimes(2));
+    await until(() =>
       expect(
         document.querySelector('[data-filter-kind="generated"][data-filter-value="true"]')?.getAttribute('aria-checked'),
       ).toBe('mixed'),
@@ -568,9 +657,9 @@ describe('metadata refresh', () => {
       pathname: () => '/octo/repo/pull/1/changes',
       readImmediate: async () => immediate,
       refreshDefault: async () => ({ metadata: immediate, changed: false }),
-      readPull,
+      readPull: signalled(readPull),
     });
-    await vi.waitFor(() => expect(readPull).toHaveBeenCalledOnce());
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
     await failed.catch(() => undefined);
 
     await nextReconcile(() => {
@@ -580,11 +669,11 @@ describe('metadata refresh', () => {
       item.setAttribute('aria-label', 'extra.ts');
       document.querySelector('[role="tree"]')?.append(item);
     });
-    await vi.waitFor(() => expect(readPull).toHaveBeenCalledTimes(2));
+    await until(() => expect(readPull).toHaveBeenCalledTimes(2));
     openMenu();
     app.reconcile();
     expect(readPull).toHaveBeenCalledTimes(2);
-    await vi.waitFor(() =>
+    await until(() =>
       expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(),
     );
     app.stop();
@@ -600,9 +689,9 @@ describe('metadata refresh', () => {
       pathname: () => '/octo/repo/pull/1/changes',
       readImmediate: async () => immediate,
       refreshDefault: async () => ({ metadata: immediate, changed: false }),
-      readPull,
+      readPull: signalled(readPull),
     });
-    await vi.waitFor(() => expect(readPull).toHaveBeenCalledOnce());
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
     openMenu();
     app.reconcile();
     document.querySelector('[role="tree"]')?.append(document.createElement('li'));
@@ -610,7 +699,7 @@ describe('metadata refresh', () => {
     expect(readPull).toHaveBeenCalledOnce();
 
     resolvePull(loaded);
-    await vi.waitFor(() =>
+    await until(() =>
       expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(),
     );
     expect(readPull).toHaveBeenCalledOnce();
@@ -630,9 +719,9 @@ describe('metadata refresh', () => {
         metadata: { codeowners: '', attributes: 'src/** group=FromCache' },
         changed: false,
       }),
-      readPull,
+      readPull: signalled(readPull),
     });
-    await vi.waitFor(() =>
+    await until(() =>
       expect(document.querySelector('[data-filter-value="FromCache"]')).not.toBeNull(),
     );
     expect(readPull).toHaveBeenCalledOnce();
@@ -655,7 +744,7 @@ describe('review app reuse invariants', () => {
       }),
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document.querySelector(
           '[data-filter-kind="generated"][data-filter-value="true"]',
@@ -706,7 +795,7 @@ describe('review app reuse invariants', () => {
       }),
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document.querySelector<HTMLButtonElement>(
           '[data-filter-kind="generated"][data-filter-value="true"]',
@@ -723,7 +812,7 @@ describe('review app reuse invariants', () => {
         ?.setAttribute('aria-label', 'Viewed');
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document
           .querySelector<HTMLButtonElement>(
@@ -743,7 +832,7 @@ describe('review app reuse invariants', () => {
       pathname: () => '/octo/repo/pull/1/changes',
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(document.querySelector('[data-diffseek="filters"]')).not.toBeNull(),
     );
     const menu = document.querySelector<HTMLElement>(
@@ -784,21 +873,21 @@ describe('fresh filter defaults', () => {
       ...inertMetadata,
       root: document,
       pathname: () => '/octo/repo/pull/1/changes',
-      markFiles,
+      markFiles: signalled(markFiles),
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'src/generated.ts linguist-generated',
       }),
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document
           .querySelector('[data-diffseek-always-read]')
           ?.getAttribute('aria-pressed'),
       ).toBe('true'),
     );
-    await vi.waitFor(() =>
+    await until(() =>
       expect(markFiles).toHaveBeenCalledWith(
         expect.anything(),
         ['src/generated.ts'],
@@ -836,7 +925,7 @@ describe('fresh filter defaults', () => {
       ...inertMetadata,
       root: document,
       pathname: () => '/octo/repo/pull/1/changes',
-      markFiles,
+      markFiles: signalled(markFiles),
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'src/generated.ts linguist-generated',
@@ -856,7 +945,7 @@ describe('fresh filter defaults', () => {
         `.diffseek-menu-row:has([data-filter-kind="${facet}"][data-filter-value="true"]) .diffseek-menu-count`,
       )?.textContent;
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(generated()?.getAttribute('aria-checked')).toBe('mixed'),
     );
     expect(viewed()?.getAttribute('aria-checked')).toBe('mixed');
@@ -867,14 +956,14 @@ describe('fresh filter defaults', () => {
     expect(count('generated')).toBe('0/1');
 
     viewed()?.click();
-    await vi.waitFor(() =>
+    await until(() =>
       expect(document.getElementById('docs/readme.md')?.hidden).toBe(false),
     );
     expect(viewed()?.getAttribute('aria-checked')).toBe('true');
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
 
     generated()?.click();
-    await vi.waitFor(() => {
+    await until(() => {
       expect(generated()?.getAttribute('aria-checked')).toBe('true');
       expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
     });
@@ -888,11 +977,11 @@ describe('fresh filter defaults', () => {
     generated()?.click();
     generated()?.click();
     generated()?.click();
-    await vi.waitFor(() =>
+    await until(() =>
       expect(generated()?.getAttribute('aria-checked')).toBe('true'),
     );
     expect(markFiles).not.toHaveBeenCalled();
-    await vi.waitFor(async () =>
+    await until(async () =>
       expect(
         await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
       ).toEqual({
@@ -917,7 +1006,7 @@ describe('fresh filter defaults', () => {
       }),
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document.querySelector(
           '[data-filter-kind="generated"][data-filter-value="true"]',
@@ -970,14 +1059,14 @@ describe('review app interactions', () => {
       ...inertMetadata,
       root: document,
       pathname: () => '/octo/repo/pull/1/changes',
-      markFiles,
+      markFiles: signalled(markFiles),
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'src/generated.ts linguist-generated',
       }),
     });
 
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document.querySelector<HTMLButtonElement>(
           '[data-filter-kind="generated"][data-filter-value="true"]',
@@ -990,7 +1079,7 @@ describe('review app interactions', () => {
         .querySelector('[data-diffseek-always-read]')
         ?.getAttribute('aria-pressed'),
     ).toBe('true');
-    await vi.waitFor(() =>
+    await until(() =>
       expect(markFiles).toHaveBeenCalledWith(
         expect.anything(),
         ['src/generated.ts'],
@@ -1010,14 +1099,14 @@ describe('review app interactions', () => {
     ).toBe('true');
 
     releaseMark();
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document.querySelector(
           '#diff-generated button[aria-label="Viewed"]',
         ),
       ).not.toBeNull(),
     );
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document.querySelector<HTMLButtonElement>(
           '[data-filter-kind="generated"][data-filter-value="true"]',
@@ -1030,7 +1119,7 @@ describe('review app interactions', () => {
         '[data-filter-kind="generated"][data-filter-value="true"]',
       )
       ?.click();
-    await vi.waitFor(() =>
+    await until(() =>
       expect(
         document.querySelector(
           '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]',
@@ -1053,16 +1142,21 @@ describe('review app interactions', () => {
       ...inertMetadata,
       root: document,
       pathname: () => '/octo/repo/pull/1/changes',
-      markFiles,
+      markFiles: signalled(markFiles),
       readImmediate: async () => ({ codeowners: '', attributes: 'src/generated.ts linguist-generated' }),
     });
     const alwaysRead = () => document.querySelector<HTMLButtonElement>('[data-diffseek-always-read]');
-    await vi.waitFor(() => expect(alwaysRead()).not.toBeNull());
+    await until(() => expect(alwaysRead()).not.toBeNull());
     alwaysRead()?.click();
-    await vi.waitFor(() => expect(markFiles).toHaveBeenCalledWith(expect.anything(), ['src/generated.ts'], true, expect.anything()));
+    await until(() => expect(markFiles).toHaveBeenCalledWith(expect.anything(), ['src/generated.ts'], true, expect.anything()));
+    // The auto-view batch must finish before the toggle is clicked again.
+    await until(() => {
+      expect(document.querySelector('#diff-generated button[aria-label="Viewed"]')).not.toBeNull();
+      expect(document.querySelector('[data-filter-kind="generated"][data-filter-value="true"]')?.hasAttribute('disabled')).toBe(false);
+    });
     expect(alwaysRead()?.getAttribute('aria-pressed')).toBe('true');
     alwaysRead()?.click();
-    await vi.waitFor(async () => expect(await fakeBrowser.storage.local.get('diffseek:filter-defaults')).toEqual({
+    await until(async () => expect(await fakeBrowser.storage.local.get('diffseek:filter-defaults')).toEqual({
       'diffseek:filter-defaults': { hidden: [], viewed: [] },
     }));
     const control = document.querySelector('#diff-generated button');
@@ -1092,7 +1186,7 @@ describe('review app interactions', () => {
     expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
 
     viewed?.click();
-    await vi.waitFor(async () =>
+    await until(async () =>
       expect(
         await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
       ).toEqual({
@@ -1115,7 +1209,7 @@ describe('review app interactions', () => {
         '[data-filter-kind="viewed"][data-filter-value="true"]',
       )
       ?.click();
-    await vi.waitFor(async () =>
+    await until(async () =>
       expect(
         await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
       ).toEqual({
@@ -1156,7 +1250,7 @@ describe('review app interactions', () => {
       ...inertMetadata,
       root: document,
       pathname: () => '/octo/repo/pull/1/changes',
-      markFiles,
+      markFiles: signalled(markFiles),
     });
 
     document
@@ -1165,7 +1259,7 @@ describe('review app interactions', () => {
       )
       ?.click();
 
-    await vi.waitFor(() => {
+    await until(() => {
       expect(
         [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
           ?.textContent,
@@ -1198,7 +1292,7 @@ describe('review app interactions', () => {
       ...inertMetadata,
       root: document,
       pathname: () => path,
-      markFiles,
+      markFiles: signalled(markFiles),
     });
 
     document
@@ -1206,7 +1300,7 @@ describe('review app interactions', () => {
         '#src\\/app\\.ts [data-diffseek-viewed-action]',
       )
       ?.click();
-    await vi.waitFor(() => expect(markFiles).toHaveBeenCalledOnce());
+    await until(() => expect(markFiles).toHaveBeenCalledOnce());
 
     await nextReconcile(() => {
       path = '/octo/repo/pull/2/changes';
@@ -1316,7 +1410,7 @@ describe('review app interactions', () => {
     viewed?.setAttribute('aria-label', 'Viewed');
     viewed?.setAttribute('aria-pressed', 'true');
 
-    await vi.waitFor(() => {
+    await until(() => {
       expect(
         document
           .querySelector('#src\\/app\\.ts [data-diffseek-viewed-action]')

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   installRedrawTrace,
@@ -87,8 +87,12 @@ describe('redraw trace', () => {
     resetRedrawTrace(document);
     for (const row of rows) row.remove();
     await flush();
-    await new Promise((resolve) => setTimeout(resolve, 520));
+    // The trace timestamps with Date.now(); move the clock past the settle
+    // window instead of sleeping through it.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 520);
     document.dispatchEvent(new Event('diffseek-redraw-settle'));
+    vi.useRealTimers();
     const discarded = readRedrawCounts(document);
     expect(discarded.treeRowsRemoved).toBe(10);
     expect(discarded.treeRowsReadded).toBe(0);

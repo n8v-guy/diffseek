@@ -16,10 +16,15 @@ describe('ViewedActionExecutor', () => {
     const snapshot = scanPage(document);
     if (!snapshot.supported) throw new Error(snapshot.reason);
     let painted: (() => void) | undefined;
+    let started!: () => void;
+    const executeStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     const beforeExecute = vi.fn(
       () =>
         new Promise<void>((resolve) => {
           painted = resolve;
+          started();
         }),
     );
     const markFiles = vi.fn().mockResolvedValue({
@@ -43,7 +48,8 @@ describe('ViewedActionExecutor', () => {
       viewed: true,
       paths: ['src/app.ts'],
     });
-    await vi.waitFor(() => expect(beforeExecute).toHaveBeenCalledOnce());
+    await executeStarted;
+    expect(beforeExecute).toHaveBeenCalledOnce();
 
     expect(markFiles).not.toHaveBeenCalled();
     painted?.();
@@ -115,7 +121,12 @@ describe('ViewedActionExecutor', () => {
     const firstPending = new Promise<void>((resolve) => {
       finishFirst = resolve;
     });
+    let firstCalled!: () => void;
+    const firstCall = new Promise<void>((resolve) => {
+      firstCalled = resolve;
+    });
     const markFiles = vi.fn(async (_snapshot, paths: string[]) => {
+      firstCalled();
       if (paths[0] === 'src/app.ts') await firstPending;
       return {
         requested: paths.length,
@@ -137,7 +148,8 @@ describe('ViewedActionExecutor', () => {
       viewed: true,
       paths: ['src/app.ts', 'src/new.ts'],
     });
-    await vi.waitFor(() => expect(markFiles).toHaveBeenCalledOnce());
+    await firstCall;
+    expect(markFiles).toHaveBeenCalledOnce();
 
     executor.invalidate('src/new.ts');
     finishFirst?.();
