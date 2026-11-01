@@ -27,6 +27,7 @@ import { ReviewSession } from './review-session';
 type ReviewAppOptions = {
   root?: Document;
   pathname?: () => string;
+  search?: () => string;
   hash?: () => string;
   replace?: (url: string) => void;
   readImmediate?: (repository: RepositoryRef) => Promise<RepositoryMetadata>;
@@ -52,7 +53,10 @@ export async function startReviewApp(
 ): Promise<ReviewApp> {
   const root = options.root ?? document;
   const pathname = options.pathname ?? (() => location.pathname);
-  const changesPath = changesPathFromClassic(pathname());
+  const search = options.search ?? (() => location.search);
+  const changesPath = isSignedOut(root)
+    ? null
+    : changesPathFromClassic(pathname(), search());
   if (changesPath) {
     const hash = options.hash?.() ?? location.hash;
     (options.replace ?? location.replace.bind(location))(`${changesPath}${hash}`);
@@ -140,4 +144,9 @@ export async function startReviewApp(
       review = null;
     },
   };
+}
+
+/** GitHub renders an empty `user-login` meta for signed-out visitors. */
+function isSignedOut(root: Document): boolean {
+  return root.querySelector('meta[name="user-login"]')?.getAttribute('content') === '';
 }

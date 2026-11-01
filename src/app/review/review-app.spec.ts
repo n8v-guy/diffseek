@@ -82,6 +82,35 @@ describe('review app lifecycle', () => {
     app.stop();
   });
 
+  it('stays on the classic route GitHub sent the visitor back to', async () => {
+    const replace = vi.fn();
+    const app = await startReviewApp({
+      pathname: () => '/octo/repo/pull/1/files',
+      search: () => '?new_files_changed=true',
+      replace,
+    });
+
+    expect(replace).not.toHaveBeenCalled();
+
+    app.stop();
+  });
+
+  it('leaves signed-out visitors on the classic route', async () => {
+    const meta = document.createElement('meta');
+    meta.name = 'user-login';
+    meta.content = '';
+    document.head.append(meta);
+    const replace = vi.fn();
+    const app = await startReviewApp({
+      pathname: () => '/octo/repo/pull/1/files',
+      replace,
+    });
+
+    expect(replace).not.toHaveBeenCalled();
+
+    app.stop();
+  });
+
   it('replaces cached metadata with PR-head content while default refresh stays isolated', async () => {
     openMenu();
     let resolveDefault:
