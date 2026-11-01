@@ -1,3 +1,5 @@
+import { isRecord } from '@diffseek/browser/record';
+
 import {
   fetchRawFile,
   isRawFileRequest,
@@ -38,8 +40,4 @@ function isRawFileMessage(value: unknown): value is RawFileMessage {
     value.type === rawFileMessageType &&
     isRawFileRequest(value.request)
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
 }

@@ -1,3 +1,5 @@
+import { isRecord } from '@diffseek/browser/record';
+
 import {
   fetchPullHead,
   isPullHeadRequest,
@@ -40,8 +42,4 @@ function isPullHeadMessage(value: unknown): value is PullHeadMessage {
     value.type === pullHeadMessageType &&
     isPullHeadRequest(value.request)
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
 }

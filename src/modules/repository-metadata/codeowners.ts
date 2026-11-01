@@ -1,3 +1,5 @@
+import { globSource } from './glob';
+
 export type CodeownersRule = {
   pattern: string;
   owners: string[];
@@ -60,28 +62,4 @@ function compilePattern(source: string): RegExp {
   const suffix = matchesDescendants ? '(?:/.*)?$' : '$';
 
   return new RegExp(`${prefix}${globSource(pattern)}${suffix}`);
-}
-
-function globSource(pattern: string): string {
-  let source = '';
-  for (let index = 0; index < pattern.length; index += 1) {
-    const character = pattern[index];
-    const next = pattern[index + 1];
-    if (character === '*' && next === '*') {
-      if (pattern[index + 2] === '/') {
-        source += '(?:.*/)?';
-        index += 2;
-      } else {
-        source += '.*';
-        index += 1;
-      }
-    } else if (character === '*') {
-      source += '[^/]*';
-    } else if (character === '?') {
-      source += '[^/]';
-    } else {
-      source += character?.replace(/[|\\{}()[\]^$+?.]/g, '\\$&') ?? '';
-    }
-  }
-  return source;
 }

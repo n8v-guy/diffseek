@@ -1,3 +1,9 @@
+import { isRecord } from '@diffseek/browser/record';
+
+import { type RedrawCounts } from './redraw-trace';
+
+export type { RedrawCounts };
+
 /** Live DiffSeek performance defaults for sha-tm/diffseek-test-data#1 (seed 185108). */
 export const defaultLivePrUrl =
   'https://github.com/sha-tm/diffseek-test-data/pull/1/changes?new_files_changed=true';
@@ -12,19 +18,6 @@ export const expectedGeneratedTotal = 86;
  * classified. Viewed-state settle is out of scope.
  */
 export type LivePerfScenario = 'cold' | 'warm' | 'hot';
-
-export type RedrawCounts = {
-  reconciles: number;
-  domMutations: number;
-  treeRebuilds: number;
-  panelRebuilds: number;
-  treeRowsRemoved: number;
-  panelsRemoved: number;
-  treeRowsReadded: number;
-  panelsReadded: number;
-  treeNetLoss: number;
-  panelNetLoss: number;
-};
 
 export type LivePerfSample = RedrawCounts & {
   scenario: LivePerfScenario;
@@ -240,18 +233,16 @@ export function medianBudgetFailures(
   if (samples.length === 0) return ['no samples'];
   const sample = medianSample(samples);
   const failures: string[] = [];
-  const renderBudget =
-    sample.scenario === 'cold'
-      ? budgets.coldFirstRenderSeconds
-      : sample.scenario === 'warm'
-        ? budgets.warmFirstRenderSeconds
-        : budgets.hotFirstRenderSeconds;
-  const panelsBudget =
-    sample.scenario === 'cold'
-      ? budgets.coldPanelsSeconds
-      : sample.scenario === 'warm'
-        ? budgets.warmPanelsSeconds
-        : budgets.hotPanelsSeconds;
+  const renderBudget = {
+    cold: budgets.coldFirstRenderSeconds,
+    warm: budgets.warmFirstRenderSeconds,
+    hot: budgets.hotFirstRenderSeconds,
+  }[sample.scenario];
+  const panelsBudget = {
+    cold: budgets.coldPanelsSeconds,
+    warm: budgets.warmPanelsSeconds,
+    hot: budgets.hotPanelsSeconds,
+  }[sample.scenario];
   if (sample.firstRenderSeconds > renderBudget) {
     failures.push(
       `${sample.scenario} firstRenderSeconds ${sample.firstRenderSeconds} > ${renderBudget}`,
@@ -352,6 +343,3 @@ function numberEnv(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
-}

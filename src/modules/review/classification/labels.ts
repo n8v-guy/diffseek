@@ -3,16 +3,10 @@ import {
   type CodeownersRule,
   type DiffSeekAttributes,
   type GitAttributeRule,
+  ownersForPathOrNull,
 } from '@diffseek/repository-metadata';
 
 import type { FileRecord } from '../model/file';
-
-import { generatedLabelSource } from './label-sources/generated';
-import { groupLabelSource } from './label-sources/group';
-import { languageLabelSource } from './label-sources/language';
-import { ownerLabelSource } from './label-sources/owner';
-import { statusLabelSource } from './label-sources/status';
-import { viewedLabelSource } from './label-sources/viewed';
 
 export const labelFacets = [
   'viewed',
@@ -28,7 +22,6 @@ export type LabelFacet = (typeof labelFacets)[number];
 export type FileLabel = {
   facet: LabelFacet;
   value: string;
-  /** Languages facet: true when value comes from linguist-language. */
   mapped?: boolean;
 };
 
@@ -47,6 +40,49 @@ export type LabelSource = {
     files: readonly ClassifiedFile[],
     context: LabelContext,
   ) => (file: ClassifiedFile) => FileLabel[];
+};
+
+const viewedLabelSource: LabelSource = {
+  prepare: () => ({ file }) =>
+    file.viewed ? [{ facet: 'viewed', value: 'true' }] : [],
+};
+
+const groupLabelSource: LabelSource = {
+  prepare: () => ({ attributes }) => [
+    { facet: 'groups', value: attributes.group ?? 'No groups' },
+  ],
+};
+
+const ownerLabelSource: LabelSource = {
+  prepare: (_files, context) => ({ file }) => {
+    const owners =
+      ownersForPathOrNull(file.path, context.codeowners) ?? file.owners;
+    return (owners.length > 0 ? owners : ['Unmapped']).map((value) => ({
+      facet: 'owners',
+      value,
+    }));
+  },
+};
+
+const languageLabelSource: LabelSource = {
+  prepare: () => ({ file, attributes }) => [
+    attributes.language
+      ? { facet: 'languages', value: attributes.language, mapped: true }
+      : {
+          facet: 'languages',
+          value: file.extension?.slice(1) ?? 'No extension',
+        },
+  ],
+};
+
+const generatedLabelSource: LabelSource = {
+  prepare: () => ({ attributes }) => [
+    { facet: 'generated', value: String(attributes.generated) },
+  ],
+};
+
+const statusLabelSource: LabelSource = {
+  prepare: () => ({ file }) => [{ facet: 'statuses', value: file.status }],
 };
 
 const defaultLabelSources: LabelSource[] = [

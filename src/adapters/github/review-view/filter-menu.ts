@@ -1,11 +1,4 @@
-import {
-  facetChoices,
-  facetDefinitions,
-  isFallbackFacetValue,
-  type FacetProjection,
-  type LabelFacet,
-  projectFacet,
-} from '@diffseek/review';
+import { facetDefinitions } from '@diffseek/review';
 
 import {
   applyCheckedState,
@@ -16,14 +9,15 @@ import {
   moveFocus,
 } from './filter-menu-keyboard';
 import {
-  displayLabel,
-  emptyProjection,
   type FilterMenuOptions,
   type MenuRowModel,
-  selection,
-  sharedOwnerPrefix,
+  menuRowModels,
 } from './filter-menu-model';
-import { patchFilterMenu } from './filter-menu-patch';
+import {
+  filtersRootSelector,
+  patchFilterMenu,
+  syncMenuItemDisabled,
+} from './filter-menu-patch';
 import {
   hasTransientExclusions,
   resetTransientExclusions,
@@ -40,17 +34,6 @@ import {
 import { showHideNow } from './review-ui';
 
 export type { FilterMenuOptions } from './filter-menu-model';
-
-const filtersRootSelector = '[data-diffseek="filters"]';
-
-type FilterSectionOptions = {
-  facet: LabelFacet;
-  heading: string;
-  choices: Array<FacetProjection & { label: string; value: string }>;
-  excluded: Set<string>;
-  onChange: () => void;
-  onViewed?: (viewed: boolean, paths: string[]) => void;
-};
 
 export function mountFilterMenu(
   menu: HTMLElement,
@@ -74,94 +57,19 @@ export function mountFilterMenu(
   content.className = 'diffseek-menu-content';
   root.append(content);
 
-  const labelSets = options.files.map((file) => file.labels);
-  const viewed =
-    projectFacet('viewed', options.files, options.filters).get('true') ??
-    emptyProjection();
-  appendItem(content, {
-    ...viewed,
-    facet: 'viewed',
-    label: 'Viewed files',
-    value: 'true',
-    excluded: selection(options.filters, 'viewed'),
-    filterDefaults: options.filterDefaults,
-    onChange: options.onChange,
-    onFilterDefaultChange: options.onFilterDefaultChange,
-    onViewed: options.onViewed,
-  });
-  const generated = projectFacet(
-    'generated',
-    options.files,
-    options.filters,
-  ).get('true');
-  if (generated && generated.total > 0) {
-    appendItem(content, {
-      ...generated,
-      facet: 'generated',
-      label: 'Generated files',
-      value: 'true',
-      excluded: selection(options.filters, 'generated'),
-      filterDefaults: options.filterDefaults,
-      disabled: options.generatedDefaultBusy === true,
-      onChange: options.onChange,
-      onFilterDefaultChange: options.onFilterDefaultChange,
-      onAlwaysReadChange: options.onAlwaysReadChange,
-      onViewed: options.onViewed,
-    });
+  const sections: MenuRowModel[][] = [];
+  for (const row of menuRowModels(options)) {
+    if (row.facet === 'viewed' || row.facet === 'generated') {
+      appendItem(content, row);
+      continue;
+    }
+    const current = sections.at(-1);
+    if (current?.[0]?.facet === row.facet) current.push(row);
+    else sections.push([row]);
   }
-
-  const sections = facetDefinitions
-    .filter(
-      (definition) =>
-        !definition.native &&
-        definition.facet !== 'generated' &&
-        definition.facet !== 'viewed',
-    )
-    .map((definition): FilterSectionOptions => {
-      const projections = projectFacet(
-        definition.facet,
-        options.files,
-        options.filters,
-      );
-      const values = facetChoices(
-        definition.facet,
-        labelSets,
-        options.filters,
-      );
-      const ownerPrefix =
-        definition.facet === 'owners' ? sharedOwnerPrefix(values) : null;
-      return {
-        facet: definition.facet,
-        heading: definition.heading,
-        choices: values.map((value) => ({
-          ...(projections.get(value) ?? emptyProjection()),
-          label: displayLabel(
-            definition.label(value),
-            value,
-            definition.facet,
-            ownerPrefix,
-          ),
-          value,
-        })),
-        excluded: selection(options.filters, definition.facet),
-        onChange: options.onChange,
-        onViewed: options.onViewed,
-      };
-    })
-    .filter(
-      (section) =>
-        section.choices.length > 0 &&
-        !(
-          section.choices.length === 1 &&
-          isFallbackFacetValue(
-            section.facet,
-            section.choices[0]?.value ?? '',
-          )
-        ),
-    );
   if (sections.length > 0) appendSeparator(content);
-  for (const [index, section] of sections.entries()) {
-    appendSection(content, section);
+  for (const [index, rows] of sections.entries()) {
+    appendSection(content, rows);
     if (index < sections.length - 1) appendSeparator(content);
   }
   if (hasTransientExclusions(options.filters, options.filterDefaults)) {
@@ -177,42 +85,30 @@ export function mountFilterMenu(
   }
 }
 
-function appendSection(
-  root: HTMLElement,
-  options: FilterSectionOptions,
-): void {
+function appendSection(root: HTMLElement, rows: MenuRowModel[]): void {
+  const first = rows[0];
+  const heading = facetDefinitions.find(
+    (definition) => definition.facet === first?.facet,
+  )?.heading;
+  if (!first || heading == null) return;
   const section = document.createElement('section');
   section.className = 'diffseek-menu-section';
   const titleRow = document.createElement('div');
   titleRow.className = 'diffseek-menu-section-title';
   const title = document.createElement('h3');
-  title.textContent = options.heading;
+  title.textContent = heading;
   titleRow.append(title);
-  if (options.excluded.size > 0) {
+  if (first.excluded.size > 0) {
     titleRow.append(
       sectionAllAction({
-        excluded: options.excluded,
-        heading: options.heading,
-        onChange: options.onChange,
+        excluded: first.excluded,
+        heading,
+        onChange: first.onChange,
       }),
     );
   }
   section.append(titleRow);
-
-  for (const choice of options.choices) {
-    appendItem(section, {
-      ...choice,
-      facet: options.facet,
-      excluded: options.excluded,
-      onlyValues:
-        options.choices.length > 1
-          ? options.choices.map(({ value }) => value)
-          : undefined,
-      onChange: options.onChange,
-      onViewed: options.onViewed,
-    });
-  }
-
+  for (const row of rows) appendItem(section, row);
   root.append(section);
 }
 
@@ -226,11 +122,7 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
   item.dataset.filterKind = options.facet;
   item.dataset.filterValue = options.value;
   applyCheckedState(item, options);
-  if (options.disabled) {
-    item.disabled = true;
-    item.setAttribute('aria-disabled', 'true');
-    item.setAttribute('aria-busy', 'true');
-  }
+  syncMenuItemDisabled(item, options.disabled === true);
   const text = document.createElement('span');
   text.textContent = options.label;
   item.append(text);

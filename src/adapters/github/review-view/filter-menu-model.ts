@@ -129,7 +129,7 @@ export function menuRowModels(options: FilterMenuOptions): MenuRowModel[] {
   return rows;
 }
 
-export function selection(filters: FilterState, facet: LabelFacet): Set<string> {
+function selection(filters: FilterState, facet: LabelFacet): Set<string> {
   const excluded = filters.get(facet);
   if (excluded) return excluded;
   const created = new Set<string>();
@@ -137,7 +137,7 @@ export function selection(filters: FilterState, facet: LabelFacet): Set<string> 
   return created;
 }
 
-export function emptyProjection() {
+function emptyProjection() {
   return {
     counted: 0,
     paths: [] as string[],
@@ -148,7 +148,7 @@ export function emptyProjection() {
   };
 }
 
-export function sharedOwnerPrefix(values: string[]): string | null {
+function sharedOwnerPrefix(values: string[]): string | null {
   const mapped = values.filter((value) => value !== 'Unmapped');
   if (mapped.length < 2) return null;
   const matches = mapped.map((value) => value.match(/^(@[^/]+\/).+$/));
@@ -158,7 +158,7 @@ export function sharedOwnerPrefix(values: string[]): string | null {
     : null;
 }
 
-export function displayLabel(
+function displayLabel(
   label: string,
   value: string,
   facet: LabelFacet,

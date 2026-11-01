@@ -7,7 +7,21 @@ import { hasTransientExclusions } from './filter-reset';
 import { onlyFocusApplied } from './filter-shortcuts';
 import { configureViewedAction } from './menu-viewed-action';
 
-const filtersRootSelector = '[data-diffseek="filters"]';
+export const filtersRootSelector = '[data-diffseek="filters"]';
+
+export function syncMenuItemDisabled(
+  button: HTMLButtonElement,
+  disabled: boolean,
+): void {
+  button.disabled = disabled;
+  if (disabled) {
+    button.setAttribute('aria-disabled', 'true');
+    button.setAttribute('aria-busy', 'true');
+    return;
+  }
+  button.removeAttribute('aria-disabled');
+  button.removeAttribute('aria-busy');
+}
 
 export function patchFilterMenu(
   menu: HTMLElement,
@@ -102,14 +116,7 @@ function patchRow(
   applyCheckedState(button, row);
   if (!patchAlwaysRead(rowElement, row)) return false;
   if (!patchOnly(rowElement, row)) return false;
-  button.disabled = row.disabled === true;
-  if (row.disabled) {
-    button.setAttribute('aria-disabled', 'true');
-    button.setAttribute('aria-busy', 'true');
-  } else {
-    button.removeAttribute('aria-disabled');
-    button.removeAttribute('aria-busy');
-  }
+  syncMenuItemDisabled(button, row.disabled === true);
   const onViewed = row.onViewed;
   const counter = rowElement.querySelector<HTMLElement>('.diffseek-menu-count');
   const viewedAction = rowElement.querySelector<HTMLButtonElement>(
