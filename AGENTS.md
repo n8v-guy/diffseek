@@ -38,10 +38,9 @@ behavior works.
 
 ## Git
 
-Author and committer are `Max Sha <m@n8v.me>`. The message is one line, with
-no co-authors, trailers, or pull-request links. Subject style, and the ban
-on binary files on any branch, are the
-[commit conventions](CONTRIBUTING.md#commit-conventions).
+The commit message is one line, with no co-authors, trailers, or
+pull-request links. Subject style, and the ban on binary files on any
+branch, are the [commit conventions](CONTRIBUTING.md#commit-conventions).
 
 Start from a fresh fetch of the latest main. Work in a separate worktree,
 kept in a dedicated per-project worktrees folder, on a branch whose prefix
