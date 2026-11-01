@@ -1,6 +1,6 @@
-# DiffSeek: auto-hide PR noise + rich filters for GitHub
+# DiffSeek for GitHub: cut the noise in big PRs
 
-Fast, lightweight GitHub PR filter by file groups, formats and CODEOWNERS. Focus on one slice, mark folders viewed at once.
+Filter one slice at a time, mark it viewed in one click and watch progress fill up. Generated files are hidden and auto-viewed.
 
 Open a PR and see only what's left to review. Generated files and files you've already viewed are hidden from the start; one click in the filter menu brings them back.
 
