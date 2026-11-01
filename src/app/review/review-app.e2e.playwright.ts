@@ -272,7 +272,7 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
   );
   await expect(
     page.locator('[data-diffseek="snackbar"]', {
-      hasText: 'Marking 3 visible files in src viewed…',
+      hasText: 'Marking visible files in folder viewed…',
     }),
   ).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute(
@@ -336,7 +336,7 @@ test('interleaves native and DiffSeek viewed actions in action order', async () 
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toHaveText('Marked 1 visible file in src viewed');
+  ).toContainText('Visible files in folder marked viewed');
 });
 
 test('does not overwrite a later native action with a pending batch path', async () => {
@@ -373,7 +373,7 @@ test('does not overwrite a later native action with a pending batch path', async
   ).toBeVisible();
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toHaveText('Marked 2 visible files in src viewed');
+  ).toContainText('Visible files in folder marked viewed');
   await expect(
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'false');
@@ -541,17 +541,17 @@ test('clears native filters before taking over the menu', async () => {
   );
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toHaveText('Generated: Hide now');
+  ).toContainText('Files hidden on this page');
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'mixed');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toHaveText('Generated: Always hide');
+  ).toContainText('Files hidden on every PR');
   await generated.click();
   await expect(generated).toHaveAttribute('aria-checked', 'true');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toHaveText('Generated: Show now');
+  ).toContainText('Files shown');
   await expect(
     page.locator('#diff-generated button[aria-label="Not Viewed"]'),
   ).toHaveAttribute('aria-pressed', 'false');
@@ -582,7 +582,7 @@ test('clears native filters before taking over the menu', async () => {
   await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toHaveText('Viewed: Always hide');
+  ).toContainText('Files hidden on every PR');
   const reset = page.locator('[data-reset-filters]');
   await expect(reset).toHaveCount(0);
   await ownerRow.hover();
@@ -766,12 +766,12 @@ test('retains collapsed folders and marks only visible facet files', async () =>
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(
     page.locator('[data-diffseek="snackbar"]', {
-      hasText: 'Marking all 3 Code files viewed (1 hidden)…',
+      hasText: 'Marking all files in category viewed…',
     }),
   ).toBeVisible();
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
-  ).toHaveText('Marked all 3 Code files viewed (1 hidden)');
+  ).toContainText('All files in category marked viewed');
 
   await page.locator('#diff-app button[aria-label="Viewed"]').click();
   await expect(codeViewed).toHaveAttribute('aria-label', codePartial);

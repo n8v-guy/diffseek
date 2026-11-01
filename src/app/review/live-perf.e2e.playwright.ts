@@ -469,7 +469,7 @@ async function clearViewedFiles(page: Page): Promise<void> {
   await action.click();
   await untilDom(
     page,
-    { kind: 'text', selector: '[data-diffseek="snackbar"]', pattern: '^Unmarked all ' },
+    { kind: 'text', selector: '[data-diffseek="snackbar"]', pattern: "^(All files in category unmarked|Couldn't unmark files\\. Try again\\.)$" },
     300_000,
     'not-viewed snackbar',
   );

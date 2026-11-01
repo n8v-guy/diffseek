@@ -451,14 +451,12 @@ describe('mountFilterMenu', () => {
     expect(onViewed).toHaveBeenCalledWith(
       true,
       ['src/app.test.ts', 'unmapped.txt'],
-      { kind: 'category', name: 'Modified', hidden: 1 },
     );
     onViewed.mockClear();
     action?.click();
     expect(onViewed).toHaveBeenCalledWith(
       true,
       ['src/app.test.ts', 'unmapped.txt'],
-      { kind: 'category', name: 'Modified', hidden: 1 },
     );
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -486,14 +484,12 @@ describe('mountFilterMenu', () => {
     expect(onViewed).toHaveBeenCalledWith(
       false,
       ['docs/guide.md'],
-      { kind: 'category', name: 'Generated files', hidden: 0 },
     );
     onViewed.mockClear();
     action?.click();
     expect(onViewed).toHaveBeenCalledWith(
       false,
       ['docs/guide.md'],
-      { kind: 'category', name: 'Generated files', hidden: 0 },
     );
   });
 
@@ -546,14 +542,12 @@ describe('mountFilterMenu', () => {
     expect(onViewed).toHaveBeenCalledWith(
       true,
       ['src/app.test.ts'],
-      { kind: 'category', name: '@owner', hidden: 0 },
     );
     onViewed.mockClear();
     action?.click();
     expect(onViewed).toHaveBeenCalledWith(
       true,
       ['src/app.test.ts'],
-      { kind: 'category', name: '@owner', hidden: 0 },
     );
   });
 
@@ -687,7 +681,6 @@ describe('filter menu in-place patch', () => {
     expect(onViewed).toHaveBeenCalledWith(
       false,
       ['docs/guide.md'],
-      { kind: 'category', name: 'Generated files', hidden: 1 },
     );
   });
 

@@ -52,12 +52,7 @@ describe('viewed actions', () => {
 
     expect(clicks).toHaveBeenCalledOnce();
     expect(result.completed).toEqual([]);
-    expect(result.failed).toEqual([
-      {
-        path: 'src/app.ts',
-        reason: 'GitHub did not confirm viewed state',
-      },
-    ]);
+    expect(result.failed).toEqual(['src/app.ts']);
   });
 
   it('continues with supported files after a viewed control is unavailable', async () => {
@@ -82,12 +77,7 @@ describe('viewed actions', () => {
     expect(result).toEqual({
       requested: 2,
       completed: ['src/new.ts'],
-      failed: [
-        {
-          path: 'src/app.ts',
-          reason: 'Viewed control is unavailable',
-        },
-      ],
+      failed: ['src/app.ts'],
     });
   });
 
@@ -173,9 +163,9 @@ describe('viewed actions', () => {
     expect(folder?.title).toBe('Mark 3 remaining as viewed (0 of 3 viewed)');
     expect(folder?.getAttribute('aria-pressed')).toBe('false');
     expect(onAction).toHaveBeenCalledWith(
+      'folder',
       true,
       ['src/app.ts', 'src/new.ts', 'src/generated.ts'],
-      { kind: 'folder', name: 'src' },
     );
 
     const viewedFile = document.querySelector<HTMLButtonElement>(
@@ -184,7 +174,7 @@ describe('viewed actions', () => {
     expect(viewedFile?.title).toBe('Mark as not viewed');
     expect(viewedFile?.getAttribute('aria-pressed')).toBe('true');
     viewedFile?.click();
-    expect(onAction).toHaveBeenLastCalledWith(false, ['docs/readme.md']);
+    expect(onAction).toHaveBeenLastCalledWith('file', false, ['docs/readme.md']);
   });
 
   it('uses an eclipse for a partly viewed folder and skips hidden files', () => {
@@ -220,9 +210,9 @@ describe('viewed actions', () => {
       'Mark 1 remaining as viewed (1 of 2 viewed)',
     );
     expect(onAction).toHaveBeenCalledWith(
+      'folder',
       true,
       ['src/new.ts'],
-      { kind: 'folder', name: 'src' },
     );
     expect(
       document.querySelector('#src\\/generated\\.ts [data-diffseek-viewed-action]'),
@@ -256,9 +246,9 @@ describe('viewed actions', () => {
     folder?.click();
 
     expect(onAction).toHaveBeenCalledWith(
+      'folder',
       false,
       ['src/app.ts', 'src/new.ts', 'src/generated.ts'],
-      { kind: 'folder', name: 'src' },
     );
   });
 
@@ -285,7 +275,7 @@ describe('viewed actions', () => {
     expect(reconciled?.getAttribute('aria-pressed')).toBe('true');
     expect(reconciled?.title).toBe('Mark as not viewed');
     expect(firstAction).not.toHaveBeenCalled();
-    expect(nextAction).toHaveBeenCalledWith(false, ['src/app.ts']);
+    expect(nextAction).toHaveBeenCalledWith('file', false, ['src/app.ts']);
   });
 
   it('ignores clicks outside the toggle hit area and lets GitHub handle them', () => {

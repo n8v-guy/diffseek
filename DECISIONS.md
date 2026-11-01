@@ -118,15 +118,11 @@ generated files count and mark every markable file in that category, ignoring
 every filter. The badge stays visible/total. The circle is empty, an eclipse
 (a fixed off-center disc inside a thin ring), or filled for that same set.
 Clicking empty or partial marks the category's remaining files viewed,
-including hidden ones. Clicking filled unmarks the whole category. A progress
-snackbar and then a completion snackbar name the scope: "Marking all 26
-payments files viewed…" then "Marked all 26 payments files viewed", or
-"Unmarking all 38 payments files…" then "Unmarked all 38 payments files", plus
-"(4 hidden)" when hidden files were included. Folders still count and mark only
-files that pass the active filters except the Viewed filter's hiding, and say
-"Marking 8 visible files in checkout viewed…" then "Marked 8 visible files in
-checkout viewed".
-Individual files stay empty or filled. Files GitHub cannot mark are excluded.
+including hidden ones. Clicking filled unmarks the whole category. Folders
+still count and mark only files that pass the active filters except the
+Viewed filter's hiding. Individual files stay empty or filled. Files GitHub
+cannot mark are excluded. Notifications say which kind of scope changed (all
+files in a category versus the visible files in a folder) without naming it.
 
 **Why:** The menu icon and the click agree, including files the current
 filters have hidden. The tree stays limited to what is on screen. **Cost:** A
@@ -156,3 +152,15 @@ always-hide state returns to show on the first click and does not mark files
 viewed. Marking generated files viewed is a separate persisted "auto-view"
 control, off until the user turns it on. A stored record that hid generated
 files and marked them viewed is read as always hide plus auto-view.
+
+## D012 — Notifications are generic and short
+
+**Decision:** Notifications name only the kind of change, never a file,
+folder, category, or repository, and carry no counts. Each starts with a
+capital letter. A viewed batch shows progress when it starts and a completion
+when it ends. A failure, partial or full, asks the reviewer to try again and
+gives no reasons, hover text, or paths.
+
+**Why:** Names and counts made messages long and hard to scan, and the tree
+and menu already show what changed. **Cost:** A failure no longer says which
+files failed; the circles and checkboxes show what is still unmarked.

@@ -1,16 +1,12 @@
-import type {
-  FilterDefaultState,
-  RememberedFilterFacet,
-} from '@diffseek/browser/filter-defaults';
-import { type ViewedScope, viewedScopeNotice } from '@diffseek/review';
+import type { FilterDefaultState } from '@diffseek/browser/filter-defaults';
 
 import {
   type ActionResult,
   clearViewedAction,
+  type ViewedTarget,
 } from '../review-page/viewed-actions';
 
 const snackbarDurationMs = 7_000;
-const failureSnackbarDurationMs = 12_000;
 
 export function menuNeedsRemount(menu: HTMLElement): boolean {
   if (menu.dataset.diffseekMenuOwned !== 'true') return true;
@@ -74,7 +70,7 @@ export function showUnavailable(root: Document, reason: string): void {
   const status = root.createElement('span');
   status.dataset.diffseek = 'unavailable';
   status.setAttribute('role', 'status');
-  status.textContent = `DiffSeek unavailable: ${reason}`;
+  status.textContent = `DiffSeek unavailable. ${reason}`;
   placeStatus(root, status);
 }
 
@@ -82,110 +78,84 @@ export function removeUnavailable(root: Document): void {
   root.querySelector('[data-diffseek="unavailable"]')?.remove();
 }
 
+type BatchMessages = { progress: string; done: string; failed: string };
+
+const markMessages: Record<ViewedTarget, BatchMessages> = {
+  file: {
+    progress: 'Marking file viewed…',
+    done: 'File marked viewed',
+    failed: "Couldn't mark file viewed. Try again.",
+  },
+  folder: {
+    progress: 'Marking visible files in folder viewed…',
+    done: 'Visible files in folder marked viewed',
+    failed: "Couldn't mark files viewed. Try again.",
+  },
+  category: {
+    progress: 'Marking all files in category viewed…',
+    done: 'All files in category marked viewed',
+    failed: "Couldn't mark files viewed. Try again.",
+  },
+  'auto-view': {
+    progress: 'Auto-view: marking generated files viewed…',
+    done: 'Auto-view: generated files marked viewed',
+    failed: "Couldn't mark files viewed. Try again.",
+  },
+};
+
+const unmarkMessages: Record<ViewedTarget, BatchMessages> = {
+  file: {
+    progress: 'Unmarking file…',
+    done: 'File unmarked',
+    failed: "Couldn't unmark file. Try again.",
+  },
+  folder: {
+    progress: 'Unmarking visible files in folder…',
+    done: 'Visible files in folder unmarked',
+    failed: "Couldn't unmark files. Try again.",
+  },
+  category: {
+    progress: 'Unmarking all files in category…',
+    done: 'All files in category unmarked',
+    failed: "Couldn't unmark files. Try again.",
+  },
+  'auto-view': markMessages['auto-view'],
+};
+
+function batchMessages(target: ViewedTarget, viewed: boolean): BatchMessages {
+  return (viewed ? markMessages : unmarkMessages)[target];
+}
+
 export function showBatchStarted(
   root: Document,
+  target: ViewedTarget,
   viewed: boolean,
-  requested: number,
-  scope?: ViewedScope,
 ): void {
-  if (scope) {
-    showSnackbar(root, viewedScopeNotice(scope, viewed, requested, 'progress'));
-    return;
-  }
-  if (requested <= 1) return;
-  showSnackbar(
-    root,
-    viewed
-      ? `Marking ${fileCount(requested)} viewed…`
-      : `Unmarking ${fileCount(requested)}…`,
-  );
+  showSnackbar(root, batchMessages(target, viewed).progress);
 }
 
 export function showBatchResult(
   root: Document,
-  result: ActionResult,
+  target: ViewedTarget,
   viewed: boolean,
-  scope?: ViewedScope,
-): void {
-  if (result.failed.length > 0) {
-    showBatchFailure(root, result, viewed);
-    return;
-  }
-  if (scope) {
-    showSnackbar(
-      root,
-      viewedScopeNotice(scope, viewed, result.completed.length, 'done'),
-    );
-    return;
-  }
-  const subject =
-    result.completed.length === 1
-      ? fileName(result.completed[0] ?? '')
-      : fileCount(result.completed.length);
-  showSnackbar(
-    root,
-    viewed ? `Marked ${subject} viewed` : `Unmarked ${subject}`,
-  );
-}
-
-export function showAutoViewed(root: Document, result: ActionResult): void {
-  if (result.failed.length > 0) {
-    showBatchFailure(root, result, true);
-    return;
-  }
-  if (result.completed.length === 0) return;
-  showSnackbar(
-    root,
-    `Auto-viewed ${result.completed.length} generated ${
-      result.completed.length === 1 ? 'file' : 'files'
-    }`,
-  );
-}
-
-function showBatchFailure(
-  root: Document,
   result: ActionResult,
-  viewed: boolean,
 ): void {
-  const total = Math.max(
-    result.requested,
-    result.completed.length + result.failed.length,
-  );
-  const subject =
-    total === 1 ? fileName(result.failed[0]?.path ?? '') : fileCount(total);
-  let message: string;
-  if (result.completed.length === 0) {
-    message = viewed
-      ? `Couldn't mark ${subject} viewed. Hover for details`
-      : `Couldn't unmark ${subject}. Hover for details`;
-  } else {
-    const done = `${result.completed.length} of ${fileCount(total)}`;
-    message =
-      (viewed ? `Marked ${done} viewed` : `Unmarked ${done}`) +
-      `; ${result.failed.length} failed. Hover for details`;
-  }
-  const status = showSnackbar(root, message, failureSnackbarDurationMs);
-  status.title = result.failed
-    .map(({ path, reason }) => `${path}: ${reason}`)
-    .join('\n');
+  const messages = batchMessages(target, viewed);
+  showSnackbar(root, result.failed.length > 0 ? messages.failed : messages.done);
 }
 
 export function showRememberedFilterDefault(
   root: Document,
-  facet: RememberedFilterFacet,
   state: FilterDefaultState,
 ): void {
   showSnackbar(
     root,
-    `${facetName(facet)}: ${state === 'hidden' ? 'Always hide' : 'Show now'}`,
+    state === 'hidden' ? 'Files hidden on every PR' : 'Files shown',
   );
 }
 
-export function showHideNow(
-  root: Document,
-  facet: RememberedFilterFacet,
-): void {
-  showSnackbar(root, `${facetName(facet)}: Hide now`);
+export function showHideNow(root: Document): void {
+  showSnackbar(root, 'Files hidden on this page');
 }
 
 export function showAlwaysRead(root: Document, enabled: boolean): void {
@@ -197,11 +167,7 @@ export function showAlwaysRead(root: Document, enabled: boolean): void {
   );
 }
 
-function showSnackbar(
-  root: Document,
-  message: string,
-  durationMs = snackbarDurationMs,
-): HTMLElement {
+function showSnackbar(root: Document, message: string): void {
   let stack = root.querySelector<HTMLElement>(
     '[data-diffseek="snackbars"]',
   );
@@ -219,8 +185,7 @@ function showSnackbar(
   setTimeout(() => {
     snackbar.remove();
     if (stack?.childElementCount === 0) stack.remove();
-  }, durationMs);
-  return snackbar;
+  }, snackbarDurationMs);
 }
 
 export function isNativeMutation(record: MutationRecord): boolean {
@@ -267,16 +232,4 @@ function accessibleName(element: HTMLElement): string {
       .trim() ??
     ''
   );
-}
-
-function fileCount(count: number): string {
-  return `${count} ${count === 1 ? 'file' : 'files'}`;
-}
-
-function fileName(path: string): string {
-  return path.split('/').at(-1) ?? path;
-}
-
-function facetName(facet: RememberedFilterFacet): string {
-  return facet === 'generated' ? 'Generated' : 'Viewed';
 }

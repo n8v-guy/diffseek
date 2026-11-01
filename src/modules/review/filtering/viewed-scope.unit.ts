@@ -8,7 +8,6 @@ import {
   scopeAriaPressed,
   scopeViewedLabel,
   viewedMark,
-  viewedScopeNotice,
 } from './viewed-scope';
 
 function file(
@@ -117,39 +116,5 @@ describe('viewed scope', () => {
     expect(include(sql)).toBe(false);
     expect(include(tests)).toBe(false);
     expect(include(stub)).toBe(false);
-  });
-
-  it('announces tree folders and menu categories differently', () => {
-    const folder = { kind: 'folder', name: 'checkout' } as const;
-    const payments = { kind: 'category', name: 'payments', hidden: 4 } as const;
-    const generated = {
-      kind: 'category',
-      name: 'Generated files',
-      hidden: 0,
-    } as const;
-    expect(viewedScopeNotice(folder, true, 8, 'progress')).toBe(
-      'Marking 8 visible files in checkout viewed…',
-    );
-    expect(viewedScopeNotice(folder, true, 8, 'done')).toBe(
-      'Marked 8 visible files in checkout viewed',
-    );
-    expect(viewedScopeNotice(folder, false, 8, 'progress')).toBe(
-      'Unmarking 8 visible files in checkout…',
-    );
-    expect(viewedScopeNotice(folder, false, 1, 'done')).toBe(
-      'Unmarked 1 visible file in checkout',
-    );
-    expect(viewedScopeNotice(payments, true, 26, 'progress')).toBe(
-      'Marking all 26 payments files viewed (4 hidden)…',
-    );
-    expect(viewedScopeNotice(payments, true, 26, 'done')).toBe(
-      'Marked all 26 payments files viewed (4 hidden)',
-    );
-    expect(viewedScopeNotice(payments, false, 38, 'progress')).toBe(
-      'Unmarking all 38 payments files (4 hidden)…',
-    );
-    expect(viewedScopeNotice(generated, false, 1, 'done')).toBe(
-      'Unmarked all 1 Generated file',
-    );
   });
 });

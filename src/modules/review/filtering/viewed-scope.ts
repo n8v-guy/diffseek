@@ -64,39 +64,6 @@ export function scopeViewedLabel(
   return `Mark ${remaining} remaining${where} as viewed (${viewed} of ${counted} viewed)`;
 }
 
-export type ViewedScope =
-  | { kind: 'folder'; name: string }
-  | { kind: 'category'; name: string; hidden: number };
-
-export function viewedScopeNotice(
-  scope: ViewedScope,
-  markViewed: boolean,
-  count: number,
-  phase: 'progress' | 'done',
-): string {
-  const subject =
-    scope.kind === 'folder'
-      ? `${count} visible ${count === 1 ? 'file' : 'files'} in ${scope.name}`
-      : `all ${count} ${categoryNoun(scope.name, count)}`;
-  const suffix =
-    scope.kind === 'category' && scope.hidden > 0
-      ? ` (${scope.hidden} hidden)`
-      : '';
-  if (phase === 'progress') {
-    return markViewed
-      ? `Marking ${subject} viewed${suffix}…`
-      : `Unmarking ${subject}${suffix}…`;
-  }
-  return markViewed
-    ? `Marked ${subject} viewed${suffix}`
-    : `Unmarked ${subject}${suffix}`;
-}
-
-function categoryNoun(name: string, count: number): string {
-  const base = name.endsWith(' files') ? name.slice(0, -' files'.length) : name;
-  return `${base} ${count === 1 ? 'file' : 'files'}`;
-}
-
 export function scopeAriaPressed(
   viewed: number,
   counted: number,

@@ -3,18 +3,16 @@ import {
   scopeViewedLabel,
   viewedMark,
   type LabelFacet,
-  type ViewedScope,
 } from '@diffseek/review';
 
 export type MenuViewedActionOptions = {
   facet: LabelFacet;
-  onViewed: (viewed: boolean, paths: string[], scope?: ViewedScope) => void;
+  onViewed: (viewed: boolean, paths: string[]) => void;
   paths: string[];
   value: string;
   scope: string;
   counted: number;
   viewedCount: number;
-  hidden: number;
   disabled?: boolean;
 };
 
@@ -74,10 +72,6 @@ export function configureViewedAction(
     event.preventDefault();
     event.stopPropagation();
     if (options.disabled) return;
-    options.onViewed(
-      markViewed,
-      options.paths,
-      { kind: 'category', name: options.scope, hidden: options.hidden },
-    );
+    options.onViewed(markViewed, options.paths);
   };
 }
