@@ -11,9 +11,10 @@ const packageVersion =
   )?.[1] ?? '0.0.0';
 
 const branchCommitCount = Number(
-  execFileSync('git', ['rev-list', '--count', 'HEAD'], {
-    encoding: 'utf8',
-  }).trim(),
+  process.env.DIFFSEEK_BUILD_NUMBER ??
+    execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim(),
 );
 
 export default defineConfig({
@@ -26,7 +27,7 @@ export default defineConfig({
     '@diffseek/review': 'src/modules/review/index.ts',
   },
   manifestVersion: 3,
-  manifest: {
+  manifest: ({ browser }) => ({
     name: 'DiffSeek for GitHub: cut the noise in big PRs',
     description:
       'Filter one slice at a time, mark it viewed in one click and watch progress fill up. Generated files are hidden and auto-viewed.',
@@ -36,8 +37,22 @@ export default defineConfig({
       'https://github.com/*',
       'https://raw.githubusercontent.com/*',
     ],
-  },
+    ...(browser === 'firefox'
+      ? {
+          browser_specific_settings: {
+            gecko: {
+              id: 'diffseek@n8v.me',
+              strict_min_version: '140.0',
+              data_collection_permissions: {
+                required: ['none'],
+              },
+            },
+          },
+        }
+      : {}),
+  }),
   zip: {
     artifactTemplate: '{{name}}-{{version}}-{{browser}}.zip',
+    zipSources: false,
   },
 });
