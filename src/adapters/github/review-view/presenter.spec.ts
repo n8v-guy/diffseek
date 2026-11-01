@@ -1,5 +1,5 @@
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { emptyFacetExclusions } from '@diffseek/review';
 import type { FilterState } from '@diffseek/review';
@@ -95,7 +95,7 @@ describe('ReviewPresenter', () => {
     expect(
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
     ).toBeUndefined();
-    await vi.waitFor(() => {
+    await untilDom(() => {
       expect(
         document
           .getElementById('diff-config')
@@ -193,7 +193,7 @@ describe('ReviewPresenter', () => {
     expect(delayed?.getAttribute('aria-label')).toBe('Expand file');
 
     presenter.clear(snapshot);
-    await vi.waitFor(() => {
+    await untilDom(() => {
       expect(delayed?.getAttribute('aria-label')).toBe('Collapse file');
     });
   });
@@ -222,7 +222,7 @@ describe('ReviewPresenter', () => {
     state.get('groups')?.add('Config');
 
     presenter.apply(snapshot, state);
-    await vi.waitFor(() => {
+    await untilDom(() => {
       expect(
         document.querySelector(
           '#diff-config button[aria-label="Expand file"]',
@@ -230,7 +230,7 @@ describe('ReviewPresenter', () => {
       ).not.toBeNull();
     });
     presenter.clear(snapshot);
-    await vi.waitFor(() => {
+    await untilDom(() => {
       expect(
         document.querySelector(
           '#diff-config button[aria-label="Collapse file"]',
@@ -258,7 +258,7 @@ describe('ReviewPresenter', () => {
     expect(button?.getAttribute('aria-label')).toBe('Collapse file');
 
     presenter.apply(snapshot, state);
-    await vi.waitFor(() => {
+    await untilDom(() => {
       expect(button?.getAttribute('aria-label')).toBe('Expand file');
     });
   });
@@ -282,7 +282,7 @@ describe('ReviewPresenter', () => {
     state.get('groups')?.add('Config');
 
     presenter.apply(snapshot, state);
-    await vi.waitFor(() => {
+    await untilDom(() => {
       expect(button?.getAttribute('aria-label')).toBe('Expand file');
     });
     expect(clicks).toBe(1);
@@ -333,3 +333,36 @@ describe('ReviewPresenter', () => {
     expect(document.getElementById('docs')?.hidden).toBe(false);
   });
 });
+
+/** Resolves once `check` stops throwing, re-checking on DOM mutations only; the timeout is a failure guard. */
+async function untilDom(check: () => void, guardMs = 4_000): Promise<void> {
+  let lastError: unknown;
+  const passes = () => {
+    try {
+      check();
+      return true;
+    } catch (error) {
+      lastError = error;
+      return false;
+    }
+  };
+  if (passes()) return;
+  await new Promise<void>((resolve, reject) => {
+    const observer = new MutationObserver(() => {
+      if (!passes()) return;
+      observer.disconnect();
+      clearTimeout(timer);
+      resolve();
+    });
+    observer.observe(document, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      reject(lastError instanceof Error ? lastError : new Error('untilDom: condition never held'));
+    }, guardMs);
+  });
+}
