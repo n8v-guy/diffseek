@@ -1,115 +1,99 @@
 # DiffSeek Decisions
 
-## D001 — Rendered DOM is authoritative
+## D001 — The rendered page is authoritative
 
-**Decision:** Observe semantic DOM and imitate user clicks. Do not hook GitHub
-internal state, requests, or undocumented mutation APIs.
+**Decision:** Observe GitHub's meaningful page structure and imitate user
+clicks. Do not hook GitHub's internal state, requests, or undocumented APIs.
 
-**Why:** The extension remains session-compatible, understandable, and
-fail-open. **Cost:** markup drift requires contract fixtures and live testing.
+**Why:** The extension stays compatible with the user's session,
+understandable, and fail-open. **Cost:** Markup drift needs recorded page
+fixtures and live testing.
 
-## D002 — One semantic GitHub adapter owns DOM drift
+## D002 — One GitHub page adapter owns markup drift
 
-**Decision:** Page observations expose normalized facts and re-resolving semantic
-capabilities. Presenter and action modules do not own selectors or stored DOM
-bindings.
+**Decision:** Page observations expose normalized facts and capabilities that
+re-find their controls each time. Presentation and action code never hold page
+selectors or keep references to page elements.
 
-**Why:** Selector and node-lifetime knowledge has one locality. **Cost:** the
-adapter is a high-value integration seam and therefore needs broader fixtures.
+**Why:** Knowledge of GitHub's markup and element lifetimes lives in one place.
+**Cost:** The adapter is a high-value seam and needs broad fixtures.
 
 ## D003 — Metadata levels replace instead of merge
 
-**Decision:** Use a known-PR LRU (last 10) for immediate review metadata, else
-cached default-branch, else bundled assumptions. Uncached pull-head content
-replaces the open review and is stored in that LRU. A default-branch `HEAD`
-refresh is an isolated cache prefetch only when the repo has no default-branch
-cache yet; it does not replace a settled pull-head result. If that pull-head
-read fails, the open review adopts the settled default-branch result. A
-transport failure is not stored. Each read is one attempt. A later success
-replaces the open review. Until that success, the review keeps cached metadata
-or bundled assumptions. A failed read is attempted again when the filter menu
-opens or the file tree changes, and only one read runs at a time. A missing
-file retains the preceding level.
+**Decision:** Start from a cache of recent pull requests, else the cached
+default branch, else bundled assumptions; the uncached pull-request head then
+replaces that and is cached. A default-branch refresh only prefills an empty
+cache and never replaces a settled head result; if the head read fails, the
+review takes the default-branch result. Failures are not stored. A failed read
+is retried, one at a time, when the menu opens or the tree changes, never on a
+timer. A missing file keeps the previous level.
 
-**Why:** Warm revisits skip `CODEOWNERS` / `.gitattributes` reloads while unknown
-PRs still start from HEAD. A cold review still picks up generated and owner
-rules when a later menu open or file-list update succeeds. **Cost:** a PR-head
-file at a GitHub-higher path than the last default-branch hit is not seen until
-that cached path 404s or the PR head SHA changes. A hung raw fetch is abandoned
-after 20s.
+**Why:** Revisits skip reloading metadata files while unknown pull requests
+still start from their head, and a cold review still picks up rules on a later
+success. **Cost:** A head file in a location GitHub ranks higher than the one
+last found on the default branch is missed until that location disappears or
+the head changes. A hung read is abandoned after a guard time.
 
 ## D004 — Label sources compose through one interface
 
-**Decision:** Group, owner, language, generated, and status classifiers are
-independent adapters composed by the label module.
+**Decision:** Group, owner, language, generated, and change-status classifiers
+are independent sources composed by one labeling step.
 
-**Why:** A label source can evolve or be replaced without changing the other
-classifiers. **Cost:** the simplest sources are intentionally small modules.
+**Why:** A label source can evolve or be replaced without changing the others.
+**Cost:** The simplest sources are deliberately tiny.
 
 ## D005 — Index first; invalidate projections when observation changes
 
-**Decision:** Build one linear review index per accepted observation. Key the
-file list on the **tree** structure key. Only a tree row's own `#diff-*` link
-(not a descendant row's) counts for membership; with status it enters the
-catalog immediately (capability-less stub when regions are missing or
-duplicated). When the tree is unchanged: attribute churn refreshes
-viewed/capabilities only; **region** structure changes rescan to enrich or stub
-capabilities without dropping tree membership. The file catalog keeps prior
-labels/generated/viewed across empty-label scans so region churn does not wipe
-classification; full reclassify runs when the classify key (path/status/owners
-+ metadata) changes. Always re-apply presentation plus tree viewed actions;
-skip owned filter-menu remounts when the projection fingerprint is unchanged.
-Defer mutation-driven reconcile while automatic generated mark-viewed is in
-flight. Observe tree/diff/menu roots for attributes; use body only for
-childList discovery. Ignore MutationRecords whose target is inside DiffSeek
-chrome (including `.diffseek-viewed-icon-anchor`) so owned mounts do not
-re-enter reconcile.
+**Decision:** Build one linear review index per accepted observation. The file
+tree decides which files are in the review; a row joins at once, without
+capabilities if its diff panel is missing or duplicated. Diff-panel changes
+only add or drop capabilities, and attribute changes only refresh viewed state.
+Labels survive empty rescans, and files are reclassified only when paths,
+statuses, owners, or metadata change. Presentation is always reapplied; the
+owned menu is rebuilt only when what it shows changed. Reconciling pauses while
+auto-view is marking files, and DiffSeek ignores changes to its own elements.
 
-**Why:** Diff region mount churn is frequent and must not wipe classification
-or shrink the file list once the tree is known; regions only enrich
-viewed/collapse/owners. Presentation and tree actions still correct native
-collapse/expand churn and cloned tree nodes.
-**Cost:** region-key misses still rescan (without classify-key reset);
-capabilities stay false while duplicates exist; tree-key misses still
-full-scan and reclassify; fingerprint misses still attempt an in-place menu
-patch and fall back to a full menu rebuild when row identity or section chrome
-changes.
+**Why:** Diff panels mount and unmount often and must not wipe classification
+or shrink the file list once the tree is known. Reapplying presentation still
+corrects GitHub's own collapse churn and cloned tree rows. **Cost:** Panel and
+tree changes still cost rescans, capabilities stay off while duplicates exist,
+and a changed menu is patched or rebuilt.
 
 ## D006 — Own one filter menu model
 
-**Decision:** Reuse GitHub's filter-menu container but hide its native rows and
-let DiffSeek own all menu contents. If GitHub file filters are already active,
-invoke its rendered clear control before takeover. Viewed and collapse writes
+**Decision:** Reuse GitHub's filter menu but hide its native rows and let
+DiffSeek own all menu contents. If GitHub file filters are already active, use
+GitHub's own clear control before taking over. Viewed and collapse writes
 still use GitHub's native controls.
 
 **Why:** One model now owns visibility, counters, selection, and whether a click
 keeps the menu open. This removes native/extension drift without hooking GitHub
 internals. **Cost:** DiffSeek must restore hidden native nodes when its session
-stops and must contract-test the host menu container.
+stops and must test against GitHub's menu.
 
 ## D007 — Persist only special filter defaults
 
 **Decision:** Keep ordinary exclusions inside one review session. Persist only
-hidden defaults for viewed and generated files plus the generated
-hidden-and-viewed default, extension-wide, using the existing local-storage
-permission. Applying hidden-and-viewed invokes GitHub's current rendered
-controls once per generated file; it does not enforce the state afterward.
+the hidden defaults for viewed and generated files and the auto-view setting,
+extension-wide, using the existing local storage permission. Auto-view uses
+GitHub's current controls once per generated file; it does not enforce the
+state afterwards.
 
-**Why:** Review-specific filtering does not leak into unrelated pull requests,
-while repetitive viewed/generated preferences remain convenient. **Cost:** The
-three/four-state controls and effective filter projection must keep transient
-exclusions and persisted defaults synchronized. Menu reset applies only to
-transient exclusions. A failed native action is reported but not retried
-automatically, avoiding action storms at the cost of manual recovery.
+**Why:** Filtering for one review does not leak into unrelated pull requests,
+while the repetitive viewed and generated preferences stay convenient.
+**Cost:** The cycling controls and the effective filter must keep temporary
+exclusions and saved defaults in sync. Menu reset applies only to temporary
+exclusions. A failed native action is reported but not retried automatically,
+avoiding action storms at the cost of manual recovery.
 
 ## D008 — Facet shortcuts stay within one filter dimension
 
-**Decision:** Offer `only` on rows in multi-item sections and `all` on sections
-with exclusions. Each shortcut modifies only its own facet.
+**Decision:** Offer "only" on rows in sections with several items and "all" on
+sections with exclusions. Each shortcut changes only its own facet.
 
-**Why:** Common focus/reset operations become one click while preserving the
-existing OR-within, AND-across filter model. **Cost:** Hover-only presentation
-needs explicit keyboard focus behavior and permanent accessible names.
+**Why:** Common focus and reset steps take one click while keeping the OR
+within, AND across filter model. **Cost:** Shortcuts shown on hover need
+explicit keyboard focus behavior and permanent accessible names.
 
 ## D009 — Viewed circles follow counted files
 
@@ -130,28 +114,27 @@ menu click can change files the reviewer is not currently looking at.
 
 ## D010 — Fallback labels remain data but not menu noise
 
-**Decision:** Ungrouped files receive `No type`, matching `No owner` and
-`No extension`. Omit Owners, Groups, or Formats when its sole value is its
-fallback.
+**Decision:** Ungrouped files get No type, matching No owner and No extension.
+Owners, Groups, or Formats is left out when its only value is its fallback.
 
-**Why:** Every file remains classifiable when mixed values make a facet useful,
-without presenting a universal non-choice. **Cost:** A fallback-only facet
-cannot be toggled until repository metadata introduces another value.
+**Why:** Every file stays classifiable when mixed values make a facet useful,
+without showing a choice that applies to everything. **Cost:** A fallback-only
+facet cannot be toggled until repository metadata adds another value.
 
 ## D011 — Missing filter defaults are not an empty preference
 
-**Decision:** Absence of `diffseek:filter-defaults` hides viewed and generated
-files. A present record is parsed as saved, even when both lists are empty.
-Reading defaults does not write the implicit state.
+**Decision:** With no saved filter defaults, viewed and generated files are
+hidden. A saved record is honored as saved, even when it hides nothing. Reading
+defaults never writes the implicit state.
 
-**Why:** New installs reduce review noise without a migration that overwrites
-people who already saved a preference, including show-all. **Cost:** The
-implicit default is reapplied on every session until a remembered row changes.
-Viewed and generated clicks both run show, hide, always hide. The fresh
-always-hide state returns to show on the first click and does not mark files
-viewed. Marking generated files viewed is a separate persisted "auto-view"
-control, off until the user turns it on. A stored record that hid generated
-files and marked them viewed is read as always hide plus auto-view.
+**Why:** New installs start with less review noise, without a migration that
+overwrites people who already saved a preference, including show everything.
+**Cost:** The implicit default is reapplied every session until a remembered
+row changes. Viewed and generated clicks both cycle show, hide, always hide.
+The fresh always-hide state returns to show on the first click and does not
+mark files viewed. Marking generated files viewed is a separate saved
+auto-view switch, off until the user turns it on. An older saved setting that
+hid generated files and marked them viewed reads as always hide plus auto-view.
 
 ## D012 — Notifications are generic and short
 
@@ -168,8 +151,8 @@ files failed; the circles and checkboxes show what is still unmarked.
 
 ## D013 — Wait on events, not timers
 
-**Decision:** Product code waits on page events: the mutation or attribute
-change that confirms a native click, an animation frame to batch streamed tree
+**Decision:** Product code waits on page events: the page or attribute change
+that confirms a native click, an animation frame to batch streamed tree
 and panel changes, a batch's own completion, and the reviewer's next input.
 Timers remain only as failure guards for things nothing signals: a native
 click GitHub ignores and a request that hangs. Notifications are the one
@@ -180,7 +163,6 @@ count. A newer notification replaces it, and clicking it closes it at once.
 
 **Why:** Fixed delays are either too short on slow machines or wasted time on
 fast ones, and they hide what the code is actually waiting for. **Cost:** A
-streamed page can get one reconcile pass per frame instead of one per quiet
-period, and a background tab defers coalesced passes until it is shown. A
+streamed page can get one pass per frame instead of one per quiet period, and a background tab defers coalesced passes until it is shown. A
 notification no longer disappears on its own while the reviewer only reads,
 and the minimum is a timer: it reads the same on every machine.
