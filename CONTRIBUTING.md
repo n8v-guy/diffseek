@@ -1,8 +1,8 @@
 # Contributing
 
-`CONTEXT.md` defines the product language and invariants. `DECISIONS.md`
-records the architecture calls that should not be re-litigated without new
-evidence.
+The context document defines the product language and invariants. The
+decisions document records architecture calls that should not be re-litigated
+without new evidence.
 
 ## Design principles
 
@@ -10,49 +10,48 @@ evidence.
 
 - Keep GitHub's controls familiar while giving injected surfaces a recognizable
   DiffSeek palette.
-- Reuse GitHub's filter-menu container, but let DiffSeek own its contents so one
-  filter model controls visibility, counts, and menu lifetime.
-- Clear pre-existing GitHub file filters through GitHub's rendered control
-  before hiding native filter rows.
-- Imitate normal user actions instead of depending on internal JavaScript state.
-  Viewed and collapse writes use GitHub's native controls.
-- Leave GitHub usable when a required semantic control is unavailable.
-- Use only `storage`, `github.com`, and `raw.githubusercontent.com`; no token or
+- Reuse GitHub's filter menu, but let DiffSeek own its contents so one filter
+  model controls visibility, counts, and menu lifetime.
+- Clear pre-existing GitHub file filters through GitHub's own control before
+  hiding the native filter rows.
+- Imitate normal user actions instead of depending on GitHub's internal state.
+  Viewed and collapse changes go through GitHub's native controls.
+- Leave GitHub usable when a required control is unavailable.
+- Ask only for storage and access to GitHub and its raw file host; no token or
   separate sign-in.
 
-GitHub's rendered DOM is authoritative. Observe semantic DOM and imitate user
-clicks. Do not hook GitHub internal state, requests, or undocumented mutation
-APIs. That stays fail-open: a partially unsupported file remains native and
-visible and does not disable supported files, and a metadata failure retains
-the preceding level.
+GitHub's rendered page is authoritative. Observe its meaningful structure and
+imitate user clicks; never hook GitHub's internal state, requests, or
+undocumented APIs. Fail open: a partly unsupported file stays native and visible
+without disabling supported files, and a metadata failure keeps the previous
+level.
 
-Viewed toggles are drawn with CSS on GitHub's existing file/folder icon
-wrapper. No nodes are inserted into the React-owned tree. Inserting nodes
-before hydration finishes makes React discard and remount the whole tree.
+Viewed toggles are drawn over GitHub's existing file and folder icons. DiffSeek
+adds no elements inside GitHub's app-rendered tree, because doing that before
+the page becomes interactive makes GitHub throw the whole tree away and
+rebuild it.
 
-Performance guards already in the review session:
+Performance rules:
 
-- Skip owned filter-menu remounts when the projection fingerprint is unchanged.
-- Coalesce diff-panel reconciles to one pass per animation frame, and do not
-  let a coalesced tick postpone an already-queued immediate flush.
-- Rewrite an attribute only when its value changes, so a pass that changes
-  nothing produces no mutations.
+- Skip rebuilding the owned filter menu when nothing it shows has changed.
+- Batch streamed page changes to at most one pass per frame, and never let a
+  batched change delay an update that must happen right away.
+- Write to the page only when a value actually changes, so a pass that changes
+  nothing touches nothing.
+- Building the review index stays linear for large pull requests.
+- Live end-to-end runs track load durations, reconcile passes, DiffSeek's own
+  page writes, and GitHub tree or panel rebuilds against budgets.
 
-Product code waits on events, not time: DOM mutations, attribute changes,
+Product code waits on events, not time: page changes, attribute changes,
 animation frames, user input, and settled promises. A timer is allowed only as
 a failure guard where nothing signals that the awaited thing will never happen
 (a native click GitHub ignores, a hung request), never to pace or batch work.
 The one exception is the minimum time a notification stays up.
-- `ReviewIndex` construction is covered for large file lists without quadratic
-  growth.
-- Live e2e checks cold, warm, and hot durations, reconcile passes, DOM
-  mutations, and file-tree or diff-panel rebuilds against optional
-  `DIFFSEEK_LIVE_BUDGET_*` budgets.
 
 ### Runtime invariants
 
 - Each pull request owns a disposable review session.
-- GitHub's rendered DOM is authoritative.
+- GitHub's rendered page is authoritative.
 - Native actions execute in invocation order and re-resolve current controls.
 - A batch's progress notification turns into its outcome in place. Any other
   notification stays up for a minimum time; after that, the reviewer's next
@@ -61,264 +60,152 @@ The one exception is the minimum time a notification stays up.
   clicking a notification closes it at once.
 - Metadata levels replace one another; they are never merged.
 - File labels are independent from filter selection.
-- Stale generations cannot update a later review.
-- A partially unsupported file remains native and visible; it does not disable
+- Stale sessions cannot update a later review.
+- A partly unsupported file remains native and visible; it does not disable
   supported files.
-- Repository-file messages accept repository, ref, and relative path, never an
+- Repository file requests name a repository, ref, and relative path, never an
   arbitrary URL.
 
 ## Behavior
 
-Classic `/pull/:number/files` review URLs are replaced with GitHub's modern
-`/changes?new_files_changed=true` experience before DiffSeek starts.
+Classic pull-request file review pages are sent to GitHub's modern changes view
+before DiffSeek starts.
 
-DiffSeek replaces the contents of GitHub's **Filter options** menu with viewed,
-generated-file, owner, type, language, and change-status filters. It retains the
-native menu container and interaction model. Viewed and generated filters cycle
-show, hide, and always hide. With no saved filter defaults, both start on
-always hide and the first click shows them. The Generated row has an
-"auto-view" pill that marks generated files viewed while it is on, and is off
-for a fresh install. A saved always-hide-and-mark-read record is read as always
-hide with auto-view on. Multi-item sections expose row-hover
-`only` and title-hover `all` shortcuts. Non-matches are hidden in the file tree
-and collapsed/muted in place in the diff. File actions mark that file viewed or not viewed. Menu rows for owners,
+DiffSeek replaces the contents of GitHub's Filter options menu with viewed,
+generated, owner, type, language, and change-status filters, keeping the native
+menu and how it opens and closes. Viewed and generated filters cycle show,
+hide, and always hide. With no saved defaults, both start on always hide and
+the first click shows them. The Generated row has an auto-view switch that
+marks generated files viewed while it is on; it is off on a fresh install. An
+older saved "always hide and mark viewed" setting reads as always hide with
+auto-view on. Sections with several items offer an "only" shortcut on each row
+and an "all" shortcut on the title. Non-matching files are hidden in the file
+tree and collapsed and muted in place in the diff.
+
+A file's circle marks that file viewed or not viewed. Menu rows for owners,
 groups, formats, change status, and generated files count and mark the whole
-category, including files hidden by any other filter. The counter badge stays
-visible/total. The circle is empty, an eclipse, or filled for that whole
-category, so it describes the click. The eclipse is a fixed off-center disc in
-a thin ring. Circle tooltips and accessible names are short and generic: one
-per state (empty, partial, filled), with no category name and no counts; the
-row around the circle already says which category it is. Partial uses `aria-pressed="mixed"`. A menu circle acts on every file in the
-category, hidden ones included. The auto-view pill stays a separate control. A
-folder sums only the files under it that pass the active filters, except the
-Viewed filter's hiding, and its click marks only those visible files. A fully viewed folder still disappears while
-viewed files are hidden. Files GitHub cannot mark stay out of both circles.
-Reset clears review-local filters without changing viewed/generated defaults.
+category, including files hidden by other filters. The counter shows
+visible/total. The circle is empty, an eclipse, or filled for the whole
+category, so it describes what a click will do; the eclipse is an off-center
+disc in a thin ring. Circle tooltips and accessible names are short and
+generic, one per state, with no category name and no counts, since the row
+already names the category; screen readers hear the partial state as mixed. A
+folder counts only files under it that pass the active filters, apart from the
+Viewed filter's hiding, and its click marks only those visible files. A fully
+viewed folder still disappears while viewed files are hidden. Files GitHub
+cannot mark stay out of every circle. Reset clears review-local filters without
+changing the viewed and generated defaults.
 
-Every multi-file viewed batch shows a progress notification when it starts
-and a completion notification when it ends; a single file gets only the
-completion, since its circle answers at once. Notifications sit in a
-short-lived top-right stack with no actions on them. They are short, start with a capital letter, and never
-name a file, folder, category, or repository, and they carry no counts. Each
-case still reads differently: a file, the visible files in a folder, all files
-in a category, and auto-view each have their own subject, and unmarking says
-"unmark" rather than "mark … not viewed". Any failed path turns the completion
-into one short message that asks the reviewer to try again, with no details
-and no hover text. A filter-row notification names the row's new state in its
-tri-state cycle, and the auto-view pill's says on or off, instead of echoing a
-button label.
+Every multi-file viewed batch shows a progress notification when it starts and
+an outcome when it ends; a single file gets only the outcome, since its circle
+answers at once. Notifications appear in the top-right corner. They are short,
+start with a capital letter, never name a file, folder, category, or
+repository, and carry no counts. Each case still reads differently: a file, the
+visible files in a folder, all files in a category, and auto-view each have
+their own subject, and unmarking says "unmark". Any failure becomes one short
+message asking the reviewer to try again, with no details. A filter-row
+notification names the row's new state, and the auto-view switch's says on or
+off.
 
-Repository metadata for the open review starts from cache, then PR head:
+Repository metadata for the open review starts from cache and then the pull
+request head: a cache of recent pull requests, else the cached default branch,
+else bundled assumptions, and then the uncached pull-request head, which is
+added to that cache. A default-branch refresh runs afterwards only when that
+repository has no default-branch cache yet; it prefills the cache for later
+pull requests and does not replace the current review. A known pull request
+whose head is unchanged does not reload its metadata files. A failed read is
+not cached and not retried on a timer; it is tried again, one read at a time,
+when the filter menu opens or the file tree changes. Until a read settles, the
+review uses cached metadata or bundled assumptions, so generated files, groups,
+and formats may be missing. A settled read redraws those sections and applies
+the current hide settings without a reload.
 
-```text
-known PR cache (last 10 pull requests)
-  -> cached default branch (unknown PRs)
-  -> bundled assumptions
-  -> uncached PR head, stored in the PR LRU
-```
+CODEOWNERS supplies owners, looked up in GitHub's order. On a pull-request head
+DiffSeek first tries the location last found on the default branch, then the
+others. The root .gitattributes file is the only repository source for groups,
+language overrides, and generated status (the README shows the syntax). The
+last matching value for each attribute wins. Files without a language override
+fall back to their extension or No extension; files without a group get No
+type. Mapped languages appear first in Formats as one entry each, followed by
+unmapped extensions. Owners, Groups, or Formats is left out when its only
+choice is its fallback label.
 
-A default-branch `HEAD` refresh runs afterward only when that repo has no
-default-branch cache yet; it is an isolated prefetch for later unknown PRs
-and does not replace the current review. A known PR with the same head SHA
-does not reload `CODEOWNERS` or `.gitattributes`. A failed read is not cached
-and is not retried on a timer. It is attempted again, one request at a time,
-when the filter menu opens or the file tree is updated. Until a read settles,
-the review uses cached metadata or bundled assumptions, so generated files,
-groups, and formats may be absent. A settled read redraws those sections and
-applies the current hide settings without a reload.
-
-`CODEOWNERS` supplies owners. DiffSeek follows GitHub's order
-(`.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`). On a pull-request
-head it first tries the path last seen on that repo's default branch, then
-the remaining GitHub locations. Root `.gitattributes` is the only repository
-source for groups, explicit language overrides, and generated status:
-
-```gitattributes
-docs/** group=docs
-**/*.md group=docs
-*.ts linguist-language=TypeScript
-*.tsx linguist-language=TypeScript
-dist/** linguist-generated
-dist/source/** -linguist-generated
-```
-
-Rules follow ordered Git-attribute assignment: the last matching value for each
-attribute wins. Paths without `linguist-language` fall back to their file
-extension or `No extension`; paths without `group` use `No type`. Mapped
-languages appear first in Formats as one entry each (for example `TypeScript`
-for both `.ts` and `.tsx`); unmapped extensions follow. Owners, Groups, or
-Formats is omitted when its only choice is respectively `No owner`, `No type`,
-or `No extension`.
-
-Missing default-branch files retain bundled assumptions. Missing PR-head files
-retain the corresponding default-branch fallback. Default-branch metadata is
-cached per repository. PR-head metadata is cached in an LRU of the last 10
-pull requests and reused when the head SHA is unchanged.
+A missing default-branch file keeps the bundled assumptions, and a missing
+pull-request-head file keeps the default-branch result.
 
 ## Source architecture
 
-```text
-entrypoints -> app -> adapters -> modules
-                    \----------> modules
-```
+The code is layered: entry points use the app layer, the app layer composes
+adapters and modules, and adapters use modules.
 
-- `src/modules/` contains pure review and repository-metadata policy.
-- `src/adapters/` contains GitHub DOM/network and browser-storage integration.
-- `src/app/` composes adapters and modules into PR-scoped workflows.
+- Modules hold pure review and repository-metadata policy.
+- Adapters integrate with GitHub's page and network, and with browser storage.
+- The app layer composes them into workflows scoped to one pull request.
 
-Referenced TypeScript projects enforce the direction: modules cannot import
-adapters or app, and adapters cannot import app. Cross-layer imports use named
-aliases and module entry points; relative imports remain local to one layer.
-Tests stay beside the code they protect. Playwright e2e may be
-orchestration-only without a product namesake. Shared tool configuration lives
-under `config/`.
+The type checker enforces the direction: modules cannot depend on adapters or
+the app layer, and adapters cannot depend on the app layer. Code crosses layers
+only through each module's public entry point. Tests stay beside the code they
+protect; browser end-to-end tests may orchestrate a flow without a matching
+product module. Shared tool configuration lives in one place.
 
-## Dev setup
+## Dev setup, build, and test
 
-Requires Node.js 24, pnpm 10, and Chrome or Chromium (`package.json` engines:
-Node `>=24`, pnpm `>=10 <11`).
+DiffSeek is a Chrome Manifest V3 extension built with WXT. It needs current
+Node.js and pnpm (the package manifest pins the versions) and Chrome or
+Chromium. Installing dependencies also prepares the build tool and the git
+hooks. The package scripts cover a dev build, a production build, unit and DOM
+tests, fixture and live end-to-end tests, and the full CI check. Load the
+production build as an unpacked extension in Chrome's developer mode, then open
+a pull request's Files changed page; it uses the existing GitHub session.
 
-```sh
-corepack enable
-pnpm install
-```
+Unit and DOM tests sit beside the code they protect. Fixture end-to-end tests
+drive the built extension in a browser against recorded GitHub pages.
 
-`pnpm install` runs `wxt prepare` and installs the Husky hooks.
+Live end-to-end tests are opt-in and run against a real test pull request with
+a saved, signed-in GitHub session; a signed-out session never reaches the
+modern view. Every run turns auto-view off and resets the test pull request's
+viewed state first. Each run takes repeated samples of three loads:
 
-## Build
+- **cold** — fresh extension storage with filters shown, then load;
+- **warm** — reload;
+- **hot** — leave to the conversation tab and come back.
 
-```sh
-pnpm dev
-pnpm build
-```
+Each sample measures time to DiffSeek's first control, to an open filter menu,
+and to fully classified counts, plus reconcile passes, DiffSeek's page writes,
+and GitHub tree or panel rebuilds. Cold and warm expect exactly the one redraw
+GitHub currently does on every load; none or an extra one fails, and this needs
+revisiting when GitHub stops. Hot expects every row GitHub removes to come back.
+The cold sample also toggles the viewed filter and marks one file viewed. Median
+durations must stay under limits: one shared cutoff for all three loads,
+derived from the typical CI cold load with some headroom, and looser ceilings
+for first render and menu open.
 
-`pnpm dev` is `wxt --config config/wxt.config.ts`. `pnpm build` writes the
-unpacked Manifest V3 extension to `.output/chrome-mv3`.
-
-Load `.output/chrome-mv3` through `chrome://extensions` with **Developer mode**
-and **Load unpacked**. Open a pull request's **Files changed** page; the
-extension uses the existing GitHub session.
-
-## Test
-
-Unit and DOM tests are Vitest files beside the code they protect (`*.unit.ts`,
-`*.spec.ts`):
-
-```sh
-pnpm test
-pnpm test:ci
-```
-
-`pnpm coverage:ci` is the coverage run used by `pnpm check:ci:quality`.
-
-Fixture e2e is Playwright against the built extension and the HTML fixtures
-under `src/adapters/github/review-page/fixtures/`
-(`src/app/review/review-app.e2e.playwright.ts`):
-
-```sh
-pnpm test:e2e
-pnpm test:e2e:run
-```
-
-`test:e2e` builds first. `test:e2e:run` skips the build and uses the existing
-`.output/chrome-mv3`. Playwright matches `**/*.e2e.playwright.ts` with one
-worker (`config/playwright.config.ts`).
-
-Live e2e is opt-in. `test:e2e:live` builds first; `test:e2e:live:run` skips the
-build. Both set `DIFFSEEK_LIVE_E2E=1`, which is what includes
-`src/app/review/live-perf.e2e.playwright.ts`. Without that variable the live
-suite is skipped.
-
-Set `DIFFSEEK_GITHUB_STORAGE_STATE` to either a Playwright storageState **file
-path** or the **inline JSON** (Cursor / GitHub Actions secrets inject the JSON
-string). Logged-out GitHub stays on classic `/files` and loops with DiffSeek's
-`/changes` redirect:
-
-```sh
-pnpm exec playwright open https://github.com/login --save-storage=.cache/github-storage.json
-DIFFSEEK_GITHUB_STORAGE_STATE=.cache/github-storage.json pnpm test:e2e:live
-```
-
-It runs repeated cold, warm, and hot samples against `sha-tm/diffseek-test-data#1`
-by default (`DIFFSEEK_LIVE_SAMPLES` sets how many). Every live test seeds filter
-defaults with auto-view off, so runs never mark the fixture's generated files
-viewed on GitHub; setup then marks all of its viewed files not viewed. Cold
-clears extension storage, then writes an explicit shown filter preference so a
-fresh-install hide default does not collapse the file list, and loads the PR.
-Warm is a reload. Hot clicks Conversation, then Files changed. Each sample
-records time to the first DiffSeek control, time from the Filter click until
-the DiffSeek menu is visible, and time until the generated-facet denominator
-shows the full classified total. It also records reconcile passes, DiffSeek DOM
-mutations, and GitHub file-tree or diff-panel rebuilds (removed rows that come
-back). Cold and warm expect exactly GitHub's own per-load redraw (GitHub
-currently redraws the tree and panels on every page load), so none or an extra
-one fails; revisit when GitHub stops. Hot ignores the mass-removal rule; it
-waits until every row removed after the first DiffSeek control is back and
-fails on any that came back late or never did. The job summary includes raw
-removed and re-added counts. The cold sample also toggles the viewed filter and
-marks one file row viewed. An empty sample set fails. Median durations are
-checked against limits: one shared panel cutoff for cold, warm, and hot at
-about 1.5× the CI cold median, first render and menu open as looser ceilings,
-with optional `DIFFSEEK_LIVE_BUDGET_*` overrides; the values live in
-`src/app/review/live-perf.helpers.ts`. Results are written to
-`.cache/live-perf-latest.json`, the job summary, and a `live-perf` artifact.
-Override the target with `DIFFSEEK_LIVE_PR_URL`.
-
-Live e2e waits are event-based (`src/app/review/live-wait.ts`: in-page
-MutationObserver conditions, navigation events); timeouts are failure guards
-only, never pacing. GitHub server-renders the Filter options button and swaps
-in an interactive client copy shortly after load, so the menu is opened only
-once that copy is present (Primer `anchor-name` style or a React `onClick`).
-
-`pnpm check:ci` runs the quality checks and the production build together.
+Live end-to-end waits are event-based; timeouts only fail a stuck run. GitHub
+first renders a static Filter options button and swaps in an interactive one
+shortly after, so tests open the menu only once the interactive one is there.
 
 ## Release and CI
 
-Prepare the Chrome Web Store upload archive with:
+CI runs on every push; pull requests get CI only. After CI passes on main, live
+end-to-end runs and then the release, in that order for the same commit. The
+release builds the store package and publishes a versioned GitHub release with
+a changelog. Its version comes from the commit count. Live end-to-end can also
+be started by hand and needs the signed-in session as a repository secret.
 
-```sh
-pnpm release:zip
-```
-
-WXT writes the versioned Chrome Manifest V3 ZIP to `.output/`. The manifest
-patch version is the `git rev-list --count HEAD` count
-(`config/manifest-version.ts`).
-
-**CI** (`.github/workflows/ci.yaml`) runs on every push. Pull requests get CI
-only. On each successful CI run for `main`, the next stages run strictly in
-order for that commit:
-
-1. **Live E2E** (`.github/workflows/live-e2e.yaml`) — also manual
-   (`workflow_dispatch`). It requires repository secret
-   `DIFFSEEK_GITHUB_STORAGE_STATE` and fails when that secret is missing.
-2. **Release Chrome Extension** (`.github/workflows/release.yaml`) —
-   `pnpm release:zip`, then create a versioned GitHub Release (`v<version>`
-   with changelog). Download the newest build from
-   https://github.com/n8v-guy/diffseek/releases/latest
-
-**Publish Chrome Web Store** (`.github/workflows/publish-chrome-web-store.yaml`)
-is manual only (`workflow_dispatch` from branch `main`). It requires CI, Live
-E2E, and Release green for that main tip and publishes the ZIP artifact from
-that Release run (no rebuild). Required secrets: `CHROME_EXTENSION_ID`,
-`CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, `CHROME_REFRESH_TOKEN`,
-`CHROME_PUBLISHER_ID`. The store item must already exist; the first listing is
-created in the developer dashboard.
+Publishing to the Chrome Web Store is manual and only from main. It requires
+CI, live end-to-end, and the release to be green for that commit, and it
+uploads the release's package without rebuilding. It needs the store
+credentials as repository secrets, and the store listing must already exist.
 
 ## Commit conventions
 
-Subjects are a single imperative line, matching the existing history. No
-commit-message linter is configured.
+Commit subjects are one imperative line, matching the history.
 
-Never commit binary files (images, archives, builds), on any branch. Git
-decides what is binary by content, not extension. The pre-commit hook rejects
-them, and since hooks can be skipped, CI (`pnpm lint:binaries`, part of
-`pnpm check:ci`) checks every file in the tree too.
+Never commit binary files (images, archives, builds), on any branch. Git decides
+what is binary by content, not extension. The pre-commit hook rejects them, and
+because hooks can be skipped, CI checks every file in the tree too.
 
-`pnpm install` installs Husky:
-
-- `pre-commit` runs `pnpm check:commit`: lint-staged (`eslint --fix` on
-  `*.{ts,tsx}` via `config/lint-staged.config.ts`) and `pnpm lint:rules`
-  (`scripts/check-structure.ts`), and rejects staged binary files
-  (`scripts/check-binaries.ts --staged`).
-- `pre-push` runs `pnpm check:push`, which is `pnpm check:ci` (structure, binary files,
-  eslint, knip, typecheck, coverage, production-dependency audit, and build).
+Git hooks run automatically: before a commit, lint fixes on staged code, the
+repository structure rules, and the binary check; before a push, the full CI
+check (structure, binaries, lint, unused code, types, tests with coverage,
+production dependency audit, and build).
