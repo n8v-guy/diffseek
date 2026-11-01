@@ -309,10 +309,16 @@ created in the developer dashboard.
 Subjects are a single imperative line, matching the existing history. No
 commit-message linter is configured.
 
+Never commit binary files (images, archives, builds), on any branch. Git
+decides what is binary by content, not extension. The pre-commit hook rejects
+them, and since hooks can be skipped, CI (`pnpm lint:binaries`, part of
+`pnpm check:ci`) checks every file in the tree too.
+
 `pnpm install` installs Husky:
 
 - `pre-commit` runs `pnpm check:commit`: lint-staged (`eslint --fix` on
   `*.{ts,tsx}` via `config/lint-staged.config.ts`) and `pnpm lint:rules`
-  (`scripts/check-structure.ts`).
-- `pre-push` runs `pnpm check:push`, which is `pnpm check:ci` (structure,
+  (`scripts/check-structure.ts`), and rejects staged binary files
+  (`scripts/check-binaries.ts --staged`).
+- `pre-push` runs `pnpm check:push`, which is `pnpm check:ci` (structure, binary files,
   eslint, knip, typecheck, coverage, production-dependency audit, and build).
