@@ -49,8 +49,10 @@ that stands alone, and let the commit hook validate before any further
 check. Push the branch, open a pull request with a concise title and a
 summary of the goal and any caveat, and never merge it. Never force-push or
 rewrite pushed history without explicit owner approval. CI must be green.
-CI stays mechanical; do not propose an AI GitHub Action. Fix a failing check
-forward on the same branch.
+CI stays mechanical; do not propose an AI GitHub Action. After the push, if
+the harness did not already run the same full local check, run it while CI
+runs. Watch the checks until they finish and fix forward on the same branch,
+then self-review: gap versus the ask, leaner options, trade-offs.
 
 ## Review
 
