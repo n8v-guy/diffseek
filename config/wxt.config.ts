@@ -29,7 +29,7 @@ export default defineConfig({
   manifest: {
     name: 'DiffSeek for GitHub: cut the noise in big PRs',
     description:
-      'Fast, lightweight GitHub PR filter by file groups, formats and CODEOWNERS. Focus on one slice, mark folders viewed at once.',
+      'Generated files are hidden and auto-viewed. Filter one slice at a time, mark it viewed in one click and watch progress fill up.',
     version: manifestVersion(packageVersion, branchCommitCount),
     permissions: ['storage'],
     host_permissions: [
