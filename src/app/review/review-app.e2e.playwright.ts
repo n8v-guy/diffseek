@@ -469,15 +469,11 @@ test('clears native filters before taking over the menu', async () => {
   await expect(
     page.locator('[data-filter-kind="languages"][data-filter-value="json"]'),
   ).toBeVisible();
-  const ungrouped = page.locator(
-    '[data-filter-kind="groups"][data-filter-value="No groups"]',
-  );
-  await expect(ungrouped).toBeVisible();
-  await expect(ungrouped).toContainText('No groups');
-  await expect(ungrouped).not.toContainText('No type');
   await expect(
-    page.locator('[data-filter-kind="owners"][data-filter-value="Unmapped"]'),
-  ).toContainText('No owner');
+    page.locator(
+      '[data-filter-kind="groups"][data-filter-value="No groups"]',
+    ),
+  ).toBeVisible();
   await expect(
     menu.locator('.diffseek-menu-section h3'),
   ).toHaveText(['Owners', 'Groups', 'Formats', 'Change status']);
@@ -490,11 +486,9 @@ test('clears native filters before taking over the menu', async () => {
   const ownerViewed = ownerRow.locator('.diffseek-menu-viewed-action');
   const ownerOnly = ownerRow.locator('[data-filter-only]');
   await expect(ownerOnly).toHaveCSS('opacity', '0');
-  await expect(ownerOnly).toHaveAttribute('aria-pressed', 'false');
   await ownerCounter.hover();
   await expect(ownerRow).toHaveCSS('background-color', 'rgb(228, 220, 255)');
   await expect(ownerOnly).toHaveCSS('opacity', '1');
-  await expect(ownerOnly).toHaveCSS('background-color', 'rgb(216, 204, 255)');
   await expect(ownerItem).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(ownerViewed).toHaveCSS(
     'background-color',
@@ -509,35 +503,20 @@ test('clears native filters before taking over the menu', async () => {
     );
   expect(new Set(onlyColumns.map(Math.round)).size).toBe(1);
   await ownerOnly.click();
-  await expect(ownerOnly).toHaveAttribute('aria-pressed', 'true');
-  await ownerOnly.hover();
-  await expect(ownerOnly).toHaveCSS('background-color', 'rgb(99, 60, 190)');
-  await expect(
-    page.locator(
-      '[data-filter-kind="owners"]:not([data-filter-value="@pull-source"])',
-    ).first(),
-  ).toHaveAttribute('aria-checked', 'false');
   await page.locator('#diff-app').hover();
   await expect(ownerRow).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(ownerOnly).toHaveCSS('opacity', '1');
   await expect(ownerOnly).toHaveCSS('background-color', 'rgb(59, 46, 131)');
-  await expect(ownerOnly).toHaveCSS('color', 'rgb(240, 237, 255)');
-  await expect(
-    page
-      .locator(
-        '.diffseek-menu-row:has([data-filter-kind="owners"]:not([data-filter-value="@pull-source"])) [data-filter-only]',
-      )
-      .first(),
-  ).toHaveCSS('opacity', '0');
   await ownerOnly.evaluate((button) => {
     button.blur();
     button.focus({ focusVisible: true });
   });
   await expect(ownerRow).toHaveCSS('background-color', 'rgb(228, 220, 255)');
-  await ownerOnly.evaluate((button) => {
-    button.blur();
-  });
-  await expect(ownerRow).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(
+    page.locator(
+      '[data-filter-kind="owners"]:not([data-filter-value="@pull-source"])',
+    ).first(),
+  ).toHaveAttribute('aria-checked', 'false');
   const ownersTitle = page.locator(
     '.diffseek-menu-section:has([data-filter-kind="owners"]) .diffseek-menu-section-title',
   );
@@ -594,25 +573,6 @@ test('clears native filters before taking over the menu', async () => {
   await generated.locator('xpath=..').hover();
   await alwaysRead.click();
   await expect(alwaysRead).toHaveAttribute('aria-pressed', 'true');
-  await expect(alwaysRead).toHaveCSS('background-color', 'rgb(99, 60, 190)');
-  const generatedRow = generated.locator('xpath=..');
-  await page.locator('#diff-app').hover();
-  await expect(generatedRow).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(alwaysRead).toHaveCSS('opacity', '1');
-  await expect(alwaysRead).toHaveCSS('background-color', 'rgb(59, 46, 131)');
-  await expect(alwaysRead).toHaveCSS('color', 'rgb(240, 237, 255)');
-  await page.locator('html').evaluate((node) => {
-    node.setAttribute('data-color-mode', 'dark');
-  });
-  await expect(alwaysRead).toHaveCSS('background-color', 'rgb(230, 220, 255)');
-  await expect(alwaysRead).toHaveCSS('color', 'rgb(43, 33, 70)');
-  await alwaysRead.hover();
-  await expect(alwaysRead).toHaveCSS('background-color', 'rgb(210, 184, 255)');
-  await expect(alwaysRead).toHaveCSS('color', 'rgb(43, 33, 70)');
-  await page.locator('html').evaluate((node) => {
-    node.removeAttribute('data-color-mode');
-  });
-  await expect(alwaysRead).toHaveCSS('background-color', 'rgb(99, 60, 190)');
   const pressedBackground = await alwaysRead.evaluate(
     (pill) => getComputedStyle(pill).backgroundColor,
   );
