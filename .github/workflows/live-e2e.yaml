@@ -26,9 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          fetch-depth: 0
           persist-credentials: false
-          ref: ${{ inputs.head_sha }}
       - name: Require this main commit and a successful CI run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,33 +39,8 @@ jobs:
             echo "Live E2E for ${HEAD_SHA} was dispatched from ${RUN_SHA}." >&2
             exit 1
           fi
-          git fetch origin main
-          git merge-base --is-ancestor "$HEAD_SHA" origin/main
-          i=0
-          while [ "$i" -lt 60 ]; do
-            state="$(
-              gh api "repos/${GH_REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
-                | jq -r --arg sha "$HEAD_SHA" '
-                    [ .workflow_runs[]
-                      | select(.name == "CI" and .head_sha == $sha) ]
-                    | if any(.status != "completed") then "pending"
-                      elif any(.conclusion == "success") then "success"
-                      elif length == 0 then "missing"
-                      else "failure" end
-                  '
-            )"
-            if [ "$state" = "success" ]; then
-              exit 0
-            fi
-            if [ "$state" = "failure" ]; then
-              echo "CI for ${HEAD_SHA} did not succeed." >&2
-              exit 1
-            fi
-            i=$((i + 1))
-            sleep 2
-          done
-          echo "CI for ${HEAD_SHA} did not succeed in time." >&2
-          exit 1
+          run=$(gh run list --workflow ci.yaml --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+          gh run watch "$run" --exit-status
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:

@@ -31,13 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
-      contents: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-          ref: main
       - name: Require CI and Live E2E success for this main commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,39 +44,10 @@ jobs:
             echo "Release for ${HEAD_SHA} was dispatched from ${RUN_SHA}." >&2
             exit 1
           fi
-          git fetch origin main
-          git merge-base --is-ancestor "$HEAD_SHA" origin/main
-          require_success() {
-            local name="$1"
-            local i=0
-            local state
-            while [ "$i" -lt 60 ]; do
-              state="$(
-                gh api "repos/${GH_REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
-                  | jq -r --arg name "$name" --arg sha "$HEAD_SHA" '
-                      [ .workflow_runs[]
-                        | select(.name == $name and .head_sha == $sha) ]
-                      | if any(.status != "completed") then "pending"
-                        elif any(.conclusion == "success") then "success"
-                        elif length == 0 then "missing"
-                        else "failure" end
-                    '
-              )"
-              if [ "$state" = "success" ]; then
-                return 0
-              fi
-              if [ "$state" = "failure" ]; then
-                echo "Workflow ${name} for ${HEAD_SHA} did not succeed." >&2
-                return 1
-              fi
-              i=$((i + 1))
-              sleep 2
-            done
-            echo "Workflow ${name} for ${HEAD_SHA} did not succeed in time." >&2
-            return 1
-          }
-          require_success "CI"
-          require_success "Live E2E"
+          for workflow in ci.yaml live-e2e.yaml; do
+            run=$(gh run list --workflow "$workflow" --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+            gh run watch "$run" --exit-status
+          done
 
   zip:
     needs: verify
@@ -95,7 +60,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: main
 
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
 
@@ -103,15 +67,6 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-
-      - name: Check out the verified main commit
-        env:
-          HEAD_SHA: ${{ inputs.head_sha }}
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          git merge-base --is-ancestor "$HEAD_SHA" origin/main
-          git checkout --detach "$HEAD_SHA"
 
       - run: pnpm install --frozen-lockfile
 
