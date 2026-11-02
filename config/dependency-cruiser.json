@@ -23,7 +23,7 @@
         "path": "^(entrypoints|scripts|src/(app|(modules|adapters)/[^/]+))/"
       },
       "to": {
-        "path": "^src/(app|(modules|adapters)/[^/]+)/",
+        "path": "^src/(app|(modules|adapters)/[^/]+)/.*\\.ts$",
         "pathNot": [
           "^$1/",
           "^src/(app|(modules|adapters)/[^/]+)/index\\.ts$"

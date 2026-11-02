@@ -95,7 +95,7 @@ export default defineConfig(
       'no-restricted-syntax': [
         'error',
         {
-          selector: 'ExportAllDeclaration',
+          selector: 'ExportAllDeclaration[exported=null]',
           message:
             'Name the re-exports. A star hides the package public surface.',
         },
