@@ -43,7 +43,17 @@ export default defineConfig({
         }
       : {}),
   }),
-  vite: () => ({ resolve: { tsconfigPaths: true } }),
+  vite: () => ({
+    resolve: { tsconfigPaths: true },
+    build: {
+      rollupOptions: {
+        treeshake: {
+          // Public entries re-export whole layers. Only stylesheets are import side effects.
+          moduleSideEffects: (id) => id.endsWith('.css'),
+        },
+      },
+    },
+  }),
   zip: {
     artifactTemplate: '{{name}}-{{version}}-{{browser}}.zip',
     zipSources: false,

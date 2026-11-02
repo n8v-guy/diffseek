@@ -1,9 +1,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { markViewed, scanPage } from '@diffseek/github';
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
-import { scanPage } from '@diffseek/github/review-page/page-adapter';
-import { markViewed } from '@diffseek/github/review-page/viewed-actions';
 
 import { ViewedActionExecutor } from './action-executor';
 

@@ -1,4 +1,4 @@
-import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
+import type { FilterDefaults } from '@diffseek/browser';
 import type { FilterState, LabelFacet } from '@diffseek/review';
 
 export function hasTransientExclusions(

@@ -1,14 +1,12 @@
-import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
-import {
-  fileToggleAction,
-  type PageSnapshot,
-  viewedControlState,
-} from '@diffseek/github/review-page/page-adapter';
+import type { FilterDefaults } from '@diffseek/browser';
 import {
   afterCurrentTask,
+  fileToggleAction,
   filterMenus,
   isNativeMutation,
-} from '@diffseek/github/review-view/review-ui';
+  viewedControlState,
+  type PageSnapshot,
+} from '@diffseek/github';
 import {
   parseCodeowners,
   parseGitAttributes,

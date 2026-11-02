@@ -1,4 +1,4 @@
-import type { FilterDefaultState } from '@diffseek/browser/filter-defaults';
+import type { FilterDefaultState } from '@diffseek/browser';
 
 import {
   type ActionResult,

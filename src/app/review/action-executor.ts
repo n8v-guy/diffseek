@@ -1,8 +1,8 @@
-import type { PageSnapshot } from '@diffseek/github/review-page/page-adapter';
 import {
   markViewed,
   type ActionResult,
-} from '@diffseek/github/review-page/viewed-actions';
+  type PageSnapshot,
+} from '@diffseek/github';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 

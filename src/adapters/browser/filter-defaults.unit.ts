@@ -4,7 +4,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import {
   readFilterDefaults,
   writeFilterDefaults,
-} from '@diffseek/browser/filter-defaults';
+} from './filter-defaults';
 
 describe('filter defaults', () => {
   beforeEach(() => fakeBrowser.reset());

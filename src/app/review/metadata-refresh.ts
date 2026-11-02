@@ -1,8 +1,8 @@
 import {
   fileTreeElement,
+  filterMenus,
   treeStructureKey,
-} from '@diffseek/github/review-page/page-adapter';
-import { filterMenus } from '@diffseek/github/review-view/review-ui';
+} from '@diffseek/github';
 import type { RepositoryMetadata } from '@diffseek/repository-metadata';
 
 type MetadataRead = {
