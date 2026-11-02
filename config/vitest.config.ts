@@ -25,7 +25,7 @@ export default defineConfig({
       },
     },
     environment: 'jsdom',
-    exclude: [...configDefaults.exclude, '**/*.e2e.playwright.ts'],
     include: [unitTestFiles],
+    exclude: [...configDefaults.exclude, '**/*.e2e.playwright.ts'],
   },
 });

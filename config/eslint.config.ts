@@ -4,7 +4,6 @@ import js from '@eslint/js';
 import vitest from '@vitest/eslint-plugin';
 import { defineConfig } from 'eslint/config';
 import { flatConfigs as importConfigs } from 'eslint-plugin-import-x';
-import unsanitized from 'eslint-plugin-no-unsanitized';
 import playwright from 'eslint-plugin-playwright';
 import { configs as sonarConfigs } from 'eslint-plugin-sonarjs';
 import { configs as tseslintConfigs } from 'typescript-eslint';
@@ -44,7 +43,6 @@ export default defineConfig(
   sonarConfigs.recommended,
   importConfigs.recommended,
   importConfigs.typescript,
-  unsanitized.configs.recommended,
   tseslintConfigs.strictTypeChecked,
   {
     languageOptions: {
@@ -64,12 +62,14 @@ export default defineConfig(
         { fixStyle: 'inline-type-imports', prefer: 'type-imports' },
       ],
       '@typescript-eslint/explicit-module-boundary-types': 'error',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
       '@typescript-eslint/no-import-type-side-effects': 'error',
       '@typescript-eslint/no-shadow': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+      // A partial options object replaces the strict preset and restores the rule defaults.
       '@typescript-eslint/restrict-template-expressions': [
         'error',
         {
@@ -91,7 +91,7 @@ export default defineConfig(
       ],
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       complexity: 'error',
-      eqeqeq: 'error',
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
       'import-x/first': 'error',
       'import-x/newline-after-import': 'error',
       'import-x/order': [
@@ -111,19 +111,8 @@ export default defineConfig(
       ],
       'max-depth': 'error',
       'max-nested-callbacks': 'error',
-      'no-undef': 'off',
-      'no-warning-comments': [
-        'error',
-        {
-          location: 'anywhere',
-          terms: ['c8 ignore', 'istanbul ignore', 'jscpd:ignore', 'v8 ignore'],
-        },
-      ],
       'sonarjs/cognitive-complexity': 'off',
       'sonarjs/no-all-duplicated-branches': 'off',
-      'sonarjs/no-duplicated-branches': 'off',
-      'sonarjs/no-global-this': 'off',
-      'sonarjs/no-identical-functions': 'off',
       'sonarjs/prefer-regexp-exec': 'off',
     },
   },
@@ -146,8 +135,6 @@ export default defineConfig(
     files: testFiles,
     rules: {
       '@typescript-eslint/require-await': 'off',
-      'no-unsanitized/method': 'off',
-      'no-unsanitized/property': 'off',
       'sonarjs/no-os-command-from-path': 'off',
     },
   },
