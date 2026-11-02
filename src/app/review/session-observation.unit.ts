@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
+import type { FilterDefaults } from '@diffseek/browser';
 import { emptyFacetExclusions, type FileRecord } from '@diffseek/review';
 
 import {

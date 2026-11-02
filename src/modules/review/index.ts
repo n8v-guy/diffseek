@@ -1,5 +1,5 @@
 export { extensionOf } from './classification/groups';
-export { labelFiles, type LabelFacet } from './classification/labels';
+export { labelFiles, type FileLabel, type LabelFacet } from './classification/labels';
 export { projectFacet } from './filtering/facet-projection';
 export {
   emptyFacetExclusions,
