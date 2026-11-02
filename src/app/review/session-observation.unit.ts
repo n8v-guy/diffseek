@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
+import { emptyFacetExclusions, type FileRecord } from '@diffseek/review';
+
 import {
   pageNodesChanged,
+  projectionKeyFor,
   queuePanelReconcile,
   scheduleForMutations,
   type PanelReconcileSchedule,
@@ -10,6 +14,47 @@ import {
 afterEach(() => {
   document.body.replaceChildren();
   vi.useRealTimers();
+});
+
+const metadata = { codeowners: '', attributes: '' };
+const filterDefaults: FilterDefaults = { hidden: new Set(), viewed: new Set() };
+
+function file(): FileRecord {
+  return {
+    path: 'src/app.ts',
+    anchor: 'diff-src/app.ts',
+    extension: '.ts',
+    owners: [],
+    generated: false,
+    status: 'modified',
+    viewed: false,
+    capabilities: { collapse: true, viewed: true },
+    labels: [],
+  };
+}
+
+function key(record: FileRecord): string {
+  return projectionKeyFor({
+    metadataRevision: 0,
+    metadata,
+    filters: emptyFacetExclusions(),
+    filterDefaults,
+    generatedDefaultBusy: false,
+    menuCount: 0,
+    files: [record],
+  });
+}
+
+describe('projection key', () => {
+  it('changes when a file field changes', () => {
+    const original = key(file());
+    const extension = file();
+    extension.extension = null;
+    const anchor = file();
+    anchor.anchor = 'diff-other';
+    expect(key(extension)).not.toBe(original);
+    expect(key(anchor)).not.toBe(original);
+  });
 });
 
 describe('panel reconcile scheduling', () => {

@@ -43,9 +43,9 @@ viewed state first. Each run takes repeated samples of three loads:
 
 Each sample measures time to DiffSeek's first control, to an open filter menu,
 and to fully classified counts, plus reconcile passes, DiffSeek's page writes,
-and GitHub tree or panel rebuilds. Cold and warm expect exactly the one redraw
-GitHub currently does on every load; none or an extra one fails, and this needs
-revisiting when GitHub stops. Hot expects every row GitHub removes to come back.
+and GitHub tree or panel rebuilds. Cold and warm keep those rebuilds within
+a bound, so a GitHub load redraw can be absent; a rebuild past the bound
+fails. Hot expects every row GitHub removes to come back.
 The cold sample also toggles the viewed filter and marks one file viewed. Median
 durations must stay under limits: one shared cutoff for all three loads,
 derived from the typical CI cold load with some headroom, and looser ceilings

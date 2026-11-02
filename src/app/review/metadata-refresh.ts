@@ -73,7 +73,7 @@ async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
         applied.pull = true;
         if (!options.aborted()) options.apply(metadata);
       })
-      .catch(() => undefined),
+      .catch(reportReadFailure),
     options
       .refreshDefault()
       .then(async (result) => {
@@ -81,9 +81,14 @@ async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
         await options.commit(result.metadata).catch(() => false);
         if (!applied.pull && !options.aborted()) options.apply(result.metadata);
       })
-      .catch(() => undefined),
+      .catch(reportReadFailure),
   ]);
   return applied.pull && !options.aborted();
+}
+
+/** The review keeps going; developers and tests still see the failed read. */
+function reportReadFailure(error: unknown): void {
+  console.error(error);
 }
 
 function beginMetadataRefresh(

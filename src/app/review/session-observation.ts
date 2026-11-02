@@ -93,30 +93,41 @@ export function projectionKeyFor(options: {
     `hidden:${[...options.filterDefaults.hidden].sort(compareText).join(',')}`,
     `viewed:${[...options.filterDefaults.viewed].sort(compareText).join(',')}`,
   ].join('/');
-  const files = options.files
-    .map((file) =>
-      [
-        file.path,
-        file.viewed ? '1' : '0',
-        file.capabilities.viewed ? '1' : '0',
-        file.capabilities.collapse ? '1' : '0',
-        file.status,
-        file.owners.join(','),
-        file.generated ? '1' : '0',
-        file.labels.map((label) => `${label.facet}=${label.value}`).join(','),
-      ].join('\0'),
-    )
-    .join('\n');
+  const files = options.files.map(fileProjection).join('\n');
   return [
     options.metadataRevision,
     options.metadata.codeowners,
     options.metadata.attributes,
     filters,
     defaults,
-    options.generatedDefaultBusy ? '1' : '0',
+    flag(options.generatedDefaultBusy),
     String(options.menuCount),
     files,
   ].join('\n--\n');
+}
+
+/** A new FileRecord field that is left out of this map is a type error. */
+function fileProjection(file: FileRecord): string {
+  const capabilities = {
+    collapse: flag(file.capabilities.collapse),
+    viewed: flag(file.capabilities.viewed),
+  } satisfies Record<keyof FileRecord['capabilities'], string>;
+  const parts = {
+    anchor: file.anchor,
+    capabilities: Object.values(capabilities).join('\0'),
+    extension: file.extension ?? '',
+    generated: flag(file.generated),
+    labels: file.labels.map((label) => `${label.facet}=${label.value}`).join(','),
+    owners: file.owners.join(','),
+    path: file.path,
+    status: file.status,
+    viewed: flag(file.viewed),
+  } satisfies Record<keyof FileRecord, string>;
+  return Object.values(parts).join('\0');
+}
+
+function flag(value: boolean): string {
+  return value ? '1' : '0';
 }
 
 export function retainNativeOwners(

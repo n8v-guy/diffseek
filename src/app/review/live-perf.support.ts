@@ -73,10 +73,6 @@ export function defaultLivePerfBudgets(
     actionReconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_ACTION_RECONCILES, 40),
     treeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_TREE_REBUILDS, 0),
     panelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_PANEL_REBUILDS, 0),
-    // Broken GitHub behavior (observed 2026-10-31): GitHub itself now redraws
-    // the file tree and diff panels exactly once on a cold load and on a warm
-    // reload, with nothing lost. Cold and warm expect exactly this many;
-    // temporary, revisit when GitHub stops it.
     coldTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_TREE_REBUILDS, 1),
     coldPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANEL_REBUILDS, 1),
     warmTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_TREE_REBUILDS, 1),
@@ -177,9 +173,9 @@ export function actionFailures(
 }
 
 /**
- * Cold and warm must hit their exact rebuild counts (GitHub's own one-time
- * redraw), so a DiffSeek rebuild on top of it, or GitHub fixing it, both fail
- * the job. Actions must stay at or under the rebuild caps.
+ * Rebuilds stay at or under the scenario cap. Cold and warm leave room for a
+ * GitHub load redraw without requiring that exact count. Actions use the
+ * tighter caps.
  */
 export function rebuildFailures(
   sample: LivePerfSample,
@@ -190,11 +186,11 @@ export function rebuildFailures(
     const cold = sample.scenario === 'cold';
     const tree = cold ? budgets.coldTreeRebuilds : budgets.warmTreeRebuilds;
     const panel = cold ? budgets.coldPanelRebuilds : budgets.warmPanelRebuilds;
-    if (sample.treeRebuilds !== tree) {
-      failures.push(`${sample.scenario} treeRebuilds ${sample.treeRebuilds} !== ${tree}`);
+    if (sample.treeRebuilds > tree) {
+      failures.push(`${sample.scenario} treeRebuilds ${sample.treeRebuilds} > ${tree}`);
     }
-    if (sample.panelRebuilds !== panel) {
-      failures.push(`${sample.scenario} panelRebuilds ${sample.panelRebuilds} !== ${panel}`);
+    if (sample.panelRebuilds > panel) {
+      failures.push(`${sample.scenario} panelRebuilds ${sample.panelRebuilds} > ${panel}`);
     }
     return failures;
   }
@@ -288,7 +284,7 @@ export function livePerfSummary(report: {
     '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     ...rows,
     '',
-    'Durations are medians. Cold and warm tree rebuilds and diff-panel rebuilds must be exactly 1 (GitHub redraws once per page load since 2026-10-31, temporary). Hot ignores mass removal and fails only when a row removed after the first DiffSeek control is still gone 500 ms later.',
+    'Durations are medians. Cold and warm tree rebuilds and diff-panel rebuilds must stay within their caps (a GitHub load redraw may be present or absent). Hot ignores mass removal and fails only when a row removed after the first DiffSeek control is still gone 500 ms later.',
     '',
   ].join('\n');
 }
