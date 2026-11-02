@@ -226,16 +226,14 @@ export async function markAllViewed(page: Page): Promise<void> {
 
 export async function openPull(pull: number, nativeFilter = false): Promise<Page> {
   const page = await browser().newPage();
-  await page.route(
-    `https://github.com/octo/repo/pull/${pull}/changes`,
-    async (route) => {
-      await route.fulfill({
-        body: instrument(browserSession.fixtureSource, nativeFilter),
-        contentType: 'text/html',
-      });
-    },
-  );
-  await page.goto(`https://github.com/octo/repo/pull/${pull}/changes`);
+  const url = `https://github.com/octo/repo/pull/${String(pull)}/changes`;
+  await page.route(url, async (route) => {
+    await route.fulfill({
+      body: instrument(browserSession.fixtureSource, nativeFilter),
+      contentType: 'text/html',
+    });
+  });
+  await page.goto(url);
   return page;
 }
 
@@ -301,25 +299,16 @@ export async function stopExtensionBrowser(): Promise<void> {
 export async function writeFilterDefaults(
   defaults: null | StoredDefaults,
 ): Promise<void> {
-  if (defaults === null) await removeExtensionStorage();
-  else await setExtensionStorage(defaults);
-}
-
-async function removeExtensionStorage(): Promise<void> {
   const local = await storageLocal();
-  await local.evaluate(
-    (storage: StorageLocal, key: string): Promise<void> => storage.remove(key),
-    filterDefaultsKey,
-  );
-  await local.dispose();
-}
-
-async function setExtensionStorage(value: StoredDefaults): Promise<void> {
-  const local = await storageLocal();
-  await local.evaluate(
-    (storage: StorageLocal, items: Record<string, unknown>): Promise<void> => storage.set(items),
-    { [filterDefaultsKey]: value },
-  );
+  await (defaults === null
+    ? local.evaluate(
+      (storage: StorageLocal, key: string): Promise<void> => storage.remove(key),
+      filterDefaultsKey,
+    )
+    : local.evaluate(
+      (storage: StorageLocal, items: Record<string, unknown>): Promise<void> => storage.set(items),
+      { [filterDefaultsKey]: defaults },
+    ));
   await local.dispose();
 }
 

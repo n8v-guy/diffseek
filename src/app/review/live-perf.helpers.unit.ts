@@ -8,14 +8,11 @@ import {
   hotLossFailures,
   isExtensionMetadataRequest,
   isGeneratedCategorized,
-  isInlineStorageState,
   type LivePerfSample,
   livePerfSummary,
   median,
   medianBudgetFailures,
   medianSample,
-  parseInlineStorageState,
-  parseStorageCookies,
   rebuildFailures,
 } from './live-perf.helpers';
 
@@ -23,7 +20,6 @@ describe('live-perf helpers', () => {
   it('recognizes extension metadata fetches only', recognizesExtensionMetadataFetchesOnly);
   it('treats generated denominator as categorized-ready', treatsGeneratedDenominatorAsCategorizedReady);
   it('budgets median durations and rejects any tree rebuild', budgetsMedianDurationsAndRejectsAnyTreeRebuild);
-  it('parses storageState cookies and inline JSON secrets', parsesStorageStateCookiesAndInlineJSONSecrets);
 });
 
 function budgetsMedianDurationsAndRejectsAnyTreeRebuild(): void {
@@ -91,34 +87,6 @@ function budgetsMedianDurationsAndRejectsAnyTreeRebuild(): void {
   expect(livePerfSummary({ cold: [fast], hot: [fast], prUrl: 'https://example.test', warm: [fast] })).toContain(
     'tree rebuilds',
   );
-}
-
-function parsesStorageStateCookiesAndInlineJSONSecrets(): void {
-  expect(isInlineStorageState('{"cookies":[]}')).toBe(true);
-  expect(isInlineStorageState('./github-storage.json')).toBe(false);
-  expect(parseInlineStorageState('{"cookies":[]}')).toStrictEqual({ cookies: [] });
-  expect(
-    parseStorageCookies({
-      cookies: [
-        {
-          domain: '.github.com',
-          name: 'user_session',
-          path: '/',
-          sameSite: 'Lax',
-          value: 'abc',
-        },
-      ],
-    }),
-  ).toStrictEqual([
-    {
-      domain: '.github.com',
-      name: 'user_session',
-      path: '/',
-      sameSite: 'Lax',
-      value: 'abc',
-    },
-  ]);
-  expect(() => parseStorageCookies({ cookies: [{}] })).toThrow(/missing/v);
 }
 
 function recognizesExtensionMetadataFetchesOnly(): void {

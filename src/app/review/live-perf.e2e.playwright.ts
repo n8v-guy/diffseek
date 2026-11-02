@@ -19,36 +19,44 @@ import {
   generatedCategorizedPattern,
   generatedIndexedText,
   hotLossFailures,
-  isInlineStorageState,
   type LivePerfSample,
   type LivePerfScenario,
   livePerfSummary,
   liveSampleCount,
   medianBudgetFailures,
   medianSample,
-  parseInlineStorageState,
-  parseStorageCookies,
   rebuildFailures,
   type RedrawCounts,
+  secondsBetween,
 } from './live-perf.helpers';
 import {
-  type DomCondition,
-  installLiveWaits,
-  tagFilterButton,
-  untilAttribute,
-  untilDom,
-} from './live-wait';
+  assertAuthenticatedReview,
+  clearViewedFiles,
+  openFilterMenu,
+  panelsTimeout,
+  readRedraws,
+  renderSeconds,
+  resetRedraws,
+  runMark,
+  runToggle,
+  showConversation,
+  showFiles,
+  stepTimeout,
+  untilFirstControl,
+  viewedToggle,
+} from './live-perf.support';
+import {
+  isInlineStorageState,
+  parseInlineStorageState,
+  parseStorageCookies,
+} from './live-storage-state';
+import { installLiveWaits, untilDom } from './live-wait';
 
 const livePrUrl = process.env['DIFFSEEK_LIVE_PR_URL'] ?? defaultLivePrUrl;
 const budgets = defaultLivePerfBudgets();
 const samples = liveSampleCount();
 const generatedCounter =
   '[data-diffseek-menu-count-action][data-viewed-facet="generated"][data-viewed-value="true"]';
-const viewedFacetAction =
-  '[data-diffseek-menu-viewed-action][data-viewed-facet="viewed"][data-viewed-value="true"]';
-const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
-const stepTimeout = 20_000;
-const panelsTimeout = 90_000;
 // Fresh-install hiding without auto-view, which would mark the fixture's
 // generated files viewed on GitHub. Unit tests cover the auto-view default.
 const hideDefaults = { hidden: ['viewed', 'generated'], viewed: [] };
@@ -63,59 +71,9 @@ const phases: (RedrawCounts & { phase: string; sample: number })[] = [];
 
 registerLivePerf();
 
-async function assertAuthenticatedReview(page: Page): Promise<void> {
-  await expect(
-    page.getByRole('link', { exact: true, name: 'Sign in' }),
-    'GitHub session from DIFFSEEK_GITHUB_STORAGE_STATE is not authenticated',
-  ).toHaveCount(0);
-  await page.waitForURL(/\/changes(\?|$)/v, { timeout: stepTimeout });
-  await domWait(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
-  await domWait(page, { kind: 'filter-button-ready' }, stepTimeout, 'Filter options button interactive');
-}
-
 async function clearExtensionStore(browserContext: BrowserContext): Promise<void> {
   const worker = await extensionWorker(browserContext);
   await worker.evaluate(() => globalThis.chrome.storage.local.clear());
-}
-
-async function clearViewedFiles(page: Page): Promise<void> {
-  await openFilterMenu(page);
-  const action = page.locator(viewedFacetAction);
-  if ((await action.count()) === 0) return;
-  const label = await action.getAttribute('aria-label', { timeout: 5_000 });
-  if (label !== 'Unmark all') return;
-  await action.click();
-  await domWait(
-    page,
-    { kind: 'text', pattern: "^(All files in category unmarked|Couldn't unmark files\\. Try again\\.)$", selector: '[data-diffseek="snackbar"]' },
-    300_000,
-    'not-viewed snackbar',
-  );
-}
-
-async function closeFilterMenu(page: Page): Promise<void> {
-  if ((await page.locator('[data-diffseek="filters"]').count()) === 0) return;
-  await page.keyboard.press('Escape');
-  await domWait(page, { kind: 'absent', selector: '[data-diffseek="filters"]' }, stepTimeout, 'filter menu closed');
-}
-
-async function dismissCompactLinePopover(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    for (const popover of globalThis.document.querySelectorAll(
-      '[data-component="Popover"][data-open]',
-    )) {
-      if (popover.textContent.includes('compact line height')) popover.remove();
-    }
-  });
-}
-
-function domWait(
-  page: Page,
-  condition: DomCondition,
-  ms: number,
-  message: string,
-): Promise<unknown> {
-  return untilDom(page, condition, { message, ms });
 }
 
 async function extensionWorker(browserContext: BrowserContext): Promise<Worker> {
@@ -149,9 +107,9 @@ async function measureHiddenDefaults(): Promise<void> {
     const generatedToggle = '[data-filter-kind="generated"][data-filter-value="true"]';
     const generatedCountSelector =
       '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count';
-    await domWait(page, { kind: 'attr', name: 'aria-checked', selector: viewedToggle, value: 'mixed' }, stepTimeout, 'viewed toggle mixed');
-    await domWait(page, { kind: 'attr', name: 'aria-checked', selector: generatedToggle, value: 'mixed' }, panelsTimeout, 'generated toggle mixed');
-    await domWait(page, { kind: 'text', pattern: `^0/${expectedGeneratedTotal}$`, selector: generatedCountSelector }, panelsTimeout, 'generated count hidden');
+    await untilDom(page, { kind: 'attr', name: 'aria-checked', selector: viewedToggle, value: 'mixed' }, { message: 'viewed toggle mixed', ms: stepTimeout });
+    await untilDom(page, { kind: 'attr', name: 'aria-checked', selector: generatedToggle, value: 'mixed' }, { message: 'generated toggle mixed', ms: panelsTimeout });
+    await untilDom(page, { kind: 'text', pattern: `^0/${String(expectedGeneratedTotal)}$`, selector: generatedCountSelector }, { message: 'generated count hidden', ms: panelsTimeout });
     await expect(page.locator('[data-diffseek-always-read]')).toHaveAttribute(
       'aria-pressed',
       'false',
@@ -159,10 +117,10 @@ async function measureHiddenDefaults(): Promise<void> {
     );
 
     await viewed.click();
-    await domWait(page, { kind: 'attr', name: 'aria-checked', selector: viewedToggle, value: 'true' }, stepTimeout, 'viewed toggle on');
+    await untilDom(page, { kind: 'attr', name: 'aria-checked', selector: viewedToggle, value: 'true' }, { message: 'viewed toggle on', ms: stepTimeout });
     await generated.click();
-    await domWait(page, { kind: 'attr', name: 'aria-checked', selector: generatedToggle, value: 'true' }, stepTimeout, 'generated toggle on');
-    await domWait(page, { kind: 'text', pattern: `^${generatedIndexedText(expectedGeneratedTotal)}$`, selector: generatedCountSelector }, panelsTimeout, 'generated count shown');
+    await untilDom(page, { kind: 'attr', name: 'aria-checked', selector: generatedToggle, value: 'true' }, { message: 'generated toggle on', ms: stepTimeout });
+    await untilDom(page, { kind: 'text', pattern: `^${generatedIndexedText(expectedGeneratedTotal)}$`, selector: generatedCountSelector }, { message: 'generated count shown', ms: panelsTimeout });
     await page.close();
 }
 
@@ -213,17 +171,16 @@ async function measureReview(
 ): Promise<LivePerfSample> {
   const started = Date.now();
   await navigate();
-  await domWait(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
+  await untilFirstControl(page);
   const firstRenderSeconds = await renderSeconds(page, started);
   // GitHub removes and restores panels on this navigation. Hot starts
   // counting here and later fails on rows back after 500 ms or never back.
   if (scenario === 'hot') await resetRedraws(page);
   const menuOpenSeconds = await openFilterMenu(page);
-  await domWait(
+  await untilDom(
     page,
     { kind: 'text', pattern: generatedCategorizedPattern(expectedGeneratedTotal).source, selector: generatedCounter },
-    panelsTimeout,
-    'generated counter categorized',
+    { message: 'generated counter categorized', ms: panelsTimeout },
   );
   const panelsSeconds = secondsBetween(started);
   if (scenario === 'hot') {
@@ -231,7 +188,7 @@ async function measureReview(
     // trace still timestamps returns: one back after 500 ms is a net loss.
     // A row that never returns trips the guard and is then counted as lost.
     try {
-      await domWait(page, { kind: 'trace-settled' }, stepTimeout, 'hot rows returned');
+      await untilDom(page, { kind: 'trace-settled' }, { message: 'hot rows returned', ms: stepTimeout });
     } catch {
       // A row that never returns is counted after the guard.
     }
@@ -253,25 +210,6 @@ async function measureReview(
   });
   console.log(`diffseek live-perf:${scenario}`, sample);
   return sample;
-}
-
-async function openFilterMenu(page: Page, guardMs = stepTimeout): Promise<number> {
-  const filters = page.locator('[data-diffseek="filters"]');
-  if ((await filters.count()) > 0) return 0;
-  // GitHub server-renders this button and later swaps in a client-rendered
-  // copy; clicks on the server copy do nothing. Wait for the interactive copy.
-  await domWait(page, { kind: 'filter-button-ready' }, guardMs, 'Filter options button interactive');
-  const button = page.getByRole('button', { name: 'Filter options' });
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await dismissCompactLinePopover(page);
-    await tagFilterButton(page);
-    const started = Date.now();
-    await button.click({ timeout: stepTimeout });
-    // Re-click only on an event: GitHub replaced the button under the click.
-    const outcome = await domWait(page, { kind: 'filter-menu-or-replaced' }, stepTimeout, 'Filter menu did not open');
-    if (outcome === 'open') return secondsBetween(started);
-  }
-  throw new Error('Filter options button kept being replaced');
 }
 
 async function prepareLiveContext(): Promise<void> {
@@ -307,29 +245,6 @@ async function prepareLiveContext(): Promise<void> {
     await setup.close();
 }
 
-async function readRedraws(page: Page): Promise<RedrawCounts> {
-  const counts = await page.locator('html').evaluate((root) => {
-    const data = root.dataset;
-    const value = (key: string): number => {
-      const parsed = Number(data[key] ?? '0');
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
-    return {
-      domMutations: value('diffseekDomMutations'),
-      panelNetLoss: value('diffseekPanelNetLoss'),
-      panelRebuilds: value('diffseekPanelRebuilds'),
-      panelsReadded: value('diffseekPanelsReadded'),
-      panelsRemoved: value('diffseekPanelsRemoved'),
-      reconciles: value('diffseekReconciles'),
-      treeNetLoss: value('diffseekTreeNetLoss'),
-      treeRebuilds: value('diffseekTreeRebuilds'),
-      treeRowsReadded: value('diffseekTreeRowsReadded'),
-      treeRowsRemoved: value('diffseekTreeRowsRemoved'),
-    };
-  });
-  return counts;
-}
-
 function registerLivePerf(): void {
   if (process.env['DIFFSEEK_LIVE_E2E'] !== '1') return;
   const source = process.env['DIFFSEEK_GITHUB_STORAGE_STATE'];
@@ -351,101 +266,6 @@ function registerLivePerf(): void {
     test('measures cold, warm, and hot reviews', measureLiveReviews);
     test('hide defaults hide generated and viewed files until shown', measureHiddenDefaults);
   });
-}
-
-async function renderSeconds(page: Page, started: number): Promise<number> {
-  const raw = await page.locator('html').getAttribute('data-diffseek-first-render-epoch');
-  const epoch = Number(raw);
-  if (Number.isFinite(epoch) && epoch >= started) {
-    return Number(((epoch - started) / 1000).toFixed(3));
-  }
-  return secondsBetween(started);
-}
-
-async function resetRedraws(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    globalThis.document.dispatchEvent(new Event('diffseek-redraw-reset'));
-  });
-}
-
-async function runMark(page: Page): Promise<RedrawCounts> {
-  await resetRedraws(page);
-  const before = await readRedraws(page);
-  // Folders are treeitems too and contain their files' links. aria-expanded
-  // is the folder control; the action must be this row's own icon, not a
-  // descendant file, or the id selector matches every row in the folder.
-  const row = page
-    .locator('[role="treeitem"]:not([aria-expanded])')
-    .filter({
-      has: page.locator('[data-diffseek-viewed-action][aria-pressed="false"]'),
-    })
-    .first();
-  await domWait(page, { kind: 'unviewed-file-row' }, stepTimeout, 'unviewed file row');
-  const action = await row.evaluateHandle((element) => {
-    return (
-      [...element.querySelectorAll<HTMLElement>('[data-diffseek-viewed-action]')].find(
-        (node) =>
-          node.closest('[role="treeitem"]') === element &&
-          node.getAttribute('aria-pressed') === 'false',
-      ) ?? null
-    );
-  });
-  const target = action.asElement();
-  if (!target) throw new Error('No unviewed file row to mark');
-  await target.click({ timeout: stepTimeout });
-  await untilAttribute(target, { name: 'aria-pressed', value: 'true' }, {
-    message: 'file marked viewed',
-    ms: stepTimeout,
-  });
-  await action.dispose();
-  return subtractCounts(await readRedraws(page), before);
-}
-
-async function runToggle(page: Page): Promise<RedrawCounts> {
-  await closeFilterMenu(page);
-  await resetRedraws(page);
-  await openFilterMenu(page);
-  const before = await readRedraws(page);
-  await page.locator(viewedToggle).click({ timeout: stepTimeout });
-  await domWait(page, { key: 'diffseekReconciles', kind: 'dataset-above', value: before.reconciles }, stepTimeout, 'toggle reconcile');
-  return subtractCounts(await readRedraws(page), before);
-}
-
-function secondsBetween(started: number): number {
-  return Number(((Date.now() - started) / 1000).toFixed(3));
-}
-
-async function showConversation(page: Page): Promise<void> {
-  const conversation = page.getByRole('link', { name: /^Conversation/v });
-  await domWait(page, { kind: 'link-prefix', prefix: 'Conversation' }, stepTimeout, `Conversation link missing at ${page.url()}`);
-  await conversation.first().click({ timeout: stepTimeout });
-  await page.waitForURL(/\/pull\/\d+(?:[?#].*)?$/v, { timeout: stepTimeout });
-  await domWait(page, { kind: 'absent', selector: '[data-diffseek-viewed-action]' }, stepTimeout, 'DiffSeek controls gone');
-}
-
-async function showFiles(page: Page): Promise<void> {
-  await domWait(page, { kind: 'present', selector: '#prs-files-anchor-tab, a[href*="/changes"], a[href$="/files"]' }, stepTimeout, `Files changed link missing at ${page.url()}`);
-  const anchored = page.locator('#prs-files-anchor-tab');
-  const files =
-    (await anchored.count()) > 0
-      ? anchored.first()
-      : page.getByRole('link', { name: 'Files changed' }).first();
-  await files.click({ timeout: stepTimeout });
-}
-
-function subtractCounts(after: RedrawCounts, before: RedrawCounts): RedrawCounts {
-  return {
-    domMutations: after.domMutations - before.domMutations,
-    panelNetLoss: after.panelNetLoss - before.panelNetLoss,
-    panelRebuilds: after.panelRebuilds - before.panelRebuilds,
-    panelsReadded: after.panelsReadded - before.panelsReadded,
-    panelsRemoved: after.panelsRemoved - before.panelsRemoved,
-    reconciles: after.reconciles - before.reconciles,
-    treeNetLoss: after.treeNetLoss - before.treeNetLoss,
-    treeRebuilds: after.treeRebuilds - before.treeRebuilds,
-    treeRowsReadded: after.treeRowsReadded - before.treeRowsReadded,
-    treeRowsRemoved: after.treeRowsRemoved - before.treeRowsRemoved,
-  };
 }
 
 async function writeDefaults(

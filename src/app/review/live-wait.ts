@@ -35,7 +35,6 @@ interface LiveGuard {
 
 /** Installs the in-page observer helpers into every document of the context. */
 export async function installLiveWaits(context: BrowserContext): Promise<void> {
-  await context.addInitScript(installLiveHolds);
   await context.addInitScript(installLiveVisible);
   await context.addInitScript(installLiveFilterButton);
   await context.addInitScript(installLiveInteractive);
@@ -45,7 +44,6 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
   await context.addInitScript(installLiveTextMatches);
   await context.addInitScript(installLiveUnviewedRow);
   await context.addInitScript(installLiveCheckReview);
-  await context.addInitScript(installLiveCheck);
   await context.addInitScript(installLiveObserve);
   await context.addInitScript(installLiveWaitEntry);
 }
@@ -91,25 +89,13 @@ async function guardWait<T>(
 ): Promise<T> {
   const { promise: timeout, reject } = Promise.withResolvers<never>();
   const timer = setTimeout(() => {
-    reject(new Error(`${message}: not seen within ${guard.ms} ms`));
+    reject(new Error(`${message}: not seen within ${String(guard.ms)} ms`));
   }, guard.ms);
   try {
     return await Promise.race([work, timeout]);
   } finally {
     clearTimeout(timer);
   }
-}
-
-function installLiveCheck(): void {
-  Object.defineProperty(globalThis, '__liveCheck', {
-    configurable: true,
-    value(condition: DomCondition): unknown {
-      const dom = globalThis.__liveCheckDom(condition);
-      if (dom !== undefined) return dom;
-      return globalThis.__liveCheckReview(condition);
-    },
-    writable: true,
-  });
 }
 
 function installLiveCheckDom(): void {
@@ -194,17 +180,6 @@ function installLiveFilterButton(): void {
   }
 }
 
-function installLiveHolds(): void {
-  Object.defineProperty(globalThis, '__liveHolds', {
-    configurable: true,
-    value(result: unknown): boolean {
-      const blocked: readonly unknown[] = [false, null, undefined, '', 0];
-      return !blocked.includes(result);
-    },
-    writable: true,
-  });
-}
-
 function installLiveInteractive(): void {
   Object.defineProperty(globalThis, '__liveInteractive', {
     configurable: true,
@@ -259,15 +234,16 @@ function installLiveObserve(): void {
   Object.defineProperty(globalThis, '__liveObserve', {
     configurable: true,
     value(test: () => unknown): Promise<unknown> {
+      const blocked = new Set<unknown>(['', 0, false, null, undefined]);
       return new Promise((resolve) => {
         const first = test();
-        if (globalThis.__liveHolds(first)) {
+        if (!blocked.has(first)) {
           resolve(first);
           return;
         }
         const observer = new MutationObserver(() => {
           const result = test();
-          if (!globalThis.__liveHolds(result)) return;
+          if (blocked.has(result)) return;
           observer.disconnect();
           resolve(result);
         });
@@ -339,7 +315,9 @@ function installLiveWaitEntry(): void {
     __liveWait: {
       ...define,
       value(condition: unknown): Promise<unknown> {
-        return globalThis.__liveObserve(() => globalThis.__liveCheck(condition));
+        return globalThis.__liveObserve(
+          () => globalThis.__liveCheckDom(condition) ?? globalThis.__liveCheckReview(condition),
+        );
       },
     },
     __liveWaitElement: {
