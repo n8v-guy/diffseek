@@ -2,7 +2,7 @@ import type {
   FilterDefaults,
   FilterDefaultState,
   RememberedFilterFacet,
-} from '@diffseek/browser/filter-defaults';
+} from '@diffseek/browser';
 import type { LabelFacet } from '@diffseek/review';
 
 export type FilterDefaultOptions = {

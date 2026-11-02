@@ -1,36 +1,32 @@
 import type {
-  FilterDefaults,
   FilterDefaultState,
-} from '@diffseek/browser/filter-defaults';
-import {
-  bindSnapshot,
-  refreshObservedFiles,
-  regionStructureKey,
-  scanPage,
-  treeStructureKey,
-  type PageSnapshot,
-} from '@diffseek/github/review-page/page-adapter';
-import {
-  type markViewed,
-  mountViewedActions,
-  type ViewedTarget,
-} from '@diffseek/github/review-page/viewed-actions';
-import { mountFilterMenu } from '@diffseek/github/review-view/filter-menu';
-import { ReviewPresenter } from '@diffseek/github/review-view/presenter';
+  FilterDefaults,
+} from '@diffseek/browser';
 import {
   afterNextPaint,
+  bindSnapshot,
   dismissSnackbar,
   filterMenus,
   menuNeedsRemount,
+  mountFilterMenu,
+  mountViewedActions,
+  refreshObservedFiles,
+  regionStructureKey,
   removeInjected,
   removeUnavailable,
+  ReviewPresenter,
+  scanPage,
   showAlwaysRead,
   showBatchResult,
   showBatchStarted,
   showRememberedFilterDefault,
   showUnavailable,
-} from '@diffseek/github/review-view/review-ui';
-import type { ReviewRef } from '@diffseek/github/routing/page-route';
+  treeStructureKey,
+  type markViewed,
+  type PageSnapshot,
+  type ReviewRef,
+  type ViewedTarget,
+} from '@diffseek/github';
 import type {
   MetadataCommitGuard,
   RepositoryMetadata,

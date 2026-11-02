@@ -6,11 +6,8 @@ import {
   readPullCache,
   writeCache,
   writePullCache,
-} from '@diffseek/browser/cache';
-import type {
-  RawFileRequest,
-  RawFileResult,
-} from '@diffseek/github/repository-content/raw-file';
+} from '@diffseek/browser';
+import type { RawFileRequest, RawFileResult } from '@diffseek/github';
 import {
   bundledGitAttributes,
   MetadataCommitGuard,

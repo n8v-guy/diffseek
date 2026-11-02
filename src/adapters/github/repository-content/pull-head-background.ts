@@ -1,4 +1,4 @@
-import { isRecord } from '@diffseek/browser/record';
+import { isRecord } from '@diffseek/browser';
 
 import {
   fetchPullHead,

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
+import type { PageSnapshot } from '@diffseek/github';
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
-import type { PageSnapshot } from '@diffseek/github/review-page/page-adapter';
 
 import { startReviewApp } from './review-app';
 

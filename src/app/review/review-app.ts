@@ -1,15 +1,15 @@
-import { writeCache } from '@diffseek/browser/cache';
 import {
-  type FilterDefaults,
   readFilterDefaults,
+  writeCache,
   writeFilterDefaults,
-} from '@diffseek/browser/filter-defaults';
-import { markViewed } from '@diffseek/github/review-page/viewed-actions';
+  type FilterDefaults,
+} from '@diffseek/browser';
 import {
   changesPathFromClassic,
+  markViewed,
   reviewFromPath,
   type ReviewRef,
-} from '@diffseek/github/routing/page-route';
+} from '@diffseek/github';
 import {
   MetadataCommitGuard,
   type RepositoryMetadata,

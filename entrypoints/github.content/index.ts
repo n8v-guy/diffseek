@@ -1,4 +1,4 @@
-import { startReviewApp } from '@diffseek/app/review/review-app';
+import { startReviewApp } from '@diffseek/app';
 import './style.css';
 
 export default defineContentScript({

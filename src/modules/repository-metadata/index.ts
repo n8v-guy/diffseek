@@ -1,5 +1,14 @@
-export * from './bundled-gitattributes';
-export * from './codeowners';
-export * from './commit-guard';
-export * from './gitattributes';
-export type * from './metadata';
+export { bundledGitAttributes } from './bundled-gitattributes';
+export {
+  ownersForPathOrNull,
+  parseCodeowners,
+  type CodeownersRule,
+} from './codeowners';
+export { MetadataCommitGuard } from './commit-guard';
+export {
+  attributesForPath,
+  parseGitAttributes,
+  type DiffSeekAttributes,
+  type GitAttributeRule,
+} from './gitattributes';
+export type { RepositoryMetadata, RepositoryRef } from './metadata';
