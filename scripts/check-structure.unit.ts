@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { findStructureViolations } from './structure-violations';
+import { findStructureViolations } from './check-structure';
 
 describe('repository structure', () => {
   it('accepts configured product, test, tooling, and documentation roots', () => {

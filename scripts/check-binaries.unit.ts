@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { findBinaryPaths } from './binary-paths';
+import { findBinaryPaths } from './check-binaries';
 
 describe('binary file check', () => {
   it('reports only paths git counts as binary', () => {

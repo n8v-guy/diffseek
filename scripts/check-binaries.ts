@@ -1,13 +1,28 @@
-#!/usr/bin/env -S node --experimental-strip-types
-
+import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { findBinaryPaths } from './binary-paths.ts';
-import { git } from './git-command.ts';
+/**
+ * Paths git itself treats as binary, read from `git diff --numstat -z`
+ * output. Detection is by content (git prints `-` for both counts), not by
+ * file extension.
+ */
+export function findBinaryPaths(numstat: string): string[] {
+  return numstat
+    .split('\0')
+    .map((record) => record.split('\t'))
+    .filter(([added, deleted]) => added === '-' && deleted === '-')
+    .map((fields) => fields.slice(2).join('\t'))
+    .filter((path) => path !== '');
+}
 
-const noRenamesFlag = '--no-renames';
-const numstatFlag = '--numstat';
+function git(args: string[], input?: string): string {
+  return execFileSync('git', args, {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    input,
+  });
+}
 
 function main(): void {
   const staged = process.argv.includes('--staged');
@@ -17,10 +32,10 @@ function main(): void {
     : git(['hash-object', '-t', 'tree', '--stdin'], '').trim();
   // Staged: what this commit adds or changes (removing a binary is fine).
   // Otherwise: every file in the HEAD tree, which CI cannot skip.
-  const args = staged
-    ? ['diff', '--cached', numstatFlag, '-z', noRenamesFlag, '--diff-filter=d']
-    : ['diff', numstatFlag, '-z', noRenamesFlag, emptyTree, 'HEAD'];
-  const binaries = findBinaryPaths(git(args));
+  const range = staged ? ['--cached', '--diff-filter=d'] : [emptyTree, 'HEAD'];
+  const binaries = findBinaryPaths(
+    git(['diff', '--numstat', '-z', '--no-renames', ...range]),
+  );
   if (binaries.length === 0) return;
 
   console.error(
