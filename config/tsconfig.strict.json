@@ -2,7 +2,6 @@
   "extends": "../tsconfig.depcruise.json",
   "compilerOptions": {
     "erasableSyntaxOnly": true,
-    "exactOptionalPropertyTypes": true,
-    "noPropertyAccessFromIndexSignature": true
+    "exactOptionalPropertyTypes": true
   }
 }
