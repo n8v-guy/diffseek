@@ -1,6 +1,4 @@
 #!/usr/bin/env -S node --experimental-strip-types
-import type { Page } from '@playwright/test';
-
 /**
  * Store screenshots for https://github.com/sha-tm/diffseek-test-data/pull/2.
  *
@@ -17,6 +15,8 @@ import type { Page } from '@playwright/test';
  * kept capture-N.json files without opening GitHub. BASELINE=1 only restores
  * the 12/82 baseline and checks it file by file.
  */
+import type { Page } from '@playwright/test';
+
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
