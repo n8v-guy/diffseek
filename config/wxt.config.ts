@@ -18,14 +18,6 @@ const branchCommitCount = Number(
 );
 
 export default defineConfig({
-  alias: {
-    '@diffseek/app': 'src/app',
-    '@diffseek/browser': 'src/adapters/browser',
-    '@diffseek/github': 'src/adapters/github',
-    '@diffseek/repository-metadata':
-      'src/modules/repository-metadata/index.ts',
-    '@diffseek/review': 'src/modules/review/index.ts',
-  },
   manifestVersion: 3,
   manifest: ({ browser }) => ({
     name: 'DiffSeek for GitHub: cut the noise in big PRs',
@@ -51,6 +43,7 @@ export default defineConfig({
         }
       : {}),
   }),
+  vite: () => ({ resolve: { tsconfigPaths: true } }),
   zip: {
     artifactTemplate: '{{name}}-{{version}}-{{browser}}.zip',
     zipSources: false,

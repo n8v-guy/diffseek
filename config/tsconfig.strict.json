@@ -1,0 +1,7 @@
+{
+  "extends": ["@tsconfig/strictest/tsconfig.json", "../tsconfig.json"],
+  "compilerOptions": {
+    "erasableSyntaxOnly": true,
+    "noPropertyAccessFromIndexSignature": false
+  }
+}

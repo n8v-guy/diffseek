@@ -1,0 +1,27 @@
+{
+  "extends": "dependency-cruiser/configs/recommended-strict",
+  "forbidden": [
+    {
+      "name": "no-orphans",
+      "severity": "ignore"
+    },
+    {
+      "name": "not-to-test",
+      "severity": "error",
+      "from": {
+        "pathNot": "\\.(spec|test|unit|fixture|support)\\.ts$|\\.e2e\\.playwright\\.ts$"
+      },
+      "to": {
+        "path": "\\.(spec|test|unit|fixture|support)\\.ts$|\\.e2e\\.playwright\\.ts$"
+      }
+    }
+  ],
+  "options": {
+    "enhancedResolveOptions": {
+      "conditionNames": ["import", "types", "default"],
+      "exportsFields": ["exports"]
+    },
+    "tsConfig": { "fileName": "tsconfig.json" },
+    "tsPreCompilationDeps": true
+  }
+}

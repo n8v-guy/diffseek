@@ -78,5 +78,6 @@ because hooks can be skipped, CI checks every file in the tree too.
 
 Git hooks run automatically: before a commit, lint fixes on staged code, the
 repository structure rules, and the binary check; before a push, the full CI
-check (structure, binaries, lint, unused code, types, tests with coverage,
-production dependency audit, and build).
+check (structure, binaries, unused code, types, tests with coverage,
+production dependency audit, and build). CI also runs the stricter lint,
+duplication, dependency, stylesheet, Firefox store, and workflow gates.

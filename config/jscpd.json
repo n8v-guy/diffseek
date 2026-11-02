@@ -1,0 +1,15 @@
+{
+  "format": ["typescript", "css"],
+  "gitignore": true,
+  "ignore": [
+    "**/*.{spec,test,unit}.ts",
+    "**/*.e2e.playwright.ts",
+    "**/*.fixture.ts",
+    "**/*.support.ts",
+    "**/fixtures/**",
+    "config/**",
+    "scripts/**"
+  ],
+  "minLines": 10,
+  "threshold": 0
+}
