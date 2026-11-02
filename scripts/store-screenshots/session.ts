@@ -8,6 +8,7 @@ import {
   changesUrl,
   extensionPath,
   type FilterDefaults,
+  maxAttempts,
   quietDefaults,
   scale,
   shotDir,
@@ -24,7 +25,7 @@ export async function openReview(page: Page): Promise<void> {
       await page.locator(viewedActionSelector).first().waitFor({ timeout: 60_000 });
       break;
     } catch (error) {
-      if (attempt >= 3) throw error;
+      if (attempt >= maxAttempts) throw error;
       console.log('Review page did not load, retrying.');
     }
   }

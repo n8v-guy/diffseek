@@ -6,6 +6,7 @@ import type {
   Note,
   PlacedLayer,
   Point,
+  Ring,
   Route,
   Scene,
   Tag,
@@ -13,9 +14,21 @@ import type {
 import type { Box } from './config.ts';
 
 type Attrs = Record<string, number | string>;
+/** A note with the box its leader points at. */
+interface Callout { note: Note; target: Box; }
 interface Paint { accent: string; corner: number; svg: SVGSVGElement; }
 
 const svgNamespace = 'http://www.w3.org/2000/svg';
+
+export function centerOf(box: Box): Point {
+  return [box.x + box.w / 2, box.y + box.h / 2];
+}
+
+export function ringOf(box: Box): Ring {
+  const [cx, cy] = centerOf(box);
+  const pad = 6;
+  return { cx, cy, r: Math.max(box.w, box.h) / 2 + pad };
+}
 
 function appendBold(parent: ParentNode, text: string): void {
   const pattern = /\*\*(.+?)\*\*/gv;
@@ -59,8 +72,8 @@ function drawArrowhead(paint: Paint, from: Point, to: Point): void {
   const size = 11;
   const points = [
     [toX, toY],
-    [toX - ux * size - uy * size * 0.5, toY - uy * size + ux * size * 0.5],
-    [toX - ux * size + uy * size * 0.5, toY - uy * size - ux * size * 0.5],
+    [toX - ux * size - uy * size / 2, toY - uy * size + ux * size / 2],
+    [toX - ux * size + uy * size / 2, toY - uy * size - ux * size / 2],
   ];
   drawShape(paint, 'polygon', { fill: paint.accent, points: points.map((point) => point.join(',')).join(' ') });
 }
@@ -73,20 +86,20 @@ function drawLayers(body: HTMLElement, layers: PlacedLayer[]): void {
   for (const layer of layers) {
     const box = document.createElement('div');
     box.className = 'layer';
-    box.style.left = `${layer.left}px`;
-    box.style.width = `${layer.width}px`;
+    box.style.left = px(layer.left);
+    box.style.width = px(layer.width);
     const image = document.createElement('img');
     image.src = layer.src;
-    image.style.width = `${layer.width0 * layer.ratio}px`;
-    image.style.height = `${layer.height0 * layer.ratio}px`;
-    image.style.marginLeft = `${-(layer.x0 + layer.crop)}px`;
-    image.style.marginTop = `${-layer.y0}px`;
+    image.style.width = px(layer.width0 * layer.ratio);
+    image.style.height = px(layer.height0 * layer.ratio);
+    image.style.marginLeft = px(-(layer.x0 + layer.crop));
+    image.style.marginTop = px(-layer.y0);
     box.append(image);
     body.append(box);
     if (layer.left <= 0) continue;
     const divider = document.createElement('div');
     divider.className = 'divider';
-    divider.style.left = `${layer.left}px`;
+    divider.style.left = px(layer.left);
     body.append(divider);
   }
 }
@@ -94,7 +107,7 @@ function drawLayers(body: HTMLElement, layers: PlacedLayer[]): void {
 function drawMasks(body: HTMLElement, masks: Box[]): void {
   for (const mask of masks) {
     const box = document.createElement('div');
-    box.style.cssText = `position:absolute;left:${mask.x}px;top:${mask.y}px;width:${mask.w}px;height:${mask.h}px;background:#fff`;
+    box.style.cssText = `position:absolute;left:${px(mask.x)};top:${px(mask.y)};width:${px(mask.w)};height:${px(mask.h)};background:#fff`;
     body.append(box);
   }
 }
@@ -146,24 +159,22 @@ function drawTags(body: HTMLElement, tags: Tag[]): void {
     const tag = document.createElement('div');
     tag.className = 'tag';
     tag.textContent = item.text;
-    tag.style.left = `${item.x}px`;
-    tag.style.top = `${item.y}px`;
+    tag.style.left = px(item.x);
+    tag.style.top = px(item.y);
     const size = item.size ?? 0;
-    if (size > 0) tag.style.fontSize = `${size}px`;
+    if (size > 0) tag.style.fontSize = px(size);
     if (item.center === true) tag.style.transform = 'translateX(-50%)';
     if (item.right === true) tag.style.transform = 'translateX(-100%)';
     body.append(tag);
   }
 }
 
-function drawTarget(paint: Paint, note: Note, t: Box, label: HTMLElement): void {
+function drawTarget(paint: Paint, { note, target }: Callout, label: HTMLElement): void {
   const rect = label.getBoundingClientRect();
-  const cx = t.x + t.w / 2;
-  const cy = t.y + t.h / 2;
-  const anchor = edgeAnchor(paint, rect, cx, cy);
+  const anchor = edgeAnchor(paint, rect, centerOf(target));
   const start = note.shape === 'ring'
-    ? ringStart(paint, t, anchor)
-    : rectStart(paint, note, t, anchor);
+    ? ringStart(paint, target, anchor)
+    : rectStart(paint, { note, target }, anchor);
   drawShape(paint, 'line', { stroke: paint.accent, 'stroke-linecap': 'round', 'stroke-width': 2, x1: start[0], x2: anchor[0], y1: start[1], y2: anchor[1] });
   drawDot(paint, anchor);
   // Arrowhead on the target end, pointing at the target.
@@ -171,7 +182,7 @@ function drawTarget(paint: Paint, note: Note, t: Box, label: HTMLElement): void 
   if (note.target2) drawSourceBox(paint, note.target2, rect);
 }
 
-function edgeAnchor(paint: Paint, rect: DOMRect, x: number, y: number): Point {
+function edgeAnchor(paint: Paint, rect: DOMRect, [x, y]: Point): Point {
   const { corner } = paint;
   const clampedX = Math.max(rect.left + corner, Math.min(x, rect.right - corner));
   const clampedY = Math.max(rect.top + corner, Math.min(y, rect.bottom - corner));
@@ -214,33 +225,32 @@ function placeNotes(body: HTMLElement, notes: Note[]): HTMLElement[] {
     if (note === undefined) continue;
     const group = note.group;
     const groupWidth = group === undefined || group === '' ? undefined : widths[group];
-    positionNote(label, note, groupWidth, labels);
+    if (groupWidth !== undefined) label.style.width = px(groupWidth);
+    positionNote(label, note, labels);
   }
   return placed;
 }
 
-function positionNote(
-  label: HTMLElement,
-  note: Note,
-  groupWidth: number | undefined,
-  labels: Record<string, HTMLElement>,
-): void {
-  if (groupWidth !== undefined) label.style.width = `${groupWidth}px`;
+function positionNote(label: HTMLElement, note: Note, labels: Record<string, HTMLElement>): void {
   const { height, width } = label.getBoundingClientRect();
   let left = note.at[0];
   if (note.align === 'center') left -= width / 2;
   else if (note.align === 'right') left -= width;
-  if (note.within) left = Math.max(note.within[0] + 12, Math.min(left, note.within[1] - 12 - width));
+  const margin = 12;
+  if (note.within) left = Math.max(note.within[0] + margin, Math.min(left, note.within[1] - margin - width));
   let top = note.middle === true ? note.at[1] - height / 2 : note.at[1];
-  const above = note.below ? labels[note.below[0]] : undefined;
-  if (note.below && above) top = above.getBoundingClientRect().bottom + note.below[1];
-  label.style.left = `${Math.round(left)}px`;
-  label.style.top = `${Math.round(top)}px`;
+  const above = note.below ? labels[note.below.id] : undefined;
+  if (note.below && above) top = above.getBoundingClientRect().bottom + note.below.gap;
+  label.style.left = px(Math.round(left));
+  label.style.top = px(Math.round(top));
 }
 
-function rectStart(paint: Paint, note: Note, t: Box, anchor: Point): Point {
-  const cx = t.x + t.w / 2;
-  const cy = t.y + t.h / 2;
+function px(value: number): string {
+  return `${String(value)}px`;
+}
+
+function rectStart(paint: Paint, { note, target: t }: Callout, anchor: Point): Point {
+  const [cx, cy] = centerOf(t);
   const [ax, ay] = anchor;
   const dx = ax - cx;
   const dy = ay - cy;
@@ -248,11 +258,14 @@ function rectStart(paint: Paint, note: Note, t: Box, anchor: Point): Point {
   const hw = t.w / 2 + pad;
   const hh = t.h / 2 + pad;
   drawShape(paint, 'rect', { fill: 'none', height: hh * 2, rx: 8, stroke: paint.accent, 'stroke-width': 2.5, width: hw * 2, x: cx - hw, y: cy - hh });
+  // Keeps a leader end off the outline's rounded corners.
+  const corner = 10;
   // Enter through the left edge, level with the label where possible.
-  if (note.enter === 'left') return [cx - hw, Math.max(cy - hh + 10, Math.min(ay, cy + hh - 10))];
+  if (note.enter === 'left') return [cx - hw, Math.max(cy - hh + corner, Math.min(ay, cy + hh - corner))];
   // Leave through the top edge, toward the label's side.
-  if (note.exit === 'top') return [Math.max(cx - hw + 10, Math.min(ax, cx + hw - 10)), cy - hh];
-  const k = Math.min(hw / Math.abs(dx || 1e-6), hh / Math.abs(dy || 1e-6));
+  if (note.exit === 'top') return [Math.max(cx - hw + corner, Math.min(ax, cx + hw - corner)), cy - hh];
+  const epsilon = 1e-6;
+  const k = Math.min(hw / Math.abs(dx || epsilon), hh / Math.abs(dy || epsilon));
   return [cx + dx * k, cy + dy * k];
 }
 
@@ -272,18 +285,16 @@ function renderScene(scene: Scene): void {
     const label = placed[index];
     if (!label) continue;
     if (note.routes) drawRoutes(paint, note.routes, label);
-    if (note.target) drawTarget(paint, note, note.target, label);
+    if (note.target) drawTarget(paint, { note, target: note.target }, label);
   }
   drawTags(body, scene.tags);
 }
 
 function ringStart(paint: Paint, t: Box, anchor: Point): Point {
-  const cx = t.x + t.w / 2;
-  const cy = t.y + t.h / 2;
+  const { cx, cy, r } = ringOf(t);
   const dx = anchor[0] - cx;
   const dy = anchor[1] - cy;
   const length = Math.hypot(dx, dy) || 1;
-  const r = Math.max(t.w, t.h) / 2 + 6;
   drawShape(paint, 'circle', { cx, cy, fill: 'none', r, stroke: paint.accent, 'stroke-width': 2.5 });
   return [cx + (dx / length) * r, cy + (dy / length) * r];
 }
@@ -311,6 +322,9 @@ export const canvasScript = [
   appendText,
   appendCode,
   appendBold,
+  px,
+  centerOf,
+  ringOf,
   drawLayers,
   drawMasks,
   drawShape,

@@ -1,10 +1,12 @@
 import type { ElementHandle, Locator, Page } from '@playwright/test';
 
-import { treeItemSelector, viewedActionSelector } from './config.ts';
+import { inputPause, pollInterval, treeItemSelector, viewedActionSelector } from './config.ts';
 
 const expandedAttribute = 'aria-expanded';
 const missingRowLabel = 'a row';
 const pressedAttribute = 'aria-pressed';
+// Pause (ms) for the virtualised tree to render rows after a scroll or toggle.
+const treeRenderPause = 150;
 
 /** Every file row id in the tree, scrolling it so virtualised rows render. */
 export async function collectFileIds(page: Page): Promise<string[]> {
@@ -15,7 +17,8 @@ export async function collectFileIds(page: Page): Promise<string[]> {
 export async function collectFileStates(page: Page): Promise<Map<string, null | string>> {
   await expandAll(page);
   const seen = new Map<string, null | string>();
-  for (let step = 0; step < 40; step += 1) {
+  const maxScrollSteps = 40;
+  for (let step = 0; step < maxScrollSteps; step += 1) {
     const rows = await page.evaluate(
       ({ action, expanded, item, pressed }) => {
         const { document } = globalThis;
@@ -34,7 +37,7 @@ export async function collectFileStates(page: Page): Promise<Map<string, null | 
     );
     for (const [id, pressed] of rows) seen.set(id, pressed);
     if (!(await scrollTree(page))) break;
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(treeRenderPause);
   }
   return seen;
 }
@@ -46,14 +49,15 @@ export async function expandTo(page: Page, id: string): Promise<void> {
     if ((await row.count()) === 0) await expandAll(page);
     // GitHub folds single-child folders into one row, like services/payments.
     if ((await row.count()) === 0 && depth < parts.length) continue;
-    if ((await row.getAttribute(expandedAttribute)) === 'false') await toggleFolder(page, row, 200);
+    if ((await row.getAttribute(expandedAttribute)) === 'false') await toggleFolder(page, row, inputPause);
   }
 }
 
 /** The row's own viewed circle, not one from a nested row. */
 export async function ownAction(row: Locator): Promise<ElementHandle<HTMLElement>> {
   // The circle is injected after GitHub renders the row, so give it a moment.
-  for (let attempt = 0; attempt < 25; attempt += 1) {
+  const circleChecks = 25;
+  for (let attempt = 0; attempt < circleChecks; attempt += 1) {
     const handle = await row.evaluateHandle(
       (element, { action, item }) =>
         [...element.querySelectorAll<HTMLElement>(action)].find((node) => node.closest(item) === element) ?? null,
@@ -61,9 +65,9 @@ export async function ownAction(row: Locator): Promise<ElementHandle<HTMLElement
     );
     const element = handle.asElement();
     if (element) return element;
-    await row.page().waitForTimeout(200);
+    await row.page().waitForTimeout(pollInterval);
   }
-  throw new Error(`Viewed circle is missing on ${await rowLabel(row)}`);
+  throw new Error(`Viewed circle is missing on ${String(await rowLabel(row))}`);
 }
 
 export async function setFileViewed(page: Page, id: string, viewed: boolean): Promise<void> {
@@ -102,10 +106,11 @@ export function treeRow(page: Page, id: string): Locator {
 }
 
 async function expandAll(page: Page): Promise<void> {
-  for (let guard = 0; guard < 80; guard += 1) {
+  const maxFolders = 80;
+  for (let guard = 0; guard < maxFolders; guard += 1) {
     const collapsed = page.locator(`${treeItemSelector}[aria-expanded="false"]`);
     if ((await collapsed.count()) === 0) return;
-    await toggleFolder(page, collapsed.first(), 150);
+    await toggleFolder(page, collapsed.first(), treeRenderPause);
   }
 }
 
@@ -121,11 +126,13 @@ function scrollTree(page: Page): Promise<boolean> {
   return page.evaluate(() => {
     const { document } = globalThis;
     const tree = document.querySelector('[role="tree"]');
+    // Skip near-fits, then scroll most of a screen, never less than `min`.
+    const step = { min: 240, share: 0.8, slack: 4 };
     let node = tree?.parentElement ?? null;
-    while (node && node.scrollHeight <= node.clientHeight + 4) node = node.parentElement;
+    while (node && node.scrollHeight <= node.clientHeight + step.slack) node = node.parentElement;
     if (!node) return false;
     const before = node.scrollTop;
-    node.scrollTop = before + Math.max(240, node.clientHeight * 0.8);
+    node.scrollTop = before + Math.max(step.min, node.clientHeight * step.share);
     return node.scrollTop !== before;
   });
 }

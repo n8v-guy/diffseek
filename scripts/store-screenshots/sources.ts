@@ -5,13 +5,13 @@ import {
   clipHeight,
   clipWidth,
   compareUrl,
+  gutter,
   menuSelector,
   outHeight,
   outWidth,
   type Rect,
   scale,
   type Shot,
-  sourceLines,
 } from './config.ts';
 import { frame, outBox, settleLayout, shoot } from './geometry.ts';
 import { paymentsRow, settleCounts } from './page.ts';
@@ -43,6 +43,18 @@ const entrySelector = (filePath: string): string =>
   `copilot-diff-entry[data-file-path="${filePath}"]`;
 // Formats with no linguist-language line fall back to the file extension.
 const otherFormats = ['proto', 'snap', 'sql', 'yaml'];
+// The lines each menu row reads, under a comment line just above `first`.
+const sourceRuns: Record<SourceKey, { file: string; first: number; last: number }> = {
+  generated: { file: attributes, first: 4, last: 7 },
+  payments: { file: owners, first: 10, last: 11 },
+  tests: { file: attributes, first: 20, last: 23 },
+  typescript: { file: attributes, first: 26, last: 27 },
+};
+// The menu keeps a strip on the right; the labels sit between it and the
+// source lines.
+const menuStrip = 430;
+const lineRange = (first: number, last: number): number[] =>
+  Array.from({ length: last - first + 1 }, (_, index) => first + index);
 
 /**
  * Left: GitHub's own compare view of the base branch against its
@@ -61,7 +73,7 @@ export async function sourcesSplit(page: Page): Promise<SourcesCapture> {
   await ownersEntry.evaluate((element) => { element.scrollIntoView({ block: 'start' }); });
   await page.evaluate(() => {
     const { window } = globalThis;
-    window.scrollBy(0, -12);
+    window.scrollBy({ top: -12 });
   });
   await settleLayout(page);
   const top = await ownersEntry.boundingBox();
@@ -69,20 +81,16 @@ export async function sourcesSplit(page: Page): Promise<SourcesCapture> {
   // A little smaller than the menu, so the longest source line clears the
   // label column.
   const sourceZoom = 1.35;
-  const sourceClip = { height: outHeight / sourceZoom, width: outWidth / sourceZoom, x: top.x - 4, y: top.y - 10, zoom: sourceZoom };
-  const lines: Record<SourceKey, Rect> = {
-    generated: await lineRows(page, attributes, [4, 5, 6, 7]),
-    payments: await lineRows(page, owners, [10, 11]),
-    tests: await lineRows(page, attributes, [20, 21, 22, 23]),
-    typescript: await lineRows(page, attributes, [26, 27]),
-  };
+  const margin = { left: 4, top: 10 };
+  const sourceClip = { height: outHeight / sourceZoom, width: outWidth / sourceZoom, x: top.x - margin.left, y: top.y - margin.top, zoom: sourceZoom };
   // Highlight the code text, not the full-width row. compose() trims the
   // box where it would run under its label.
+  const sourceBox = async (key: SourceKey): Promise<Box> => outBox(await lineRows(page, key), sourceClip);
   const source = {
-    generated: await outBox(lines.generated, sourceClip, 0, 0),
-    payments: await outBox(lines.payments, sourceClip, 0, 0),
-    tests: await outBox(lines.tests, sourceClip, 0, 0),
-    typescript: await outBox(lines.typescript, sourceClip, 0, 0),
+    generated: await sourceBox('generated'),
+    payments: await sourceBox('payments'),
+    tests: await sourceBox('tests'),
+    typescript: await sourceBox('typescript'),
   };
   const sourceShot = await shoot(page, sourceClip);
   return { sourceShot, ...menu, source };
@@ -106,18 +114,17 @@ async function captureMenu(page: Page): Promise<Omit<SourcesCapture, 'source' | 
   const menuClip = await frame(
     page,
     [menu.locator('[data-filter-kind="viewed"]'), formatRow(otherFormats.at(-1) ?? '')],
-    { height: clipHeight, width: clipWidth },
+    { height: clipHeight, pad: 12, width: clipWidth },
   );
   await page.mouse.move(2, 2);
-  // The menu keeps a 430px strip on the right; the labels sit between it
-  // and the source lines.
-  const menuLeft = outWidth - 430;
+  const menuLeft = outWidth - menuStrip;
   const menuBox = await menu.boundingBox();
   if (!menuBox) throw new Error('The filter menu is off screen');
-  const menuCrop = Math.round((menuBox.x - menuClip.x) * scale - 16);
+  const menuCrop = Math.round((menuBox.x - menuClip.x) * scale - gutter);
+  const placement = { crop: menuCrop, left: menuLeft };
   // The menu's own box on the canvas; the page around it is painted white.
-  const menuFrame = await outBox(menuBox, menuClip, menuCrop, menuLeft);
-  const box = (row: Locator): Promise<Box> => outBox(row, menuClip, menuCrop, menuLeft);
+  const menuFrame = await outBox(menuBox, menuClip, placement);
+  const box = (row: Locator): Promise<Box> => outBox(row, menuClip, placement);
   const found = {
     generated: await box(rows.generated),
     payments: await box(rows.payments),
@@ -127,8 +134,9 @@ async function captureMenu(page: Page): Promise<Omit<SourcesCapture, 'source' | 
   const formatBoxes: Box[] = [];
   for (const name of otherFormats) formatBoxes.push(await box(formatRow(name)));
   // Trim where the TypeScript row meets proto, so the two outlines keep a gap.
-  found.typescript = { ...found.typescript, h: found.typescript.h - 6 };
-  const otherTop = Math.min(...formatBoxes.map((item) => item.y)) + 8;
+  const trim = { other: 8, typescript: 6 };
+  found.typescript = { ...found.typescript, h: found.typescript.h - trim.typescript };
+  const otherTop = Math.min(...formatBoxes.map((item) => item.y)) + trim.other;
   const [firstFormat] = formatBoxes;
   if (!firstFormat) throw new Error('No other format rows');
   const other = {
@@ -206,7 +214,8 @@ function hideCodeownersErrors(selector: string): void {
   const { document } = globalThis;
   for (const node of document.querySelectorAll(`${selector} *`)) {
     const text = node.textContent;
-    const errorBanner = node.children.length < 4
+    const bannerChildLimit = 4;
+    const errorBanner = node.children.length < bannerChildLimit
       && text.includes('contains errors')
       && node.closest('table') === null;
     if (!errorBanner) continue;
@@ -218,8 +227,9 @@ function hideCodeownersErrors(selector: string): void {
   }
 }
 
-/** Code-text box of the given line numbers in one compare file. */
-function lineRows(page: Page, filePath: string, lineNumbers: number[]): Promise<Rect> {
+/** Code-text box of the lines one menu row reads. */
+function lineRows(page: Page, key: SourceKey): Promise<Rect> {
+  const run = sourceRuns[key];
   return page.evaluate(({ cellSelector, codeSelector, lineAttribute, numbers, selector }) => {
     const { document } = globalThis;
     const file = document.querySelector(selector);
@@ -235,7 +245,8 @@ function lineRows(page: Page, filePath: string, lineNumbers: number[]): Promise<
       range.selectNodeContents(code);
       const text = range.getBoundingClientRect();
       const cell = row.getBoundingClientRect();
-      return { bottom: cell.bottom, left: text.left - 4, right: text.right + 4, top: cell.top };
+      const pad = 4;
+      return { bottom: cell.bottom, left: text.left - pad, right: text.right + pad, top: cell.top };
     });
     const x = Math.min(...boxes.map((box) => box.left));
     const y = Math.min(...boxes.map((box) => box.top));
@@ -249,8 +260,8 @@ function lineRows(page: Page, filePath: string, lineNumbers: number[]): Promise<
     cellSelector: lineCell,
     codeSelector: blobCodeSelector,
     lineAttribute: lineNumberAttribute,
-    numbers: lineNumbers,
-    selector: entrySelector(filePath),
+    numbers: lineRange(run.first, run.last),
+    selector: entrySelector(run.file),
   });
 }
 
@@ -276,8 +287,13 @@ function ownersFirst([ownersSelector, attributesSelector]: string[]): void {
 
 /** Leaves only the kept CODEOWNERS and .gitattributes lines on the compare page. */
 async function trimCompare(page: Page): Promise<void> {
-  const kept = Object.keys(sourceLines);
-  const files = Object.fromEntries(kept.map((filePath) => [entrySelector(filePath), sourceLines[filePath] ?? []]));
+  // Lines kept on GitHub's compare page; the rest of each file is folded away.
+  const keptLines: Record<string, number[]> = {};
+  for (const { file, first, last } of Object.values(sourceRuns)) {
+    keptLines[file] = [...(keptLines[file] ?? []), ...lineRange(first - 1, last)];
+  }
+  const kept = Object.keys(keptLines);
+  const files = Object.fromEntries(Object.entries(keptLines).map(([filePath, lines]) => [entrySelector(filePath), lines]));
   await page.evaluate(({ cellSelector, keep, lineAttribute }) => {
     const { document } = globalThis;
     for (const [selector, lines] of Object.entries(keep)) {

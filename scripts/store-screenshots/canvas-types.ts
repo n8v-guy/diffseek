@@ -5,7 +5,7 @@ export interface Note {
   align?: 'center' | 'right';
   arrow?: boolean;
   at: Point;
-  below?: [string, number];
+  below?: { gap: number; id: string };
   body?: string;
   enter?: 'left';
   exit?: 'top';

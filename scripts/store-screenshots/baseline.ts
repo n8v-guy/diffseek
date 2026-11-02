@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { baseline, totalFiles } from './config.ts';
+import { baseline, maxAttempts, totalFiles } from './config.ts';
 import {
   closeMenu,
   expectCounter,
@@ -16,6 +16,7 @@ import { collectFileIds, collectFileStates, setFileViewed } from './tree.ts';
 
 const clearAllSelector =
   '[data-diffseek-menu-viewed-action][data-viewed-facet="viewed"][data-viewed-value="true"]';
+const baselineCount = `${String(baseline.length)}/${String(totalFiles)}`;
 
 /** BASELINE=1: restore the demo PR, then prove it, without taking shots. */
 export async function restoreAndVerify(): Promise<void> {
@@ -57,13 +58,14 @@ async function clearViewedMarks(page: Page): Promise<void> {
 async function confirmBaseline(page: Page, attempt: number): Promise<void> {
   // GitHub saves viewed marks in the background. Reload to prove they stuck
   // before the browser closes, and go again if the server still disagrees.
-  await page.waitForTimeout(5_000);
+  const saveGrace = 5_000;
+  await page.waitForTimeout(saveGrace);
   await openReview(page);
   if (await hasCounter(page, baseline.length)) {
-    console.log(`Baseline restored: ${baseline.length}/${totalFiles} viewed.`);
+    console.log(`Baseline restored: ${baselineCount} viewed.`);
     return;
   }
-  if (attempt >= 3) throw new Error('Baseline did not stick after 3 tries');
+  if (attempt >= maxAttempts) throw new Error(`Baseline did not stick after ${String(maxAttempts)} tries`);
   console.log('Baseline did not stick, restoring again.');
   await restoreBaseline(page, attempt + 1);
 }
@@ -109,6 +111,6 @@ async function verifyBaseline(page: Page): Promise<void> {
   const report = { counted, extra, files: states.size, missing, viewed: viewed.length };
   console.log('baseline check:', JSON.stringify(report));
   if (states.size !== totalFiles || extra.length > 0 || missing.length > 0 || !counted) {
-    throw new Error(`The demo PR is not at its ${baseline.length}/${totalFiles} baseline: ${JSON.stringify(report)}`);
+    throw new Error(`The demo PR is not at its ${baselineCount} baseline: ${JSON.stringify(report)}`);
   }
 }

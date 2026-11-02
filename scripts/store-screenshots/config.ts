@@ -4,12 +4,6 @@ const prUrl = 'https://github.com/sha-tm/diffseek-test-data/pull/2';
 export const changesUrl = `${prUrl}/changes?new_files_changed=true`;
 export const compareUrl =
   'https://github.com/sha-tm/diffseek-test-data/compare/7cf6ff089a...showcase/acme-base';
-// Lines kept on GitHub's compare page; the rest of each file is folded away.
-export const sourceLines: Record<string, number[]> = {
-  '.gitattributes': [3, 4, 5, 6, 7, 19, 20, 21, 22, 23, 25, 26, 27],
-  CODEOWNERS: [9, 10, 11],
-};
-
 export interface FilterDefaults { hidden: string[]; viewed: string[] }
 // Filter defaults with auto-view off, so a fresh profile leaves the PR's
 // viewed state alone. Shot 1 skips this and shows the real first run.
@@ -26,6 +20,15 @@ export const outHeight = 800;
 export const accent = '#d9480f';
 export const clipWidth = outWidth / scale;
 export const clipHeight = outHeight / scale;
+export const halfWidth = outWidth / 2;
+// Space kept left of a framed menu.
+export const gutter = 16;
+// Pauses (ms) for GitHub to repaint after input, and for layout to settle.
+export const inputPause = 200;
+export const settlePause = 300;
+export const pollInterval = 200;
+// Tries for a GitHub step that sometimes stalls.
+export const maxAttempts = 3;
 export const extensionPath = path.resolve(
   process.env['EXTENSION_PATH'] ?? '.output/chrome-mv3',
 );

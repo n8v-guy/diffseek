@@ -3,15 +3,24 @@ import type { ElementHandle, Locator, Page } from '@playwright/test';
 import {
   type Box,
   type Clip,
+  gutter,
+  halfWidth,
   menuSelector,
   outWidth,
   type Rect,
   scale,
+  settlePause,
   type Shot,
   viewport,
 } from './config.ts';
 
-interface FrameSize { height: number; pad?: number; width: number }
+interface FrameSize { height: number; pad: number; width: number }
+/** Where a capture lands on the canvas: `crop` px cut from its left, then shifted `left`. */
+interface Placement { crop?: number; left?: number }
+
+// Byte offsets of the width and height in a PNG's IHDR chunk.
+const pngWidthOffset = 16;
+const pngHeightOffset = 20;
 
 /** The viewed circle is painted by ::before; return that disc's box. */
 export function discOf(target: ElementHandle | Locator): Promise<Rect> {
@@ -20,14 +29,18 @@ export function discOf(target: ElementHandle | Locator): Promise<Rect> {
   return evaluate(measureDisc);
 }
 
+/** "WxH", as messages print a size. */
+export function formatSize(width: number, height: number): string {
+  return `${String(width)}x${String(height)}`;
+}
+
 /** A clip of the given size that holds every subject. */
 export async function frame(
   page: Page,
   locators: Locator[],
   size: FrameSize,
 ): Promise<Clip> {
-  const { height, width } = size;
-  const pad = size.pad ?? 12;
+  const { height, pad, width } = size;
   const [first] = locators;
   if (!first) throw new Error('A frame needs a subject');
   await first.evaluate((element) => { element.scrollIntoView({ block: 'start', inline: 'nearest' }); });
@@ -45,11 +58,11 @@ export async function frame(
   const right = Math.max(...boxes.map((box) => box.x + box.width));
   if (right - left > width || bottom - top > height) {
     throw new Error(
-      `Subjects span ${Math.ceil(right - left)}x${Math.ceil(bottom - top)} CSS px and the clip is ${Math.round(width)}x${Math.round(height)}: ${JSON.stringify(boxes.map((box) => [Math.round(box.x), Math.round(box.y)]))}`,
+      `Subjects span ${formatSize(Math.ceil(right - left), Math.ceil(bottom - top))} CSS px and the clip is ${formatSize(Math.round(width), Math.round(height))}: ${JSON.stringify(boxes.map((box) => [Math.round(box.x), Math.round(box.y)]))}`,
     );
   }
   const viewportSize = viewportOf(page);
-  let x = Math.min(Math.max(0, left - 16), viewportSize.width - width);
+  let x = Math.min(Math.max(0, left - gutter), viewportSize.width - width);
   let y = Math.min(Math.max(0, top - pad), viewportSize.height - height);
   if (x + width < right) x = Math.max(0, right - width);
   if (y + height < bottom) y = Math.max(0, bottom - height);
@@ -67,15 +80,14 @@ export function fullWidthClip(page: Page, zoom: number, height: number): Clip {
 export function halfCrop(menuBox: null | Rect, clip: Clip): number {
   if (!menuBox) throw new Error('The filter menu is off screen');
   const left = (menuBox.x - clip.x) * scale;
-  return Math.max(0, Math.min(outWidth - 640, Math.round(left - 16)));
+  return Math.max(0, Math.min(outWidth - halfWidth, Math.round(left - gutter)));
 }
 
 /** Maps a page box (or an element's box) into output canvas pixels. */
 export async function outBox(
   target: ElementHandle | Locator | null | Rect,
   clip: Clip,
-  crop: number,
-  left: number,
+  { crop = 0, left = 0 }: Placement = {},
 ): Promise<Box> {
   const box = target && 'boundingBox' in target ? await target.boundingBox() : target;
   if (!box) throw new Error('An annotated element is off screen');
@@ -91,7 +103,7 @@ export async function outBox(
 
 /** Width and height from a PNG's IHDR chunk. */
 export function pngSize(buffer: Buffer): { height: number; width: number; } {
-  return { height: buffer.readUInt32BE(20), width: buffer.readUInt32BE(16) };
+  return { height: buffer.readUInt32BE(pngHeightOffset), width: buffer.readUInt32BE(pngWidthOffset) };
 }
 
 /**
@@ -103,9 +115,9 @@ export async function settleLayout(page: Page): Promise<void> {
     const { Event, window } = globalThis;
     window.dispatchEvent(new Event('resize'));
   });
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(settlePause);
   await page.screenshot({ type: 'png' });
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(settlePause);
 }
 
 /**
@@ -120,7 +132,7 @@ export async function shoot(page: Page, clip: Clip): Promise<Shot> {
   const size = viewportOf(page);
   const { height, width } = pngSize(buffer);
   if (width !== Math.round(size.width * scale) || height !== Math.round(size.height * scale)) {
-    throw new Error(`Shot is ${width}x${height}, expected the ${size.width}x${size.height} viewport at ${scale}x`);
+    throw new Error(`Shot is ${formatSize(width, height)}, expected the ${formatSize(size.width, size.height)} viewport at ${String(scale)}x`);
   }
   // Base64, so a capture can be kept as JSON and replayed.
   return { clip, height, png: buffer.toString('base64'), width };

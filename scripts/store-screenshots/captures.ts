@@ -5,8 +5,11 @@ import {
   type Clip,
   clipHeight,
   clipWidth,
+  halfWidth,
+  inputPause,
   menuSelector,
   outHeight,
+  settlePause,
   type Shot,
 } from './config.ts';
 import {
@@ -19,6 +22,7 @@ import {
   shoot,
 } from './geometry.ts';
 import {
+  blurActiveElement,
   closeMenu,
   cursorOn,
   expectCounter,
@@ -37,6 +41,8 @@ import { expandTo, ownAction, treeRow } from './tree.ts';
 
 const menuOnlySelector = '.diffseek-menu-only';
 const pressed = 'aria-pressed';
+// Shots 1 and 3 show the full width, so they run below `scale`.
+const fullWidthZoom = 1.2;
 
 export interface NoiseCutCapture { menuBox: Box; pillBox: Box; shot: Shot; signs: Box; }
 export interface OnlySplitCapture {
@@ -53,8 +59,9 @@ export interface ViewedBadgesCapture { boxes: Record<'circle' | 'folder' | 'menu
 export async function noiseCut(page: Page): Promise<NoiseCutCapture> {
   // The real first run: Viewed and Generated hidden, auto-view on, so the
   // generated files are marked viewed as soon as the PR loads.
-  await settleCounts(page, 58);
-  await expectCounter(page, 58);
+  const firstRunViewed = 58;
+  await settleCounts(page, firstRunViewed);
+  await expectCounter(page, firstRunViewed);
   await waitForQuiet(page);
   const row = page.locator('.diffseek-menu-row:has([data-filter-kind="generated"])');
   const pill = row.locator('[data-diffseek-always-read]');
@@ -65,8 +72,8 @@ export async function noiseCut(page: Page): Promise<NoiseCutCapture> {
   await waitForQuiet(page);
   await expectNoToast(page);
   const signs = await signBox(page, ['viewed', 'generated'], clip);
-  const pillBox = await outBox(pill, clip, 0, 0);
-  const menuBox = await outBox(page.locator(menuSelector), clip, 0, 0);
+  const pillBox = await outBox(pill, clip);
+  const menuBox = await outBox(page.locator(menuSelector), clip);
   const shot = await shoot(page, clip);
   return { menuBox, pillBox, shot, signs };
 }
@@ -84,18 +91,14 @@ export async function onlySplit(page: Page): Promise<OnlySplitCapture> {
   await row.hover();
   await cursorOn(page, only);
   const beforeCrop = halfCrop(await menu.boundingBox(), beforeClip);
-  const onlyBox = await outBox(only, beforeClip, beforeCrop, 0);
+  const onlyBox = await outBox(only, beforeClip, { crop: beforeCrop });
   const beforeShot = await shoot(page, beforeClip);
 
   await only.click();
   await waitForToasts(page);
   // The click leaves focus on the payments "only" button, and :focus-within
   // paints that row as hovered. Drop focus, so the row shows its selection only.
-  await page.evaluate(() => {
-    const { document, HTMLElement } = globalThis;
-    const active = document.activeElement;
-    if (active instanceof HTMLElement) active.blur();
-  });
+  await blurActiveElement(page);
   await openMenu(page);
   await page.mouse.move(2, 2);
   const afterClip = await frame(page, subjects, { height: clipHeight, pad: 4, width: clipWidth });
@@ -104,12 +107,13 @@ export async function onlySplit(page: Page): Promise<OnlySplitCapture> {
   const ownersAll = ownersTitle.locator('[data-filter-all]');
   await ownersTitle.hover();
   await cursorOn(page, ownersAll);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(settlePause);
   await expectOnlyAllHovered(page);
   const afterCrop = halfCrop(await menu.boundingBox(), afterClip);
-  const allBox = await outBox(ownersAll, afterClip, afterCrop, 640);
+  const afterHalf = { crop: afterCrop, left: halfWidth };
+  const allBox = await outBox(ownersAll, afterClip, afterHalf);
   // The restore icon in the menu's top right corner brings every section back.
-  const resetBox = await outBox(menu.locator('[data-reset-filters]'), afterClip, afterCrop, 640);
+  const resetBox = await outBox(menu.locator('[data-reset-filters]'), afterClip, afterHalf);
   const afterShot = await shoot(page, afterClip);
   return { afterCrop, afterShot, allBox, beforeCrop, beforeShot, onlyBox, resetBox };
 }
@@ -134,12 +138,12 @@ export async function viewedBadges(page: Page): Promise<ViewedBadgesCapture> {
   for (const id of others) {
     // An open folder's box covers its children, so click its own chevron.
     await page.locator(`[role="treeitem"][id="${id}"] > div .PRIVATE_TreeView-item-toggle`).first().click();
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(inputPause);
   }
   const folder = treeRow(page, 'web');
   const action = await ownAction(folder);
   if ((await action.getAttribute(pressed)) !== 'mixed') {
-    throw new Error(`web folder circle is ${await action.getAttribute(pressed)}, expected mixed at the 12/82 baseline`);
+    throw new Error(`web folder circle is ${String(await action.getAttribute(pressed))}, expected mixed at the 12/82 baseline`);
   }
   await openMenu(page);
   await waitForQuiet(page);
@@ -148,10 +152,10 @@ export async function viewedBadges(page: Page): Promise<ViewedBadgesCapture> {
   await restPointer(page);
   const web = webRow(page).locator('[data-diffseek-menu-viewed-action]');
   const boxes = {
-    circle: await outBox(await discOf(web), clip, 0, 0),
-    folder: await outBox(await discOf(await ownAction(folder)), clip, 0, 0),
-    menu: await outBox(page.locator(menuSelector), clip, 0, 0),
-    tree: await outBox(page.locator('[role="tree"]'), clip, 0, 0),
+    circle: await outBox(await discOf(web), clip),
+    folder: await outBox(await discOf(await ownAction(folder)), clip),
+    menu: await outBox(page.locator(menuSelector), clip),
+    tree: await outBox(page.locator('[role="tree"]'), clip),
   };
   await expectNoToast(page);
   const shot = await shoot(page, clip);
@@ -213,7 +217,7 @@ async function signBox(page: Page, kinds: string[], clip: Clip): Promise<Box> {
       const ink = context.measureText(sign.content.replaceAll(/^["']|["']$/gv, ''));
       return { height: label.height, width: ink.actualBoundingBoxLeft + ink.actualBoundingBoxRight, x: left - ink.actualBoundingBoxLeft, y: label.top };
     });
-    boxes.push(await outBox(box, clip, 0, 0));
+    boxes.push(await outBox(box, clip));
   }
   const x = Math.min(...boxes.map((box) => box.x));
   const y = Math.min(...boxes.map((box) => box.y));
@@ -229,5 +233,5 @@ async function signBox(page: Page, kinds: string[], clip: Clip): Promise<Box> {
 async function tabBarClip(page: Page): Promise<Clip> {
   await filesTab(page).evaluate((element) => { element.scrollIntoView({ block: 'start' }); });
   await settleLayout(page);
-  return fullWidthClip(page, 1.2, outHeight);
+  return fullWidthClip(page, fullWidthZoom, outHeight);
 }

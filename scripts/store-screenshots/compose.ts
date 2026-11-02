@@ -1,7 +1,8 @@
 import { type Browser, chromium, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import '@diffseek/browser/page-globals';
+
+import '../../src/adapters/browser/page-globals.ts';
 
 import type { Layer, Note, Scene, Tag } from './canvas-types.ts';
 
@@ -14,13 +15,13 @@ import {
   scale,
   shotDir,
 } from './config.ts';
-import { pngSize } from './geometry.ts';
+import { formatSize, pngSize } from './geometry.ts';
 
 interface Composition { layers: Layer[]; masks?: Box[]; notes: Note[]; tags: Tag[]; }
 
 const pageStyle = `<!doctype html><style>
-      html,body{margin:0;width:${outWidth}px;height:${outHeight}px;overflow:hidden;font-family:Inter,'Noto Sans',sans-serif}
-      .layer{position:absolute;top:0;height:${outHeight}px;overflow:hidden}
+      html,body{margin:0;width:${String(outWidth)}px;height:${String(outHeight)}px;overflow:hidden;font-family:Inter,'Noto Sans',sans-serif}
+      .layer{position:absolute;top:0;height:${String(outHeight)}px;overflow:hidden}
       .layer img{display:block}
       .divider{position:absolute;top:0;bottom:0;width:4px;margin-left:-2px;background:#fff;box-shadow:0 0 0 1px rgba(31,35,40,.18)}
       .tag{position:absolute;white-space:nowrap;padding:6px 14px;border-radius:999px;background:${accent};color:#fff;font-size:17px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.18)}
@@ -79,11 +80,11 @@ async function drawComposition(
   const buffer = await host.screenshot({ type: 'png' });
   const { height, width } = pngSize(buffer);
   if (width !== outWidth || height !== outHeight) {
-    throw new Error(`Annotated shot is ${width}x${height}, expected ${outWidth}x${outHeight}`);
+    throw new Error(`Annotated shot is ${formatSize(width, height)}, expected ${formatSize(outWidth, outHeight)}`);
   }
   const file = path.join(shotDir, name);
   await writeFile(file, buffer);
-  console.log('wrote', file, `${width}x${height}`);
+  console.log('wrote', file, formatSize(width, height));
 }
 
 async function paintScene(host: Page, scene: Scene): Promise<void> {

@@ -1,6 +1,27 @@
 import type { Locator, Page } from '@playwright/test';
 
-import { menuSelector, snackbarSelector, totalFiles } from './config.ts';
+import {
+  baseline,
+  inputPause,
+  maxAttempts,
+  menuSelector,
+  pollInterval,
+  settlePause,
+  snackbarSelector,
+  totalFiles,
+} from './config.ts';
+
+// How long (ms) to wait for GitHub to show a change, and for streamed state to settle.
+const responseDeadline = 20_000;
+const settleDeadline = 90_000;
+
+export async function blurActiveElement(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const { document, HTMLElement } = globalThis;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+  });
+}
 
 export async function closeMenu(page: Page): Promise<void> {
   if ((await page.locator(menuSelector).count()) === 0) return;
@@ -19,7 +40,7 @@ export async function cursorOn(page: Page, locator: Locator): Promise<void> {
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   });
   await page.mouse.move(point.x, point.y);
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(inputPause);
 }
 
 export async function expectCounter(page: Page, count: number): Promise<void> {
@@ -40,7 +61,8 @@ export function filesTab(page: Page): Locator {
 }
 
 export async function hasCounter(page: Page, count: number): Promise<boolean> {
-  const deadline = Date.now() + 20_000;
+  const retryDelay = 1_000;
+  const deadline = Date.now() + responseDeadline;
   while (Date.now() < deadline) {
     try {
       await counter(page, count);
@@ -48,7 +70,7 @@ export async function hasCounter(page: Page, count: number): Promise<boolean> {
     } catch {
       // The counter is not up yet.
     }
-    await page.waitForTimeout(1_000);
+    await page.waitForTimeout(retryDelay);
   }
   return false;
 }
@@ -71,17 +93,19 @@ export async function paymentsRow(page: Page): Promise<Locator> {
 export async function restPointer(page: Page): Promise<void> {
   await page.mouse.move(2, 2);
   await blurActiveElement(page);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(settlePause);
 }
 
 /** GitHub streams the file list in; wait until the menu badges stop changing. */
-export async function settleCounts(page: Page, viewed = 12): Promise<void> {
+export async function settleCounts(page: Page, viewed = baseline.length): Promise<void> {
   await openMenu(page);
   await page.locator('[data-filter-kind="generated"]').waitFor({ timeout: 60_000 });
+  // Settled means this many identical reads in a row, this far apart.
+  const settled = { interval: 500, reads: 6 };
   let last = '';
   let steady = 0;
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline && steady < 6) {
+  const deadline = Date.now() + settleDeadline;
+  while (Date.now() < deadline && steady < settled.reads) {
     const text = await page.evaluate((selector) => {
       const { document } = globalThis;
       return [...document.querySelectorAll(`${selector} .diffseek-menu-count`)]
@@ -91,15 +115,17 @@ export async function settleCounts(page: Page, viewed = 12): Promise<void> {
     const complete = /\/46\b/v.test(text) && new RegExp(String.raw`/${viewed}\b`, 'v').test(text);
     steady = text === last && complete ? steady + 1 : 0;
     last = text;
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(settled.interval);
   }
-  if (steady < 6) throw new Error(`Menu counts never settled: ${last}`);
+  if (steady < settled.reads) throw new Error(`Menu counts never settled: ${last}`);
 }
 
 export async function showAllSections(page: Page): Promise<void> {
   await openMenu(page);
   const all = `${menuSelector} [data-filter-all]`;
   const count = await page.locator(all).count();
+  // Each "all" re-renders its section before the next click.
+  const sectionPause = 400;
   for (let index = 0; index < count; index += 1) {
     await openMenu(page);
     await page.evaluate(({ at, selector }) => {
@@ -107,13 +133,13 @@ export async function showAllSections(page: Page): Promise<void> {
       const actions = document.querySelectorAll<HTMLElement>(selector);
       actions[at]?.click();
     }, { at: index, selector: all });
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(sectionPause);
   }
   await waitForToasts(page);
 }
 
 export async function showFacet(page: Page, kind: string): Promise<void> {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     await openMenu(page);
     const row = facetToggle(page, kind);
     await row.waitFor({ timeout: 30_000 });
@@ -126,12 +152,13 @@ export async function showFacet(page: Page, kind: string): Promise<void> {
 
 /** Wait until no snackbar has been up for two seconds. */
 export async function waitForQuiet(page: Page): Promise<void> {
-  const deadline = Date.now() + 90_000;
+  const quietSpan = 2_000;
+  const deadline = Date.now() + settleDeadline;
   let quietSince = Date.now();
   while (Date.now() < deadline) {
     if ((await page.locator(snackbarSelector).count()) > 0) quietSince = Date.now();
-    else if (Date.now() - quietSince > 2_000) return;
-    await page.waitForTimeout(200);
+    else if (Date.now() - quietSince > quietSpan) return;
+    await page.waitForTimeout(pollInterval);
   }
   throw new Error(toastsDidNotClear);
 }
@@ -140,13 +167,14 @@ export async function waitForQuiet(page: Page): Promise<void> {
 export async function waitForToasts(page: Page): Promise<void> {
   const snacks = page.locator(snackbarSelector);
   const started = Date.now();
+  const toastGrace = 1_200;
   let saw = false;
-  while (Date.now() - started < 20_000) {
+  while (Date.now() - started < responseDeadline) {
     const count = await snacks.count();
     if (count > 0) saw = true;
     if (saw && count === 0) return;
-    if (!saw && Date.now() - started > 1_200) return;
-    await page.waitForTimeout(200);
+    if (!saw && Date.now() - started > toastGrace) return;
+    await page.waitForTimeout(pollInterval);
   }
   throw new Error(toastsDidNotClear);
 }
@@ -157,7 +185,7 @@ export function webRow(page: Page): Locator {
 
 /** GitHub's own "N / 82 viewed" counter. */
 async function counter(page: Page, count: number): Promise<Locator> {
-  const source = new RegExp(String.raw`\b${count}\s*/\s*${totalFiles}\b`);
+  const source = new RegExp(String.raw`\b${String(count)}\s*/\s*${String(totalFiles)}\b`);
   const matches = page.getByText(source);
   const found = await matches.count();
   for (let index = 0; index < found; index += 1) {
@@ -165,18 +193,10 @@ async function counter(page: Page, count: number): Promise<Locator> {
     const text = await readText(item);
     if (/viewed/iv.test(text) && (await item.isVisible())) return item;
   }
-  throw new Error(`Could not find ${count} / ${totalFiles} viewed`);
+  throw new Error(`Could not find ${String(count)} / ${String(totalFiles)} viewed`);
 }
 
 const toastsDidNotClear = 'DiffSeek toasts did not clear';
-
-async function blurActiveElement(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const { document, HTMLElement } = globalThis;
-    const active = document.activeElement;
-    if (active instanceof HTMLElement) active.blur();
-  });
-}
 
 function menuRow(page: Page, value: string): Locator {
   return page.locator(
