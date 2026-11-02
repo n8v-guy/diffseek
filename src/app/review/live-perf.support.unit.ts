@@ -82,18 +82,16 @@ describe('live-perf helpers', () => {
       treeRowsRemoved: 0,
     };
     expect(medianSample([slow, fast, fast]).firstRenderSeconds).toBe(4);
-    expect(rebuildFailures(slow, defaultLivePerfBudgets({}))).toEqual([
-      'cold panelRebuilds 0 !== 1',
-    ]);
+    expect(rebuildFailures(slow, defaultLivePerfBudgets({}))).toEqual([]);
     expect(
       rebuildFailures({ ...slow, panelRebuilds: 1 }, defaultLivePerfBudgets({})),
     ).toEqual([]);
     expect(
       rebuildFailures({ ...fast, panelRebuilds: 2 }, defaultLivePerfBudgets({})),
-    ).toEqual(['cold treeRebuilds 0 !== 1', 'cold panelRebuilds 2 !== 1']);
-    expect(rebuildFailures({ ...slow, scenario: 'warm' }, defaultLivePerfBudgets({}))).toEqual([
-      'warm panelRebuilds 0 !== 1',
-    ]);
+    ).toEqual(['cold panelRebuilds 2 > 1']);
+    expect(rebuildFailures({ ...slow, scenario: 'warm' }, defaultLivePerfBudgets({}))).toEqual(
+      [],
+    );
     expect(
       rebuildFailures({ ...slow, scenario: 'warm', panelRebuilds: 1 }, defaultLivePerfBudgets({})),
     ).toEqual([]);

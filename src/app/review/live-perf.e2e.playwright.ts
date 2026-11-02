@@ -138,8 +138,6 @@ test.describe('live DiffSeek performance', () => {
         await page.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
       });
       cold.push(coldSample);
-      // Cold expects exactly 1 tree and panel rebuild: GitHub's own broken
-      // cold-load redraw since 2026-10-31 (see defaultLivePerfBudgets).
       expect(rebuildFailures(coldSample, budgets)).toEqual([]);
       phases.push(
         { sample: index, phase: 'toggle-filter', ...(await runToggle(page)) },
@@ -150,7 +148,6 @@ test.describe('live DiffSeek performance', () => {
         await page.reload({ waitUntil: 'domcontentloaded' });
       });
       warm.push(warmSample);
-      // Warm also expects exactly 1: the same GitHub redraw on reload.
       expect(rebuildFailures(warmSample, budgets)).toEqual([]);
 
       await showConversation(page);
