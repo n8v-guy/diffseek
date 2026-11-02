@@ -15,19 +15,7 @@ concurrency:
 permissions: {}
 
 jobs:
-  main-only:
-    if: github.ref != 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Refuse a release from any branch but main
-        env:
-          REF: ${{ github.ref }}
-        run: |
-          echo "Release runs from main only (got ${REF})." >&2
-          exit 1
-
   verify:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -37,9 +25,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           HEAD_SHA: ${{ inputs.head_sha }}
+          REF: ${{ github.ref }}
           RUN_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          if [ "$REF" != refs/heads/main ]; then
+            echo "Release runs from main only (got ${REF})." >&2
+            exit 1
+          fi
           if [ "$HEAD_SHA" != "$RUN_SHA" ]; then
             echo "Release for ${HEAD_SHA} was dispatched from ${RUN_SHA}." >&2
             exit 1
@@ -51,7 +44,6 @@ jobs:
 
   zip:
     needs: verify
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -82,7 +74,6 @@ jobs:
 
   release:
     needs: [verify, zip]
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
