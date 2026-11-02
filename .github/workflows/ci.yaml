@@ -42,3 +42,19 @@ jobs:
         run: pipx run --spec actionlint-py==1.7.12.25 actionlint
       - if: ${{ !cancelled() }}
         run: pipx run zizmor==1.31.1 .github/workflows
+
+  # workflow_run is a dangerous trigger. Dispatch live end-to-end on main and
+  # pass the commit as an input; live and release require that same main SHA.
+  start-live:
+    needs: [test, strict]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Start live end-to-end
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+        run: gh workflow run live-e2e.yaml --repo "$GH_REPO" --ref main -f head_sha="$HEAD_SHA"
