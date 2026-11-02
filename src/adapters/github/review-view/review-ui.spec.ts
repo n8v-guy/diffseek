@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { replaceBody } from '../review-page/test-dom';
 import type { ViewedTarget } from '../review-page/viewed-actions';
 
+import { replaceBody } from '../review-page/test-dom';
 import {
   dismissSnackbar,
   removeInjected,

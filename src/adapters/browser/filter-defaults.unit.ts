@@ -1,10 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fakeBrowser } from 'wxt/testing/fake-browser';
-
 import {
   readFilterDefaults,
   writeFilterDefaults,
 } from '@diffseek/browser/filter-defaults';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 describe('filter defaults', () => {
   beforeEach(() => { fakeBrowser.reset(); });

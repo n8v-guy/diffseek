@@ -1,10 +1,9 @@
-import { describe, expect, it } from 'vitest';
-
 import {
   attributesForPath,
   bundledGitAttributes,
   parseGitAttributes,
 } from '@diffseek/repository-metadata';
+import { describe, expect, it } from 'vitest';
 
 import { extensionOf } from './groups';
 

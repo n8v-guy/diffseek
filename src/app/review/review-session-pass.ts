@@ -1,9 +1,10 @@
 import type { PageSnapshot } from '@diffseek/github/review-page/page-adapter';
+import type { ReviewPresenter } from '@diffseek/github/review-view/presenter';
+
 import {
   mountViewedActions,
   type ViewedTarget,
 } from '@diffseek/github/review-page/viewed-actions';
-import type { ReviewPresenter } from '@diffseek/github/review-view/presenter';
 import { type FilterState, ReviewIndex } from '@diffseek/review';
 
 import type { ViewedActionExecutor } from './action-executor';

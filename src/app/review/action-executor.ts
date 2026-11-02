@@ -1,4 +1,5 @@
 import type { PageSnapshot } from '@diffseek/github/review-page/page-adapter';
+
 import {
   type ActionResult,
   markViewed,

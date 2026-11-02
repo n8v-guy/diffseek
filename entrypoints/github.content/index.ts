@@ -1,6 +1,6 @@
+import { startReviewApp } from '@diffseek/app/review/review-app';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 
-import { startReviewApp } from '@diffseek/app/review/review-app';
 import './style.css';
 
 export default defineContentScript({

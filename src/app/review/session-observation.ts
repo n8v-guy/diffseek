@@ -1,4 +1,5 @@
 import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
+
 import {
   fileToggleAction,
   type PageSnapshot,

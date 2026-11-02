@@ -1,11 +1,10 @@
+import { type Browser, chromium, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-
-import { type Browser, chromium, type Page } from '@playwright/test';
-
 import '@diffseek/browser/page-globals';
 
 import type { Layer, Note, Scene, Tag } from './canvas-types.ts';
+
 import { canvasScript, renderSceneName } from './canvas.ts';
 import {
   accent,

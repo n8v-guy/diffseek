@@ -1,10 +1,9 @@
-import { vi } from 'vitest';
-
-import { emptyFacetExclusions } from '@diffseek/review';
 import type { FileRecord, FilterState } from '@diffseek/review';
 
-import { replaceBody } from '../review-page/test-dom';
+import { emptyFacetExclusions } from '@diffseek/review';
+import { vi } from 'vitest';
 
+import { replaceBody } from '../review-page/test-dom';
 import { mountFilterMenu } from './filter-menu';
 
 export const fallbackLabels: FileRecord['labels'] = [

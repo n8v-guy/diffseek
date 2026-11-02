@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
-
 import type { FilterDefaultState, RememberedFilterFacet } from '@diffseek/browser/filter-defaults';
 import type { FileRecord, FilterState, LabelFacet } from '@diffseek/review';
+
+import { describe, expect, it, vi } from 'vitest';
 
 import { mountFilterMenu } from './filter-menu';
 import {

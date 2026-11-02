@@ -4,9 +4,10 @@ import type {
   OnlySplitCapture,
   ViewedBadgesCapture,
 } from './captures.ts';
+import type { SourceKey, SourcesCapture } from './sources.ts';
+
 import { compose } from './compose.ts';
 import { type Box, outHeight, outWidth } from './config.ts';
-import type { SourceKey, SourcesCapture } from './sources.ts';
 
 export async function noiseCutLayout({ menuBox, pillBox, shot, signs }: NoiseCutCapture): Promise<void> {
   const center = signs.x + signs.w / 2;

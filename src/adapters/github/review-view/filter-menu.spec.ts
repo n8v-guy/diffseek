@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-
 import type { FileRecord } from '@diffseek/review';
+
+import { describe, expect, it } from 'vitest';
 
 import { mountFilterMenu } from './filter-menu';
 import {

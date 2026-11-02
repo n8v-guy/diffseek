@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import type { PageSnapshot } from './page-adapter';
+
 import edgeCases from './fixtures/github-pr-edge-cases.html?raw';
 import fixture from './fixtures/github-pr.html?raw';
-import type { PageSnapshot } from './page-adapter';
 import {
   pageStructureKey,
   refreshObservedFiles,

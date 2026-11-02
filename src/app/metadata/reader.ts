@@ -1,11 +1,12 @@
+import type { PullHeadRequest } from '@diffseek/github/repository-content/pull-head';
+import type { RawFileRequest, RawFileResult } from '@diffseek/github/repository-content/raw-file';
+
 import {
   readCache,
   readPullCache,
   writePullCache,
 } from '@diffseek/browser/cache';
-import type { PullHeadRequest } from '@diffseek/github/repository-content/pull-head';
 import { resolvePullHead } from '@diffseek/github/repository-content/pull-head-client';
-import type { RawFileRequest, RawFileResult } from '@diffseek/github/repository-content/raw-file';
 import { readRawFile } from '@diffseek/github/repository-content/raw-file-client';
 import {
   bundledGitAttributes,

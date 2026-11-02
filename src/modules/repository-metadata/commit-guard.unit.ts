@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { MetadataCommitGuard } from './commit-guard';
 import type { RepositoryMetadata, RepositoryRef } from './metadata';
+
+import { MetadataCommitGuard } from './commit-guard';
 
 const repository = { owner: 'owner', repo: 'repo' };
 

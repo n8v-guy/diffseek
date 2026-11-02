@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 
 import type { RawFileRequest, RawFileResult } from './raw-file';
+
 import {
   type RawFileMessage,
   type RawFileMessageResult,

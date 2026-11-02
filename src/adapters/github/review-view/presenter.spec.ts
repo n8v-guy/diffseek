@@ -1,13 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-
+import type { FileLabel, FilterState } from '@diffseek/review';
 
 import { emptyFacetExclusions } from '@diffseek/review';
-import type { FileLabel, FilterState } from '@diffseek/review';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import fixture from '../review-page/fixtures/github-pr.html?raw';
 import { type PageSnapshot, scanPage } from '../review-page/page-adapter';
 import { parseFragment, replaceDocument } from '../review-page/test-dom';
-
 import { ReviewPresenter } from './presenter';
 
 const ariaLabel = 'aria-label';

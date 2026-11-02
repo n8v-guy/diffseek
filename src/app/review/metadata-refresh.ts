@@ -1,9 +1,10 @@
+import type { RepositoryMetadata } from '@diffseek/repository-metadata';
+
 import {
   fileTreeElement,
   treeStructureKey,
 } from '@diffseek/github/review-page/page-adapter';
 import { filterMenus } from '@diffseek/github/review-view/review-ui';
-import type { RepositoryMetadata } from '@diffseek/repository-metadata';
 
 export interface MetadataRefresh {
   flight: null | Promise<void>;

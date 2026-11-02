@@ -1,10 +1,10 @@
+import type { FileRecord } from './file';
+
 import {
   addCountedFile,
   type CountBucket,
   emptyCountBucket,
 } from '../filtering/viewed-scope';
-
-import type { FileRecord } from './file';
 
 export class ReviewIndex {
   private readonly descendants = new Map<string, FileRecord[]>();

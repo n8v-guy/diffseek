@@ -1,5 +1,3 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 import {
   type PageSnapshot,
@@ -9,6 +7,7 @@ import {
   type ActionResult,
   markViewed,
 } from '@diffseek/github/review-page/viewed-actions';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ViewedActionExecutor, type ViewedCommand } from './action-executor';
 import { replaceBody } from './review-app.fixture';

@@ -1,7 +1,6 @@
+import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-
-import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 
 import { startReviewApp } from './review-app';
 import { appendMarkup, inertMetadata, replaceBody } from './review-app.fixture';

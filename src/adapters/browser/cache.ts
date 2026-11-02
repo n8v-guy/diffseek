@@ -1,6 +1,6 @@
-import { browser } from 'wxt/browser';
-
 import type { RepositoryMetadata, RepositoryRef } from '@diffseek/repository-metadata';
+
+import { browser } from 'wxt/browser';
 
 import { isRecord, isUnknownArray } from './record';
 

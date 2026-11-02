@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fakeBrowser } from 'wxt/testing/fake-browser';
+import type {
+  RawFileRequest,
+  RawFileResult,
+} from '@diffseek/github/repository-content/raw-file';
 
 import {
   readCache,
@@ -7,14 +9,12 @@ import {
   writeCache,
   writePullCache,
 } from '@diffseek/browser/cache';
-import type {
-  RawFileRequest,
-  RawFileResult,
-} from '@diffseek/github/repository-content/raw-file';
 import {
   bundledGitAttributes,
   MetadataCommitGuard,
 } from '@diffseek/repository-metadata';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import {
   readImmediateMetadata,

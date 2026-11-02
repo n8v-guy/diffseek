@@ -1,13 +1,12 @@
-import { describe, expect, it } from 'vitest';
-
 import {
   parseCodeowners,
   parseGitAttributes,
 } from '@diffseek/repository-metadata';
+import { describe, expect, it } from 'vitest';
 
 import type { FileRecord } from '../model/file';
-
 import type { FileLabel } from './label';
+
 import { labelFiles, type LabelSource } from './labels';
 
 const typeScriptLanguage: FileLabel = {

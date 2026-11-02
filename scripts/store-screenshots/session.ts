@@ -1,11 +1,9 @@
+import { type BrowserContext, chromium, type Page } from '@playwright/test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { type BrowserContext, chromium, type Page } from '@playwright/test';
-
 import '../../src/adapters/browser/page-globals.ts';
-
 import {
   changesUrl,
   extensionPath,

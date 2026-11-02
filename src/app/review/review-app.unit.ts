@@ -1,7 +1,7 @@
+import type { markViewed } from '@diffseek/github/review-page/viewed-actions';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-
-import type { markViewed } from '@diffseek/github/review-page/viewed-actions';
 
 import {
   installReviewPage,

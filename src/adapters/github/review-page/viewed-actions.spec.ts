@@ -1,9 +1,9 @@
+import { emptyFacetExclusions, type FileRecord, ReviewIndex } from '@diffseek/review';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { emptyFacetExclusions, type FileRecord, ReviewIndex } from '@diffseek/review';
+import type { PageSnapshot } from './page-adapter';
 
 import fixture from './fixtures/github-pr.html?raw';
-import type { PageSnapshot } from './page-adapter';
 import { scanPage } from './page-adapter';
 import { parseFragment, replaceDocument } from './test-dom';
 import {

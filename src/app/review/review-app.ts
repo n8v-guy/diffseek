@@ -21,7 +21,6 @@ import {
   readPullMetadata,
   refreshDefaultMetadata,
 } from '../metadata/reader';
-
 import { ReviewSession } from './review-session';
 
 export interface ReviewApp {

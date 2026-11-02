@@ -7,7 +7,6 @@ import {
 } from '@diffseek/repository-metadata';
 
 import type { FileRecord } from '../model/file';
-
 import type { FileLabel } from './label';
 
 export { type FileLabel, type LabelFacet } from './label';

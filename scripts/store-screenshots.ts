@@ -1,4 +1,6 @@
 #!/usr/bin/env -S node --experimental-strip-types
+import type { Page } from '@playwright/test';
+
 /**
  * Store screenshots for https://github.com/sha-tm/diffseek-test-data/pull/2.
  *
@@ -17,8 +19,6 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-
-import type { Page } from '@playwright/test';
 
 import { restoreAndVerify, restoreBaseline } from './store-screenshots/baseline.ts';
 import {

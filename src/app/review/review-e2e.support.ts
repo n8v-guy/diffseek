@@ -1,5 +1,4 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import type { ExtensionStorageLocal } from '@diffseek/browser/page-globals';
 
 import {
   type BrowserContext,
@@ -9,8 +8,8 @@ import {
   type Page,
   type Worker,
 } from '@playwright/test';
-
-import type { ExtensionStorageLocal } from '@diffseek/browser/page-globals';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import '@diffseek/browser/page-globals';
 
 const browserSession: {

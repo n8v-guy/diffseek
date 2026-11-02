@@ -1,4 +1,8 @@
 import type { FilterDefaults, FilterDefaultState } from '@diffseek/browser/filter-defaults';
+import type { markViewed, ViewedTarget } from '@diffseek/github/review-page/viewed-actions';
+import type { ReviewRef } from '@diffseek/github/routing/page-route';
+import type { MetadataCommitGuard, RepositoryMetadata, RepositoryRef } from '@diffseek/repository-metadata';
+
 import {
   bindSnapshot,
   type PageSnapshot,
@@ -7,7 +11,6 @@ import {
   scanPage,
   treeStructureKey,
 } from '@diffseek/github/review-page/page-adapter';
-import type { markViewed, ViewedTarget } from '@diffseek/github/review-page/viewed-actions';
 import { mountFilterMenu } from '@diffseek/github/review-view/filter-menu';
 import { ReviewPresenter } from '@diffseek/github/review-view/presenter';
 import {
@@ -23,8 +26,6 @@ import {
   showRememberedFilterDefault,
   showUnavailable,
 } from '@diffseek/github/review-view/review-ui';
-import type { ReviewRef } from '@diffseek/github/routing/page-route';
-import type { MetadataCommitGuard, RepositoryMetadata, RepositoryRef } from '@diffseek/repository-metadata';
 import { emptyFacetExclusions, excludedFacetCount, FileCatalog } from '@diffseek/review';
 
 import { ViewedActionExecutor } from './action-executor';

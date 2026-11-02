@@ -1,7 +1,3 @@
-import { appendFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-
 import {
   type BrowserContext,
   chromium,
@@ -10,7 +6,9 @@ import {
   test,
   type Worker,
 } from '@playwright/test';
-
+import { appendFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import '@diffseek/browser/page-globals';
 
 import {

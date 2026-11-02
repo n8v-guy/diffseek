@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import type { FileRecord } from './file';
+
 import { emptyFacetExclusions } from '../filtering/facets';
 import { includeCountedFiles } from '../filtering/viewed-scope';
-
-import type { FileRecord } from './file';
 import { ReviewIndex } from './review-index';
 
 describe('ReviewIndex', () => {

@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 
 import type { PullHeadRequest } from './pull-head';
+
 import {
   type PullHeadMessage,
   type PullHeadMessageResult,

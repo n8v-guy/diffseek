@@ -3,6 +3,7 @@ import type {
   FilterDefaultState,
   RememberedFilterFacet,
 } from '@diffseek/browser/filter-defaults';
+
 import {
   facetChoices,
   facetDefinitions,

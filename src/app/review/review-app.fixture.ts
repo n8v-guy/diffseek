@@ -1,13 +1,13 @@
-import { vi } from 'vitest';
-import { fakeBrowser } from 'wxt/testing/fake-browser';
-
-import fixtureHtml from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 import type { markViewed } from '@diffseek/github/review-page/viewed-actions';
 import type { ReviewRef } from '@diffseek/github/routing/page-route';
 import type {
   RepositoryMetadata,
   RepositoryRef,
 } from '@diffseek/repository-metadata';
+
+import fixtureHtml from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
+import { vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import { type ReviewApp, startReviewApp } from './review-app';
 

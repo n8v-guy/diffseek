@@ -1,10 +1,10 @@
+import type { FacetExclusions } from './exclusions';
+
 import {
   type FileLabel,
   type LabelFacet,
   labelFacets,
 } from '../classification/label';
-
-import type { FacetExclusions } from './exclusions';
 
 export type { FacetExclusions } from './exclusions';
 
