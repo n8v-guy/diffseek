@@ -140,10 +140,7 @@ export default defineConfig(
           ignoreTypeIndexes: true,
         },
       ],
-      'sonarjs/no-duplicate-string': [
-        'error',
-        { ignoreStrings: 'aria-label,aria-pressed,Filter options' },
-      ],
+      'sonarjs/no-duplicate-string': 'error',
     },
   },
   {
