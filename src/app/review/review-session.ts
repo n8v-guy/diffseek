@@ -31,10 +31,10 @@ import {
   showUnavailable,
 } from '@diffseek/github/review-view/review-ui';
 import type { ReviewRef } from '@diffseek/github/routing/page-route';
-import {
-  type MetadataCommitGuard,
-  type RepositoryMetadata,
-  type RepositoryRef,
+import type {
+  MetadataCommitGuard,
+  RepositoryMetadata,
+  RepositoryRef,
 } from '@diffseek/repository-metadata';
 import {
   emptyFacetExclusions,
@@ -124,7 +124,10 @@ export class ReviewSession {
   private unavailable = new Map<string, string>();
   private metadata: RepositoryMetadata;
 
-  constructor(private readonly options: ReviewSessionOptions) {
+  private readonly options: ReviewSessionOptions;
+
+  constructor(options: ReviewSessionOptions) {
+    this.options = options;
     for (const facet of options.filterDefaults.hidden) {
       this.filters.get(facet)?.add('true');
     }
@@ -175,7 +178,10 @@ export class ReviewSession {
     this.refreshObservationRoots();
   }
 
-  start(): void { this.reconcile(); void this.refreshMetadata(); }
+  start(): void {
+    this.reconcile();
+    this.refreshMetadata();
+  }
 
   reconcile(): void {
     if (this.lifecycle.signal.aborted || this.reconciling) {
@@ -189,7 +195,7 @@ export class ReviewSession {
       do {
         this.dirty = false;
         this.reconcileOnce();
-      } while (this.dirty && !this.lifecycle.signal.aborted);
+      } while (this.reconcilePending());
     } finally {
       this.reconciling = false;
     }
@@ -206,6 +212,10 @@ export class ReviewSession {
     this.observedRoots.clear();
     cancelPanelReconcile(this.scheduleState);
     this.clearInjected();
+  }
+
+  private reconcilePending(): boolean {
+    return this.dirty && !this.lifecycle.signal.aborted;
   }
 
   private reconcileOnce(): void {

@@ -54,59 +54,69 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
       const props = key ? (button as unknown as Record<string, { onClick?: unknown }>)[key] : null;
       return typeof props?.onClick === 'function';
     };
-    const check = (condition: DomCondition): unknown => {
+    const unviewedFileRow = (): boolean =>
+      [...document.querySelectorAll('[role="treeitem"]:not([aria-expanded])')].some((row) =>
+        [...row.querySelectorAll('[data-diffseek-viewed-action][aria-pressed="false"]')].some(
+          (action) => action.closest('[role="treeitem"]') === row,
+        ),
+      );
+    const mark = (passed: boolean): '' | 'ready' => (passed ? 'ready' : '');
+    const filterMenuState = (): 'open' | 'replaced' | '' => {
+      if (document.querySelector('[data-diffseek="filters"]')) return 'open';
+      const button = filterButton();
+      if (button != null && !button.hasAttribute('data-live-clicked')) return 'replaced';
+      return '';
+    };
+    const check = (condition: DomCondition): string => {
       switch (condition.kind) {
         case 'present':
-          return visible(document.querySelector(condition.selector));
+          return mark(visible(document.querySelector(condition.selector)));
         case 'absent':
-          return document.querySelector(condition.selector) == null;
+          return mark(document.querySelector(condition.selector) == null);
         case 'text': {
-          const text = document.querySelector(condition.selector)?.textContent?.trim();
-          return text != null && new RegExp(condition.pattern).test(text);
+          const text = document.querySelector(condition.selector)?.textContent.trim();
+          return mark(text != null && new RegExp(condition.pattern).test(text));
         }
         case 'attr':
-          return (
+          return mark(
             document.querySelector(condition.selector)?.getAttribute(condition.name) ===
-            condition.value
+              condition.value,
           );
         case 'dataset-above':
-          return Number(document.documentElement.dataset[condition.key] ?? '0') > condition.value;
+          return mark(
+            Number(document.documentElement.dataset[condition.key] ?? '0') > condition.value,
+          );
         case 'link-prefix':
-          return [...document.querySelectorAll('a')].some(
-            (link) => link.textContent?.trim().startsWith(condition.prefix) && visible(link),
+          return mark(
+            [...document.querySelectorAll('a')].some(
+              (link) => link.textContent.trim().startsWith(condition.prefix) && visible(link),
+            ),
           );
         case 'unviewed-file-row':
-          return [...document.querySelectorAll('[role="treeitem"]:not([aria-expanded])')].some(
-            (row) =>
-              [...row.querySelectorAll('[data-diffseek-viewed-action][aria-pressed="false"]')].some(
-                (action) => action.closest('[role="treeitem"]') === row,
-              ),
-          );
+          return mark(unviewedFileRow());
         case 'filter-button-ready': {
           const button = filterButton();
-          return button != null && interactive(button);
+          return mark(button != null && interactive(button));
         }
-        case 'filter-menu-or-replaced': {
-          if (document.querySelector('[data-diffseek="filters"]')) return 'open';
-          const button = filterButton();
-          return button && !button.hasAttribute('data-live-clicked') ? 'replaced' : false;
-        }
+        case 'filter-menu-or-replaced':
+          return filterMenuState();
         case 'trace-settled': {
           const data = document.documentElement.dataset;
-          return data.diffseekTreeOpen === '0' && data.diffseekPanelOpen === '0';
+          return mark(data.diffseekTreeOpen === '0' && data.diffseekPanelOpen === '0');
         }
       }
     };
-    const observe = (test: () => unknown) =>
+    const observed = (value: string): boolean => value !== '';
+    const observe = (test: () => string) =>
       new Promise<unknown>((resolve) => {
         const first = test();
-        if (first) {
+        if (observed(first)) {
           resolve(first);
           return;
         }
         const observer = new MutationObserver(() => {
           const result = test();
-          if (!result) return;
+          if (!observed(result)) return;
           observer.disconnect();
           resolve(result);
         });
@@ -119,7 +129,7 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
       });
     window.__liveWait = (condition) => observe(() => check(condition));
     window.__liveWaitElement = (element, name, value) =>
-      observe(() => element.getAttribute(name) === value);
+      observe(() => (element.getAttribute(name) === value ? 'ready' : ''));
     // Tag the current filter button so a client re-render (a new node) is observable.
     (window as unknown as { __liveTagFilterButton: () => void }).__liveTagFilterButton = () => {
       filterButton()?.setAttribute('data-live-clicked', '');
@@ -134,7 +144,11 @@ export async function untilDom(
   message: string,
 ): Promise<unknown> {
   return guard(
-    page.evaluate((value) => window.__liveWait!(value), condition),
+    page.evaluate((value) => {
+      const wait = window.__liveWait;
+      if (wait === undefined) throw new Error('live wait is not installed');
+      return wait(value);
+    }, condition),
     guardMs,
     `${message} (${JSON.stringify(condition)})`,
   );
@@ -149,8 +163,12 @@ export async function untilAttribute(
 ): Promise<unknown> {
   return guard(
     element.evaluate(
-      (node, [attribute, expected]) => window.__liveWaitElement!(node, attribute!, expected!),
-      [name, value],
+      (node, pair) => {
+        const wait = window.__liveWaitElement;
+        if (wait === undefined) throw new Error('live wait is not installed');
+        return wait(node, pair.attribute, pair.expected);
+      },
+      { attribute: name, expected: value },
     ),
     guardMs,
     message,

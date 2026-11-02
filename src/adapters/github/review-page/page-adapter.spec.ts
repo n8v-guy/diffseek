@@ -120,7 +120,8 @@ describe('scanPage', () => {
     folder.setAttribute('role', 'treeitem');
     group.setAttribute('role', 'group');
     folder.append(group);
-    group.append(file!);
+    if (file == null) throw new Error('missing file row');
+    group.append(file);
     tree?.prepend(folder);
 
     const snapshot = scanPage(document);
@@ -178,11 +179,12 @@ describe('scanPage', () => {
     folder.setAttribute('role', 'treeitem');
     group.setAttribute('role', 'group');
     folder.append(group);
-    group.append(file!);
+    if (file == null) throw new Error('missing file row');
+    group.append(file);
     tree?.prepend(folder);
-    document.getElementById('diff-app')?.after(
-      document.getElementById('diff-app')!.cloneNode(true),
-    );
+    const diff = document.getElementById('diff-app');
+    if (diff == null) throw new Error('missing diff');
+    diff.after(diff.cloneNode(true));
 
     const snapshot = scanPage(document);
     expect(snapshot.supported).toBe(true);

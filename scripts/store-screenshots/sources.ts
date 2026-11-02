@@ -122,10 +122,12 @@ async function captureMenu(page: Page): Promise<Omit<SourcesCapture, 'sourceShot
 
 /** Code-text box of the given line numbers in one compare file. */
 function lineRows(page: Page, path: string, numbers: number[]): Promise<Rect> {
-  return page.evaluate(({ selector, numbers, cellSelector }) => {
+  return page.evaluate(({ selector, lineNumbers, cellSelector }) => {
     const file = document.querySelector(selector);
     const rows = [...(file?.querySelectorAll('tr') ?? [])].filter((row) =>
-      [...row.querySelectorAll(cellSelector)].some((cell) => numbers.includes(Number(cell.getAttribute('data-line-number')))),
+      [...row.querySelectorAll(cellSelector)].some((cell) =>
+        lineNumbers.includes(Number(cell.getAttribute('data-line-number'))),
+      ),
     );
     // Measure the code text itself, not the full-width row.
     const boxes = rows.map((row) => {
@@ -139,7 +141,7 @@ function lineRows(page: Page, path: string, numbers: number[]): Promise<Rect> {
     const x = Math.min(...boxes.map((box) => box.left));
     const y = Math.min(...boxes.map((box) => box.top));
     return { x, y, width: Math.max(...boxes.map((box) => box.right)) - x, height: Math.max(...boxes.map((box) => box.bottom)) - y };
-  }, { selector: entrySelector(path), numbers, cellSelector: lineCell });
+  }, { selector: entrySelector(path), lineNumbers: numbers, cellSelector: lineCell });
 }
 
 /** Leaves only the kept CODEOWNERS and .gitattributes lines on the compare page. */
@@ -159,7 +161,11 @@ async function trimCompare(page: Page): Promise<void> {
   // catches files and banners that GitHub streams in later.
   await page.evaluate((paths) => {
     const style = document.createElement('style');
-    style.textContent = `${paths.reduce((rule, path) => `${rule}:not([data-file-path="${path}"])`, 'copilot-diff-entry')}{display:none!important}.js-codeowners-errors,footer{display:none!important}`;
+    const excluded = paths.reduce(
+      (rule, path) => `${rule}:not([data-file-path="${path}"])`,
+      'copilot-diff-entry',
+    );
+    style.textContent = `${excluded}{display:none!important}.js-codeowners-errors,footer{display:none!important}`;
     document.head.append(style);
     // With only two short files left, the page can end above the shot, and
     // the browser then clamps the scroll mid-capture. Keep blank room below.
@@ -187,7 +193,7 @@ function foldOldColumn(selectors: string[]): void {
 
 function hideCodeownersErrors(selector: string): void {
   for (const node of document.querySelectorAll(`${selector} *`)) {
-    if (node.children.length >= 4 || !/contains errors/.test(node.textContent ?? '') || node.closest('table')) continue;
+    if (node.children.length >= 4 || !/contains errors/.test(node.textContent) || node.closest('table')) continue;
     const block = node.closest<HTMLElement>('.js-file-content > div, .js-file-content > *') ?? (node as HTMLElement);
     if (!block.querySelector('table')) block.style.display = 'none';
   }

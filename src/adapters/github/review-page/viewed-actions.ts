@@ -18,6 +18,8 @@ import {
 
 /** How long a native click may go unanswered before it counts as ignored. */
 const ignoredClickGuardMs = 1_500;
+const ariaLabelAttribute = 'aria-label';
+const ariaPressedAttribute = 'aria-pressed';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
@@ -169,18 +171,16 @@ function bindViewedAnchor(
     ? fileViewedLabel(bucket.viewed === bucket.counted)
     : scopeViewedLabel(bucket.viewed, bucket.counted);
   const pressed = file
-    ? bucket.viewed === bucket.counted
-      ? 'true'
-      : 'false'
+    ? pressedState(bucket.viewed === bucket.counted)
     : scopeAriaPressed(bucket.viewed, bucket.counted);
-  setAttribute(anchor, 'aria-label', label);
-  setAttribute(anchor, 'aria-pressed', pressed);
+  setAttribute(anchor, ariaLabelAttribute, label);
+  setAttribute(anchor, ariaPressedAttribute, pressed);
   setAttribute(anchor, 'title', label);
   anchor.classList.toggle(viewedPartialClass, pressed === 'mixed');
   const paths = bucketActionPaths(bucket);
-  const markViewed = pressed !== 'true';
+  const nextViewed = pressed !== 'true';
   actionHandlers.set(anchor, () =>
-    onAction(file ? 'file' : 'folder', markViewed, paths),
+    onAction(file ? 'file' : 'folder', nextViewed, paths),
   );
 }
 
@@ -190,12 +190,16 @@ export function clearViewedAction(anchor: Element): void {
   if (anchor.getAttribute('class') === '') anchor.removeAttribute('class');
   for (const name of [
     'data-diffseek-viewed-action',
-    'aria-label',
-    'aria-pressed',
+    ariaLabelAttribute,
+    ariaPressedAttribute,
     'title',
   ]) {
     anchor.removeAttribute(name);
   }
+}
+
+function pressedState(viewed: boolean): 'true' | 'false' {
+  return viewed ? 'true' : 'false';
 }
 
 function setAttribute(element: Element, name: string, value: string): void {
@@ -270,7 +274,7 @@ function waitForViewedState(
       attributes: true,
       childList: true,
       subtree: true,
-      attributeFilter: ['aria-label', 'aria-pressed'],
+      attributeFilter: [ariaLabelAttribute, ariaPressedAttribute],
     });
     // Failure guard only: success is the attribute change above; nothing
     // signals a click GitHub ignored.

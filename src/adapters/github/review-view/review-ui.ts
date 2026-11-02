@@ -8,6 +8,8 @@ import {
 
 /** The one product timer that paces UI: the shortest time a toast stays up. */
 const snackbarMinimumMs = 5_000;
+const filterOptionsLabel = 'Filter options';
+const markFilesFailed = "Couldn't mark files viewed. Try again.";
 
 export function menuNeedsRemount(menu: HTMLElement): boolean {
   if (menu.dataset.diffseekMenuOwned !== 'true') return true;
@@ -16,18 +18,18 @@ export function menuNeedsRemount(menu: HTMLElement): boolean {
     (child) =>
       child instanceof HTMLElement &&
       child.dataset.diffseek !== 'filters' &&
-      !child.hidden,
+      child.hidden === false,
   );
 }
 
 export function filterMenus(root: Document): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>('[role="menu"]')].filter(
     (menu) => {
-      if (menu.getAttribute('aria-label') === 'Filter options') return true;
+      if (menu.getAttribute('aria-label') === filterOptionsLabel) return true;
       const labelledBy = menu.getAttribute('aria-labelledby');
       return (
         labelledBy != null &&
-        root.getElementById(labelledBy)?.textContent === 'Filter options'
+        root.getElementById(labelledBy)?.textContent === filterOptionsLabel
       );
     },
   );
@@ -109,17 +111,17 @@ const markMessages: Record<ViewedTarget, BatchMessages> = {
   folder: {
     progress: 'Marking visible files in folder viewed…',
     done: 'Visible files in folder marked viewed',
-    failed: "Couldn't mark files viewed. Try again.",
+    failed: markFilesFailed,
   },
   category: {
     progress: 'Marking all files in category viewed…',
     done: 'All files in category marked viewed',
-    failed: "Couldn't mark files viewed. Try again.",
+    failed: markFilesFailed,
   },
   'auto-view': {
     progress: 'Auto-view: marking generated files viewed…',
     done: 'Auto-view: generated files marked viewed',
-    failed: "Couldn't mark files viewed. Try again.",
+    failed: markFilesFailed,
   },
 };
 
@@ -314,7 +316,7 @@ export function isNativeMutation(record: MutationRecord): boolean {
 
 function placeStatus(root: Document, status: HTMLElement): void {
   const trigger = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => accessibleName(button) === 'Filter options',
+    (button) => accessibleName(button) === filterOptionsLabel,
   );
   const anchor =
     trigger ??

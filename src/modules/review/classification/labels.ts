@@ -8,22 +8,9 @@ import {
 
 import type { FileRecord } from '../model/file';
 
-export const labelFacets = [
-  'viewed',
-  'groups',
-  'owners',
-  'languages',
-  'generated',
-  'statuses',
-] as const;
+import { labelFacets, type FileLabel, type LabelFacet } from './label';
 
-export type LabelFacet = (typeof labelFacets)[number];
-
-export type FileLabel = {
-  facet: LabelFacet;
-  value: string;
-  fromLinguistLanguage?: boolean;
-};
+export { labelFacets, type FileLabel, type LabelFacet };
 
 export type LabelContext = {
   attributes: GitAttributeRule[];

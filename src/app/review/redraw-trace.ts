@@ -38,18 +38,32 @@ function emptyLedger(): SettleLedger {
   return { open: new Map(), readded: 0, netLoss: 0 };
 }
 
+const emptyCounts: RedrawCounts = {
+  reconciles: 0,
+  domMutations: 0,
+  treeRebuilds: 0,
+  panelRebuilds: 0,
+  treeRowsRemoved: 0,
+  panelsRemoved: 0,
+  treeRowsReadded: 0,
+  panelsReadded: 0,
+  treeNetLoss: 0,
+  panelNetLoss: 0,
+};
+
 function countsFrom(trace?: RedrawCounts): RedrawCounts {
+  const counts = trace ?? emptyCounts;
   return {
-    reconciles: trace?.reconciles ?? 0,
-    domMutations: trace?.domMutations ?? 0,
-    treeRebuilds: trace?.treeRebuilds ?? 0,
-    panelRebuilds: trace?.panelRebuilds ?? 0,
-    treeRowsRemoved: trace?.treeRowsRemoved ?? 0,
-    panelsRemoved: trace?.panelsRemoved ?? 0,
-    treeRowsReadded: trace?.treeRowsReadded ?? 0,
-    panelsReadded: trace?.panelsReadded ?? 0,
-    treeNetLoss: trace?.treeNetLoss ?? 0,
-    panelNetLoss: trace?.panelNetLoss ?? 0,
+    reconciles: counts.reconciles,
+    domMutations: counts.domMutations,
+    treeRebuilds: counts.treeRebuilds,
+    panelRebuilds: counts.panelRebuilds,
+    treeRowsRemoved: counts.treeRowsRemoved,
+    panelsRemoved: counts.panelsRemoved,
+    treeRowsReadded: counts.treeRowsReadded,
+    panelsReadded: counts.panelsReadded,
+    treeNetLoss: counts.treeNetLoss,
+    panelNetLoss: counts.panelNetLoss,
   };
 }
 
@@ -257,8 +271,13 @@ function collectIds(node: Node, selector: string, into: Set<string>): void {
 function countMutations(records: MutationRecord[]): number {
   let count = 0;
   for (const record of records) {
-    const root = record.target.ownerDocument?.documentElement;
-    if (record.target === root) continue;
+    const target = record.target;
+    if (
+      target instanceof HTMLElement &&
+      target === target.ownerDocument.documentElement
+    ) {
+      continue;
+    }
     count +=
       record.type === 'childList'
         ? record.addedNodes.length + record.removedNodes.length

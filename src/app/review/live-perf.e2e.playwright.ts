@@ -29,7 +29,8 @@ import {
   type LivePerfSample,
   type LivePerfScenario,
   type RedrawCounts,
-} from './live-perf.helpers';
+} from '../../../test/e2e/live-perf.helpers';
+
 import {
   installLiveWaits,
   tagFilterButton,
@@ -53,7 +54,8 @@ const panelsTimeout = 90_000;
 // generated files viewed on GitHub. Unit tests cover the auto-view default.
 const hideDefaults = { hidden: ['viewed', 'generated'], viewed: [] };
 
-describeLive('live DiffSeek performance', () => {
+test.describe('live DiffSeek performance', () => {
+  if (!liveEnabled) return;
   test.describe.configure({ mode: 'serial' });
   test.setTimeout(1_800_000);
 
@@ -65,12 +67,10 @@ describeLive('live DiffSeek performance', () => {
 
   test.beforeAll(async () => {
     test.setTimeout(420_000);
-    if (!storageStateSource) {
-      test.skip(
-        true,
+    if (storageStateSource == null || storageStateSource === '') {
+      throw new Error(
         'Set DIFFSEEK_GITHUB_STORAGE_STATE to Playwright storageState JSON (inline secret or file path). Logged-out GitHub stays on classic /files and loops with DiffSeek /changes redirect.',
       );
-      return;
     }
     const extension = resolve('.output/chrome-mv3');
     const userDataDir = await mkdtemp(join(tmpdir(), 'diffseek-live-e2e-'));
@@ -103,7 +103,7 @@ describeLive('live DiffSeek performance', () => {
   });
 
   test.afterAll(async () => {
-    await context?.close();
+    await context.close();
     if (cold.length === 0) return;
     const report = {
       prUrl: livePrUrl,
@@ -179,9 +179,6 @@ describeLive('live DiffSeek performance', () => {
     const generated = page.locator(
       '[data-filter-kind="generated"][data-filter-value="true"]',
     );
-    const generatedCount = page.locator(
-      '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
-    );
     const generatedToggle = '[data-filter-kind="generated"][data-filter-value="true"]';
     const generatedCountSelector =
       '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count';
@@ -199,15 +196,9 @@ describeLive('live DiffSeek performance', () => {
     await generated.click();
     await untilDom(page, { kind: 'attr', selector: generatedToggle, name: 'aria-checked', value: 'true' }, stepTimeout, 'generated toggle on');
     await untilDom(page, { kind: 'text', selector: generatedCountSelector, pattern: `^${generatedIndexedText(expectedGeneratedTotal)}$` }, panelsTimeout, 'generated count shown');
-    void generatedCount;
     await page.close();
   });
 });
-
-function describeLive(title: string, body: () => void): void {
-  if (liveEnabled) test.describe(title, body);
-  else test.describe.skip(title, body);
-}
 
 async function loadStorageState(source: string): Promise<unknown> {
   if (isInlineStorageState(source)) return parseInlineStorageState(source);
@@ -375,10 +366,10 @@ function subtractCounts(after: RedrawCounts, before: RedrawCounts): RedrawCounts
 }
 
 async function assertAuthenticatedReview(page: Page): Promise<void> {
-  expect(
-    await page.getByRole('link', { name: 'Sign in', exact: true }).count(),
+  await expect(
+    page.getByRole('link', { name: 'Sign in', exact: true }),
     'GitHub session from DIFFSEEK_GITHUB_STORAGE_STATE is not authenticated',
-  ).toBe(0);
+  ).toHaveCount(0);
   await page.waitForURL(/\/changes(\?|$)/, { timeout: stepTimeout });
   await untilDom(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
   await untilDom(page, { kind: 'filter-button-ready' }, stepTimeout, 'Filter options button interactive');
@@ -414,7 +405,7 @@ async function dismissCompactLinePopover(page: Page): Promise<void> {
     for (const popover of document.querySelectorAll(
       '[data-component="Popover"][data-open]',
     )) {
-      if (popover.textContent?.includes('compact line height')) popover.remove();
+      if (popover.textContent.includes('compact line height')) popover.remove();
     }
   });
 }

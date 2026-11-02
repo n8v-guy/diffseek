@@ -16,6 +16,8 @@ describe('review status UI', () => {
     document.body.innerHTML = '<main></main>';
   });
 
+  afterEach(() => vi.useRealTimers());
+
   it('announces a snackbar in the live region', () => {
     showBatchStarted(document, 'folder', true);
     const stack = document.querySelector('[data-diffseek="snackbars"]');
@@ -78,8 +80,6 @@ describe('review status UI', () => {
       document.querySelector('[data-diffseek="unavailable"]')?.textContent,
     ).toBe('DiffSeek unavailable. No file tree on this page');
   });
-
-  afterEach(() => vi.useRealTimers());
 
   const snackbars = () =>
     [

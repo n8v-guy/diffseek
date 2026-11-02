@@ -4,6 +4,7 @@
     "config/**/*.ts",
     "entrypoints/**/*.ts",
     "scripts/**/*.ts",
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "test/**/*.ts"
   ]
 }

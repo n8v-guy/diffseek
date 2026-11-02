@@ -33,10 +33,10 @@ src/app.test.ts linguist-generated
         { facet: 'generated', value: 'true' },
       ]),
     );
-    expect(languageLabels(files[0]!)).toEqual([
+    expect(languageLabels(at(files, 0))).toEqual([
       { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
     ]);
-    expect(languageLabels(files[1]!)).toEqual([
+    expect(languageLabels(at(files, 1))).toEqual([
       { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
     ]);
   });
@@ -55,13 +55,13 @@ src/app.test.ts linguist-generated
       codeowners: [],
     });
 
-    expect(languageLabels(files[0]!)).toEqual([
+    expect(languageLabels(at(files, 0))).toEqual([
       { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
     ]);
-    expect(languageLabels(files[1]!)).toEqual([
+    expect(languageLabels(at(files, 1))).toEqual([
       { facet: 'languages', value: 'MJS' },
     ]);
-    expect(languageLabels(files[2]!)).toEqual([
+    expect(languageLabels(at(files, 2))).toEqual([
       { facet: 'languages', value: 'No extension' },
     ]);
   });
@@ -71,7 +71,7 @@ src/app.test.ts linguist-generated
       file('src/viewed.ts', '.ts'),
       file('src/pending.ts', '.ts'),
     ];
-    files[0]!.viewed = true;
+    at(files, 0).viewed = true;
 
     labelFiles(files, { attributes: [], codeowners: [] });
 
@@ -87,7 +87,7 @@ src/app.test.ts linguist-generated
 
   it('labels files without a resolved owner as Unmapped', () => {
     const files = [file('docs/readme.md', '.md')];
-    files[0]!.owners = [];
+    at(files, 0).owners = [];
 
     labelFiles(files, {
       attributes: [],
@@ -143,6 +143,12 @@ function file(path: string, extension: string | null): FileRecord {
   };
 }
 
-function languageLabels(file: FileRecord) {
-  return file.labels.filter((label) => label.facet === 'languages');
+function at<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new Error(`missing item ${index}`);
+  return item;
+}
+
+function languageLabels(record: FileRecord) {
+  return record.labels.filter((label) => label.facet === 'languages');
 }

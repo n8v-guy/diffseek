@@ -1,5 +1,4 @@
-import type { FileLabel } from '../classification/labels';
-import type { FacetExclusions } from '../filtering/facets';
+import type { FileLabel, LabelFacet } from '../classification/label';
 
 export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
 
@@ -18,4 +17,4 @@ export type FileRecord = {
   labels: FileLabel[];
 };
 
-export type FilterState = FacetExclusions;
+export type FilterState = Map<LabelFacet, Set<string>>;

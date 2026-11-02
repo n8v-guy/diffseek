@@ -48,7 +48,10 @@ export async function expectNoToast(page: Page): Promise<void> {
 /** Drop the mouse and focus, so nothing looks hovered. */
 export async function restPointer(page: Page): Promise<void> {
   await page.mouse.move(2, 2);
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
+  await page.evaluate(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+  });
   await page.waitForTimeout(300);
 }
 

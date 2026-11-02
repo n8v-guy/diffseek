@@ -9,7 +9,10 @@ import type { FileRecord } from './file';
 export class ReviewIndex {
   private readonly descendants = new Map<string, FileRecord[]>();
 
-  constructor(private readonly files: readonly FileRecord[]) {
+  private readonly files: readonly FileRecord[];
+
+  constructor(files: readonly FileRecord[]) {
+    this.files = files;
     for (const file of files) {
       for (const item of ancestors(file.path)) {
         const matches = this.descendants.get(item) ?? [];

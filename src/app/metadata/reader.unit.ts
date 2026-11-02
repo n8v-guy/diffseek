@@ -146,13 +146,11 @@ describe('repository metadata', () => {
       attributes: '*.ts group=default',
     });
     const fallback = await readImmediateMetadata(repository);
-    const request = vi.fn(async (input: RawFileRequest) =>
-      input.path === '.gitattributes'
-        ? found('*.ts group=pull')
-        : input.path === 'CODEOWNERS'
-          ? found('*.ts @pull')
-          : missing,
-    );
+    const request = vi.fn(async (input: RawFileRequest) => {
+      if (input.path === '.gitattributes') return found('*.ts group=pull');
+      if (input.path === 'CODEOWNERS') return found('*.ts @pull');
+      return missing;
+    });
     const resolveHead = vi.fn().mockResolvedValue(sha);
 
     const result = await readPullMetadata(review, fallback, request, resolveHead);

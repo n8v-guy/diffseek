@@ -32,7 +32,7 @@ export const facetDefinitions: FacetDefinition[] = [
     facet: 'statuses',
     heading: 'Change status',
     native: false,
-    label: (value) => `${value[0]?.toUpperCase()}${value.slice(1)}`,
+    label: (value) => `${value.charAt(0).toUpperCase()}${value.slice(1)}`,
   },
   {
     facet: 'generated',

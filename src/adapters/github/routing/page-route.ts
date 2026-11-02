@@ -23,17 +23,25 @@ export function changesPathFromClassic(
   const match = pathname.match(
     /^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/files\/?$/,
   );
-  if (!match) return null;
-  return `/${match[1]}/${match[2]}/pull/${match[3]}/changes?new_files_changed=true`;
+  const owner = match?.[1];
+  const repo = match?.[2];
+  const pull = match?.[3];
+  if (owner === undefined || repo === undefined || pull === undefined) {
+    return null;
+  }
+  return `/${owner}/${repo}/pull/${pull}/changes?new_files_changed=true`;
 }
 
 export function reviewFromPath(pathname: string): ReviewRef | null {
   const match = pathname.match(
     /^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/changes\/?$/,
   );
-  if (!match) return null;
-  const owner = match[1]!;
-  const repo = match[2]!;
-  const pull = Number(match[3]);
+  const owner = match?.[1];
+  const repo = match?.[2];
+  const pullText = match?.[3];
+  if (owner === undefined || repo === undefined || pullText === undefined) {
+    return null;
+  }
+  const pull = Number(pullText);
   return { owner, repo, pull, key: `${owner}/${repo}#${pull}` };
 }

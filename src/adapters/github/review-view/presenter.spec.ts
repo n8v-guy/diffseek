@@ -156,8 +156,9 @@ describe('ReviewPresenter', () => {
       '#diff-config button[aria-label="Collapse file"]',
     );
     const delayed = original?.cloneNode(true) as HTMLButtonElement | undefined;
-    original?.replaceWith(delayed!);
-    delayed?.addEventListener('click', () => {
+    if (original == null || delayed == null) throw new Error('missing collapse control');
+    original.replaceWith(delayed);
+    delayed.addEventListener('click', () => {
       queueMicrotask(() => {
         delayed.setAttribute(
           'aria-label',
@@ -171,11 +172,11 @@ describe('ReviewPresenter', () => {
 
     presenter.apply(snapshot, state);
     await Promise.resolve();
-    expect(delayed?.getAttribute('aria-label')).toBe('Expand file');
+    expect(delayed.getAttribute('aria-label')).toBe('Expand file');
 
     presenter.clear(snapshot);
     await untilDom(() => {
-      expect(delayed?.getAttribute('aria-label')).toBe('Collapse file');
+      expect(delayed.getAttribute('aria-label')).toBe('Collapse file');
     });
   });
 
@@ -184,8 +185,9 @@ describe('ReviewPresenter', () => {
       '#diff-config button[aria-label="Collapse file"]',
     );
     const detached = original?.cloneNode(true) as HTMLButtonElement | undefined;
-    original?.replaceWith(detached!);
-    detached?.addEventListener('click', () => {
+    if (original == null || detached == null) throw new Error('missing collapse control');
+    original.replaceWith(detached);
+    detached.addEventListener('click', () => {
       setTimeout(() => {
         const replacement = detached.cloneNode(true) as HTMLButtonElement;
         replacement.setAttribute('aria-label', 'Expand file');

@@ -238,7 +238,7 @@ function clearNativeFilters(menu: HTMLElement): boolean {
     .find(
       (item) =>
         !item.closest(filtersRootSelector) &&
-        item.textContent?.trim() === 'Clear filters',
+        item.textContent.trim() === 'Clear filters',
     );
   if (!clear) {
     delete menu.dataset.diffseekNativeClearing;
@@ -257,7 +257,7 @@ function takeOverMenu(menu: HTMLElement): void {
     if (
       child instanceof HTMLElement &&
       child.dataset.diffseek !== 'filters' &&
-      !child.hidden
+      child.hidden === false
     ) {
       child.dataset.diffseekNativeHidden = 'true';
       child.hidden = true;
