@@ -14,6 +14,36 @@
       "to": {
         "path": "\\.(spec|test|unit|fixture|support)\\.ts$|\\.e2e\\.playwright\\.ts$"
       }
+    },
+    {
+      "name": "public-entry-only",
+      "severity": "error",
+      "comment": "App is one package. Each directory under modules or adapters is a package. Only its index.ts is public.",
+      "from": {
+        "path": "^(entrypoints|scripts|src/(app|(modules|adapters)/[^/]+))/"
+      },
+      "to": {
+        "path": "^src/(app|(modules|adapters)/[^/]+)/.*\\.ts$",
+        "pathNot": [
+          "^$1/",
+          "^src/(app|(modules|adapters)/[^/]+)/index\\.ts$"
+        ]
+      }
+    },
+    {
+      "name": "layer-direction",
+      "severity": "error",
+      "from": { "path": "^src/(modules|adapters)/" },
+      "to": {
+        "path": "^src/(adapters|app)/",
+        "pathNot": "^src/$1/"
+      }
+    },
+    {
+      "name": "entrypoints-use-app-layer",
+      "severity": "error",
+      "from": { "path": "^entrypoints/" },
+      "to": { "path": "^src/(adapters|modules)/" }
     }
   ],
   "options": {
