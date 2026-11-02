@@ -10,7 +10,7 @@ import {
   scopeViewedLabel,
 } from '@diffseek/review';
 
-import { type PageSnapshot, viewedControlState } from './page-adapter';
+import { type SupportedSnapshot, viewedControlState } from './page-adapter';
 
 /** How long a native click may go unanswered before it counts as ignored. */
 const ignoredClickGuardMs = 1_500;
@@ -42,7 +42,6 @@ interface MarkOptions {
   viewed: boolean;
 }
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 interface ViewedWait {
   button: HTMLButtonElement;

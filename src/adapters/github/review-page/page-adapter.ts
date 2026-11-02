@@ -7,18 +7,16 @@ import {
 const ariaLabel = 'aria-label';
 const ariaPressed = 'aria-pressed';
 const bidirectionalMarks = /[\u{200E}\u{200F}\u{202A}-\u{202E}]/gv;
-const collapseFile = 'Collapse file';
+export const collapseFile = 'Collapse file';
 const diffAnchorSelector = 'a[href^="#diff-"]';
 const diffPrefix = 'diff-';
-const expandFile = 'Expand file';
+export const expandFile = 'Expand file';
 const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
 const headerButtonSelector = '[data-diff-header-wrapper="true"] button';
 const incompleteDiff = 'Incomplete diff structure';
 const invalidAnchor = 'Invalid diff anchor';
 const ownerMention = /@[\w\-]+(?:\/[\w\-]+)?/gv;
-const regionRole = 'region';
 const regionSelector = '[role="region"][id^="diff-"]';
-const treeItemRole = 'treeitem';
 const treeItemSelector = '[role="treeitem"][id]';
 
 export type PageSnapshot =
@@ -38,8 +36,8 @@ export type PageSnapshot =
       supported: false;
     };
 
+export type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 type PageFiles = Pick<SupportedSnapshot, 'files' | 'unavailable'>;
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 export function bindSnapshot(
   root: Document,
@@ -202,7 +200,7 @@ function isDiffAnchor(value: string): value is `diff-${string}` {
 function isReviewRegion(
   element: HTMLElement | undefined,
 ): element is HTMLElement {
-  return element?.getAttribute('role') === regionRole;
+  return element?.getAttribute('role') === 'region';
 }
 
 function ownersOf(region: HTMLElement): string[] {
@@ -219,8 +217,7 @@ function readTreeItem(
   { files, unavailable }: PageFiles,
 ): void {
   const link = [...treeItem.querySelectorAll<HTMLAnchorElement>(diffAnchorSelector)].find(
-    (candidate) =>
-      candidate.closest(`[role="${CSS.escape(treeItemRole)}"]`) === treeItem,
+    (candidate) => candidate.closest('[role="treeitem"]') === treeItem,
   );
   if (!link) return;
   const anchor = link.getAttribute('href')?.slice(1) ?? '';
@@ -285,10 +282,8 @@ function regionForPath(
     anchor === undefined
       ? regions.byPath.get(path) ?? []
       : regions.byId.get(anchor) ?? [];
-  if (matches.length !== 1) return null;
-  const element = matches[0];
-  if (element?.getAttribute('role') === regionRole) return element;
-  return null;
+  const [element] = matches;
+  return matches.length === 1 && isReviewRegion(element) ? element : null;
 }
 
 function tooltipText(element: HTMLElement): string {
@@ -298,7 +293,7 @@ function tooltipText(element: HTMLElement): string {
 function treeItemFor(root: Document, path: string): HTMLElement | null {
   const item = root.getElementById(path);
   if (
-    item?.getAttribute('role') === treeItemRole &&
+    item?.getAttribute('role') === 'treeitem' &&
     item.closest(fileTreeSelector)
   ) {
     return item;

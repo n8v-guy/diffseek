@@ -4,10 +4,13 @@ import {
   ReviewIndex,
 } from '@diffseek/review';
 
-import { fileToggleAction, type PageSnapshot } from '../review-page/page-adapter';
+import {
+  collapseFile,
+  expandFile,
+  fileToggleAction,
+  type SupportedSnapshot,
+} from '../review-page/page-adapter';
 
-const collapseFile = 'Collapse file';
-const expandFile = 'Expand file';
 /** How long a native click may go unanswered before it counts as ignored. */
 const ignoredClickGuardMs = 1_500;
 const treeItemSelector = '[role="treeitem"][id]';
@@ -26,7 +29,6 @@ interface QueuedTransition {
   ownsCollapse: boolean;
   path: string;
 }
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 export class ReviewPresenter {
   private readonly autoCollapsed = new Set<string>();
@@ -121,7 +123,7 @@ export class ReviewPresenter {
 
   private collapse(path: string): void {
     const button = this.resolve(path);
-    if (!button || (fileToggleAction(button) === expandFile)) return;
+    if (!button || fileToggleAction(button) === expandFile) return;
     this.enqueue(path, expandFile, true);
   }
 

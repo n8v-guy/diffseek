@@ -1,4 +1,4 @@
-import type { PageSnapshot } from '@diffseek/github/review-page/page-adapter';
+import type { SupportedSnapshot } from '@diffseek/github/review-page/page-adapter';
 
 import {
   type ActionResult,
@@ -27,7 +27,6 @@ interface MarkAttempt {
   revisions: ReadonlyMap<string, number>;
 }
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 interface ViewedActionExecutorOptions {
   beforeExecute?: () => Promise<void>;

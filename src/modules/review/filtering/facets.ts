@@ -8,8 +8,6 @@ import {
 
 export type { FacetExclusions } from './exclusions';
 
-const extensionSortGroup = 1;
-const fallbackSortGroup = 2;
 
 export interface FacetDefinition {
   facet: LabelFacet;
@@ -77,7 +75,7 @@ export function facetChoices(
     if (!sortGroup.has(value)) {
       sortGroup.set(
         value,
-        isFallbackFacetValue(facet, value) ? fallbackSortGroup : 0,
+        isFallbackFacetValue(facet, value) ? 2 : 0,
       );
     }
   }
@@ -117,9 +115,9 @@ export function matchesFacets(
 }
 
 function facetSortGroup(facet: LabelFacet, label: FileLabel): number {
-  if (isFallbackFacetValue(facet, label.value)) return fallbackSortGroup;
+  if (isFallbackFacetValue(facet, label.value)) return 2;
   if (facet === 'languages' && label.fromLinguistLanguage !== true) {
-    return extensionSortGroup;
+    return 1;
   }
   return 0;
 }

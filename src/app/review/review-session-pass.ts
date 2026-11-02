@@ -2,7 +2,7 @@ import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
 import type { ReviewPresenter } from '@diffseek/github/review-view/presenter';
 
 import {
-  type PageSnapshot,
+  type SupportedSnapshot,
   viewedControlState,
 } from '@diffseek/github/review-page/page-adapter';
 import {
@@ -32,7 +32,6 @@ export interface ProjectionPass {
   staleMenus: HTMLElement[];
 }
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 export function classifyKeyFor(
   metadata: RepositoryMetadata,

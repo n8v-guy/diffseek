@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { PageSnapshot } from './page-adapter';
+import type { PageSnapshot, SupportedSnapshot } from './page-adapter';
 
 import edgeCases from './fixtures/github-pr-edge-cases.html?raw';
 import fixture from './fixtures/github-pr.html?raw';
@@ -17,7 +17,6 @@ const appPath = 'src/app.ts';
 const diffApp = 'diff-app';
 const lazyPath = 'src/lazy.ts';
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 function appendHtml(parent: ParentNode, html: string): void {
   parent.append(parseFragment(html));

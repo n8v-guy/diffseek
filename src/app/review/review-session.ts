@@ -6,10 +6,10 @@ import type { MetadataCommitGuard, RepositoryMetadata, RepositoryRef } from '@di
 import {
   bindSnapshot,
   fileTreeElement,
-  type PageSnapshot,
-  refreshObservedFiles,
+  type PageSnapshot, refreshObservedFiles,
   regionStructureKey,
   scanPage,
+  type SupportedSnapshot,
   treeStructureKey,
 } from '@diffseek/github/review-page/page-adapter';
 import { removeUnavailable } from '@diffseek/github/review-view/review-ui';
@@ -59,7 +59,6 @@ export interface ReviewSessionOptions {
   writeFilterDefaults: (defaults: FilterDefaults) => Promise<void>;
 }
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 type UnsupportedSnapshot = Extract<PageSnapshot, { supported: false }>;
 
@@ -93,16 +92,20 @@ export class ReviewSession {
     this.metadata = options.metadata;
     this.metadataRevision = options.metadataCommits.begin(options.review);
     this.projection = new SessionProjection({
-      ...options,
       aborted: (): boolean => this.lifecycle.signal.aborted,
+      filterDefaults: options.filterDefaults,
+      markFiles: options.markFiles,
       metadataRevision: this.metadataRevision,
       reconcile: (): void => {
         this.reconcile();
       },
+      review: options.review,
+      root: options.root,
       schedule: (): void => {
         this.schedule();
       },
       snapshot: (): null | SupportedSnapshot => this.snapshot,
+      writeFilterDefaults: options.writeFilterDefaults,
     });
     installRedrawTrace(options.root);
     delete options.root.documentElement.dataset['diffseekFirstRenderEpoch'];

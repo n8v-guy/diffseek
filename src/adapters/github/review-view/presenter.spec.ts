@@ -3,7 +3,7 @@ import type { FileLabel, FilterState } from '@diffseek/review';
 import { emptyFacetExclusions } from '@diffseek/review';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { PageSnapshot } from '../review-page/page-adapter';
+import type { SupportedSnapshot } from '../review-page/page-adapter';
 
 import fixture from '../review-page/fixtures/github-pr.html?raw';
 import { parseFragment, replaceDocument, requireSupported } from '../review-page/test-dom';
@@ -18,7 +18,6 @@ const expandFile = 'Expand file';
 const readmePath = 'docs/readme.md';
 const domGuardMs = 4_000;
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 function buttonLabel(): null | string | undefined {
   return document

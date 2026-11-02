@@ -1,3 +1,4 @@
+import { collapseFile, expandFile } from '@diffseek/github/review-page/page-adapter';
 import {
   afterCurrentTask,
   filterMenus,
@@ -36,7 +37,7 @@ export function watchObservationRoots(options: ObservationRoots): void {
     observeAttributes(options, candidate, contentAttributeFilter);
   }
   const filterButton = options.root.querySelector<HTMLElement>(filterButtonSelector);
-  if (filterButton === null || options.observedRoots.has(filterButton)) return;
+  if (filterButton === null) return;
   observeAttributes(options, filterButton, filterButtonAttributeFilter);
 }
 
@@ -123,10 +124,8 @@ const ariaExpandedAttribute = 'aria-expanded';
 const ariaLabelAttribute = 'aria-label';
 const ariaPressedAttribute = 'aria-pressed';
 const classAttribute = 'class';
-export const collapseFileLabel = 'Collapse file';
 const diffHeaderSelector = '[data-diff-header-wrapper="true"]';
 const diffRegionSelector = '[role="region"][id^="diff-"]';
-const expandFileLabel = 'Expand file';
 const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
 const filterButtonSelector = 'button[aria-label="Filter options"]';
 const filterOptionsLabel = 'Filter options';
@@ -151,8 +150,8 @@ const filterButtonAttributeFilter = [
 ];
 
 const controlLabels = new Set([
-  collapseFileLabel,
-  expandFileLabel,
+  collapseFile,
+  expandFile,
   notViewedLabel,
   viewedLabel,
 ]);
@@ -164,8 +163,8 @@ const structuralSelector = [
   diffHeaderSelector,
   `button[${ariaLabelAttribute}="${viewedLabel}"]`,
   `button[${ariaLabelAttribute}="${notViewedLabel}"]`,
-  `button[${ariaLabelAttribute}="${collapseFileLabel}"]`,
-  `button[${ariaLabelAttribute}="${expandFileLabel}"]`,
+  `button[${ariaLabelAttribute}="${collapseFile}"]`,
+  `button[${ariaLabelAttribute}="${expandFile}"]`,
 ].join(',');
 
 interface ObservationRoots {

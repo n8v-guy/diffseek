@@ -3,7 +3,7 @@ import type { markViewed, ViewedTarget } from '@diffseek/github/review-page/view
 import type { ReviewRef } from '@diffseek/github/routing/page-route';
 import type { RepositoryMetadata } from '@diffseek/repository-metadata';
 
-import { fileToggleAction, type PageSnapshot } from '@diffseek/github/review-page/page-adapter';
+import { collapseFile, fileToggleAction, type SupportedSnapshot } from '@diffseek/github/review-page/page-adapter';
 import { mountFilterMenu } from '@diffseek/github/review-view/filter-menu';
 import { ReviewPresenter } from '@diffseek/github/review-view/presenter';
 import {
@@ -30,7 +30,6 @@ import {
   viewedPathFromClick,
   writeSessionProjection,
 } from './review-session-pass';
-import { collapseFileLabel } from './session-observation';
 
 export interface SessionProjectionOptions {
   aborted: () => boolean;
@@ -45,7 +44,6 @@ export interface SessionProjectionOptions {
   writeFilterDefaults: (defaults: FilterDefaults) => Promise<void>;
 }
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 /** The session's writes: filter menus, file projection, and viewed batches. */
 export class SessionProjection {
@@ -279,7 +277,7 @@ function filteredFileExpanded(root: Document): boolean {
   for (const button of root.querySelectorAll<HTMLButtonElement>(
     '[data-diffseek-filtered-out="true"] button',
   )) {
-    if (fileToggleAction(button) === collapseFileLabel) return true;
+    if (fileToggleAction(button) === collapseFile) return true;
   }
   return false;
 }

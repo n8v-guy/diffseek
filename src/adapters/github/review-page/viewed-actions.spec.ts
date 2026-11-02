@@ -1,7 +1,7 @@
 import { emptyFacetExclusions } from '@diffseek/review';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PageSnapshot } from './page-adapter';
+import type { SupportedSnapshot } from './page-adapter';
 
 import fixture from './fixtures/github-pr.html?raw';
 import { parseFragment, replaceDocument, requireSupported } from './test-dom';
@@ -18,7 +18,6 @@ const readmePath = 'docs/readme.md';
 const srcFiles = [appPath, createdPath, generatedPath];
 const srcFolder = 'src';
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 type ViewedHandler = Parameters<typeof mountViewedActions>[1];
 
 function confirmViewed(button: HTMLButtonElement | null): void {

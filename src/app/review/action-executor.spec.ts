@@ -1,7 +1,7 @@
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 import {
-  type PageSnapshot,
-  scanPage,
+  type PageSnapshot, scanPage,
+  type SupportedSnapshot,
 } from '@diffseek/github/review-page/page-adapter';
 import {
   type ActionResult,
@@ -17,7 +17,6 @@ const appPath = 'src/app.ts';
 const newPath = 'src/new.ts';
 
 type MarkFiles = typeof markViewed;
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 describe('ViewedActionExecutor', () => {
   beforeEach((): void => {

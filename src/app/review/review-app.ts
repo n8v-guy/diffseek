@@ -96,20 +96,6 @@ class ActiveReview implements ReviewApp {
     });
   }
 
-  onMutation(): void {
-    if (this.lifecycle.signal.aborted || this.scheduled) return;
-    this.scheduled = true;
-    queueMicrotask((): void => {
-      this.onMutationTask();
-    });
-  }
-
-  onMutationTask(): void {
-    this.scheduled = false;
-    const next = reviewFromPath(this.pathname());
-    if (next?.key !== this.review?.key) void this.replaceSession(next);
-  }
-
   async open(): Promise<void> {
     this.observer.observe(this.root.body, { childList: true, subtree: true });
     await this.replaceSession(reviewFromPath(this.pathname()));
@@ -125,7 +111,31 @@ class ActiveReview implements ReviewApp {
     void this.replaceSession(next);
   }
 
-  replaced(expectedGeneration: number, next: ReviewRef): boolean {
+  stop(): void {
+    if (this.lifecycle.signal.aborted) return;
+    this.lifecycle.abort();
+    this.generation += 1;
+    this.observer.disconnect();
+    this.session?.stop();
+    this.session = null;
+    this.review = null;
+  }
+
+  private onMutation(): void {
+    if (this.lifecycle.signal.aborted || this.scheduled) return;
+    this.scheduled = true;
+    queueMicrotask((): void => {
+      this.onMutationTask();
+    });
+  }
+
+  private onMutationTask(): void {
+    this.scheduled = false;
+    const next = reviewFromPath(this.pathname());
+    if (next?.key !== this.review?.key) void this.replaceSession(next);
+  }
+
+  private replaced(expectedGeneration: number, next: ReviewRef): boolean {
     return (
       this.lifecycle.signal.aborted ||
       expectedGeneration !== this.generation ||
@@ -133,7 +143,7 @@ class ActiveReview implements ReviewApp {
     );
   }
 
-  async replaceSession(next: null | ReviewRef): Promise<void> {
+  private async replaceSession(next: null | ReviewRef): Promise<void> {
     const expectedGeneration = ++this.generation;
     this.session?.stop();
     this.session = null;
@@ -156,16 +166,6 @@ class ActiveReview implements ReviewApp {
       writeFilterDefaults: this.dependencies.writeFilterDefaults,
     });
     this.session.start();
-  }
-
-  stop(): void {
-    if (this.lifecycle.signal.aborted) return;
-    this.lifecycle.abort();
-    this.generation += 1;
-    this.observer.disconnect();
-    this.session?.stop();
-    this.session = null;
-    this.review = null;
   }
 }
 
