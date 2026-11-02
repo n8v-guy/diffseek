@@ -16,51 +16,28 @@
       }
     },
     {
-      "name": "no-deep-import",
+      "name": "public-entry-only",
       "severity": "error",
-      "comment": "Outside a package, only its index.ts is public. App is one package; modules and adapters are one package per directory.",
+      "comment": "App is one package. Each directory under modules or adapters is a package. Only its index.ts is public.",
       "from": {
-        "path": "^src/(modules|adapters)/([^/]+)/"
+        "path": "^(entrypoints|scripts|src/(app|(modules|adapters)/[^/]+))/"
       },
       "to": {
-        "path": "^src/(modules|adapters)/[^/]+/",
+        "path": "^src/(app|(modules|adapters)/[^/]+)/",
         "pathNot": [
-          "^src/$1/$2/",
-          "^src/(modules|adapters)/[^/]+/index\\.ts$"
+          "^$1/",
+          "^src/(app|(modules|adapters)/[^/]+)/index\\.ts$"
         ]
       }
     },
     {
-      "name": "no-deep-import-from-outside",
+      "name": "layer-direction",
       "severity": "error",
-      "from": {
-        "pathNot": "^src/(modules|adapters)/[^/]+/"
-      },
+      "from": { "path": "^src/(modules|adapters)/" },
       "to": {
-        "path": "^src/(modules|adapters)/[^/]+/",
-        "pathNot": "^src/(modules|adapters)/[^/]+/index\\.ts$"
+        "path": "^src/(adapters|app)/",
+        "pathNot": "^src/$1/"
       }
-    },
-    {
-      "name": "no-deep-import-app",
-      "severity": "error",
-      "from": { "pathNot": "^src/app/" },
-      "to": {
-        "path": "^src/app/",
-        "pathNot": "^src/app/index\\.ts$"
-      }
-    },
-    {
-      "name": "modules-not-to-higher-layer",
-      "severity": "error",
-      "from": { "path": "^src/modules/" },
-      "to": { "path": "^src/(adapters|app)/" }
-    },
-    {
-      "name": "adapters-not-to-app",
-      "severity": "error",
-      "from": { "path": "^src/adapters/" },
-      "to": { "path": "^src/app/" }
     },
     {
       "name": "entrypoints-use-app-layer",
