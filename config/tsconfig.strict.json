@@ -2,6 +2,14 @@
   "extends": ["@tsconfig/strictest/tsconfig.json", "../tsconfig.json"],
   "compilerOptions": {
     "erasableSyntaxOnly": true,
-    "noPropertyAccessFromIndexSignature": false
+    "noPropertyAccessFromIndexSignature": false,
+    // Root paths still resolve deep aliases so the blocking build typechecks.
+    // This gate only accepts each package's public entry.
+    "paths": {
+      "@diffseek/repository-metadata": [
+        "../src/modules/repository-metadata/index.ts"
+      ],
+      "@diffseek/review": ["../src/modules/review/index.ts"]
+    }
   }
 }

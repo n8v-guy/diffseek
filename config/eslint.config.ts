@@ -92,6 +92,14 @@ export default defineConfig(
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       complexity: 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ExportAllDeclaration',
+          message:
+            'Name the re-exports. A star hides the package public surface.',
+        },
+      ],
       'import-x/first': 'error',
       'import-x/newline-after-import': 'error',
       'import-x/order': [

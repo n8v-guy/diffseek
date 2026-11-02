@@ -14,6 +14,59 @@
       "to": {
         "path": "\\.(spec|test|unit|fixture|support)\\.ts$|\\.e2e\\.playwright\\.ts$"
       }
+    },
+    {
+      "name": "no-deep-import",
+      "severity": "error",
+      "comment": "Outside a package, only its index.ts is public. App is one package; modules and adapters are one package per directory.",
+      "from": {
+        "path": "^src/(modules|adapters)/([^/]+)/"
+      },
+      "to": {
+        "path": "^src/(modules|adapters)/[^/]+/",
+        "pathNot": [
+          "^src/$1/$2/",
+          "^src/(modules|adapters)/[^/]+/index\\.ts$"
+        ]
+      }
+    },
+    {
+      "name": "no-deep-import-from-outside",
+      "severity": "error",
+      "from": {
+        "pathNot": "^src/(modules|adapters)/[^/]+/"
+      },
+      "to": {
+        "path": "^src/(modules|adapters)/[^/]+/",
+        "pathNot": "^src/(modules|adapters)/[^/]+/index\\.ts$"
+      }
+    },
+    {
+      "name": "no-deep-import-app",
+      "severity": "error",
+      "from": { "pathNot": "^src/app/" },
+      "to": {
+        "path": "^src/app/",
+        "pathNot": "^src/app/index\\.ts$"
+      }
+    },
+    {
+      "name": "modules-not-to-higher-layer",
+      "severity": "error",
+      "from": { "path": "^src/modules/" },
+      "to": { "path": "^src/(adapters|app)/" }
+    },
+    {
+      "name": "adapters-not-to-app",
+      "severity": "error",
+      "from": { "path": "^src/adapters/" },
+      "to": { "path": "^src/app/" }
+    },
+    {
+      "name": "entrypoints-use-app-layer",
+      "severity": "error",
+      "from": { "path": "^entrypoints/" },
+      "to": { "path": "^src/(adapters|modules)/" }
     }
   ],
   "options": {
