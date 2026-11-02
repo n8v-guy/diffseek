@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+
 import { defineConfig } from 'wxt';
 
 import { manifestVersion } from './manifest-version.ts';

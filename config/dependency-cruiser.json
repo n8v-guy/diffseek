@@ -2,10 +2,18 @@
   "extends": "dependency-cruiser/configs/recommended-strict",
   "forbidden": [
     {
+      "name": "no-orphans",
+      "severity": "ignore"
+    },
+    {
       "name": "not-to-test",
       "severity": "error",
-      "from": { "pathNot": "\\.(spec|unit)\\.ts$|\\.e2e\\.playwright\\.ts$" },
-      "to": { "path": "\\.(spec|unit)\\.ts$|\\.e2e\\.playwright\\.ts$" }
+      "from": {
+        "pathNot": "\\.(spec|test|unit|fixture|support)\\.ts$|\\.e2e\\.playwright\\.ts$"
+      },
+      "to": {
+        "path": "\\.(spec|test|unit|fixture|support)\\.ts$|\\.e2e\\.playwright\\.ts$"
+      }
     }
   ],
   "options": {

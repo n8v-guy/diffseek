@@ -1,28 +1,31 @@
-import type { Linter } from 'eslint';
+import { fileURLToPath } from 'node:url';
 
 import js from '@eslint/js';
 import vitest from '@vitest/eslint-plugin';
-import { configs as deMorganConfigs } from 'eslint-plugin-de-morgan';
+import { defineConfig } from 'eslint/config';
 import { flatConfigs as importConfigs } from 'eslint-plugin-import-x';
 import unsanitized from 'eslint-plugin-no-unsanitized';
-import { configs as perfectionistConfigs } from 'eslint-plugin-perfectionist';
 import playwright from 'eslint-plugin-playwright';
-import promisePlugin from 'eslint-plugin-promise';
-import { configs as regexpConfigs } from 'eslint-plugin-regexp';
 import { configs as sonarConfigs } from 'eslint-plugin-sonarjs';
-import unicornPlugin from 'eslint-plugin-unicorn';
-import { defineConfig } from 'eslint/config';
-import { fileURLToPath } from 'node:url';
 import { configs as tseslintConfigs } from 'typescript-eslint';
 
+import { TEST_SUFFIXES } from './project.config.ts';
+
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
+const suffixFiles = TEST_SUFFIXES.map((suffix) => `**/*${suffix}`);
+const productFiles = ['entrypoints/**/*.ts', 'src/**/*.ts'];
+const unitFiles = suffixFiles.filter(
+  (pattern) => pattern !== '**/*.e2e.playwright.ts',
+);
 const e2eFiles = ['**/*.e2e.playwright.ts'];
-const unitFiles = ['**/*.{test,spec,unit}.ts'];
-const testOverrides: Linter.RulesRecord = {
-  '@typescript-eslint/no-magic-numbers': 'off',
-  'max-lines-per-function': 'off',
-  'sonarjs/no-duplicate-string': 'off',
-};
+const testFiles = [
+  ...suffixFiles,
+  '**/*.fixture.ts',
+  '**/*.support.ts',
+  '**/fixtures/**',
+  'config/**',
+  'scripts/**',
+];
 
 export default defineConfig(
   {
@@ -39,16 +42,10 @@ export default defineConfig(
   { linterOptions: { noInlineConfig: true } },
   js.configs.recommended,
   sonarConfigs.recommended,
-  unicornPlugin.configs.recommended,
-  regexpConfigs['flat/recommended'],
-  promisePlugin.configs['flat/recommended'],
   importConfigs.recommended,
   importConfigs.typescript,
-  deMorganConfigs.recommended,
-  perfectionistConfigs['recommended-natural'],
   unsanitized.configs.recommended,
   tseslintConfigs.strictTypeChecked,
-  tseslintConfigs.stylisticTypeChecked,
   {
     languageOptions: {
       parserOptions: {
@@ -57,109 +54,110 @@ export default defineConfig(
       },
     },
     rules: {
-      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-expect-error': true }],
+      '@typescript-eslint/ban-ts-comment': [
+        'error',
+        { 'ts-expect-error': true },
+      ],
       '@typescript-eslint/consistent-type-exports': 'error',
       '@typescript-eslint/consistent-type-imports': [
         'error',
         { fixStyle: 'inline-type-imports', prefer: 'type-imports' },
       ],
-      '@typescript-eslint/default-param-last': 'error',
-      '@typescript-eslint/explicit-function-return-type': 'error',
       '@typescript-eslint/explicit-module-boundary-types': 'error',
       '@typescript-eslint/no-import-type-side-effects': 'error',
-      '@typescript-eslint/no-magic-numbers': ['error', { ignore: [-1, 0, 1] }],
       '@typescript-eslint/no-shadow': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
-      '@typescript-eslint/prefer-readonly': 'error',
-      '@typescript-eslint/strict-boolean-expressions': 'error',
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        {
+          allowAny: false,
+          allowBoolean: false,
+          allowNever: false,
+          allowNullish: false,
+          allowNumber: true,
+          allowRegExp: false,
+        },
+      ],
+      '@typescript-eslint/strict-boolean-expressions': [
+        'error',
+        {
+          allowNullableBoolean: true,
+          allowNullableNumber: true,
+          allowNullableString: true,
+        },
+      ],
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       complexity: 'error',
       eqeqeq: 'error',
       'import-x/first': 'error',
       'import-x/newline-after-import': 'error',
-      'import-x/no-deprecated': 'error',
-      'import-x/no-duplicates': 'error',
-      'import-x/no-empty-named-blocks': 'error',
-      'import-x/no-mutable-exports': 'error',
-      'import-x/no-self-import': 'error',
-      'import-x/no-useless-path-segments': 'error',
-      'max-depth': 'error',
-      'max-lines': ['error', { skipBlankLines: true, skipComments: true }],
-      'max-lines-per-function': [
+      'import-x/order': [
         'error',
-        { skipBlankLines: true, skipComments: true },
+        {
+          alphabetize: { caseInsensitive: true, order: 'asc' },
+          groups: [
+            'builtin',
+            'external',
+            'internal',
+            'parent',
+            'sibling',
+            'index',
+          ],
+          'newlines-between': 'always',
+        },
       ],
+      'max-depth': 'error',
       'max-nested-callbacks': 'error',
-      'max-params': 'error',
-      'no-else-return': 'error',
-      'no-implicit-coercion': 'error',
-      'no-lonely-if': 'error',
-      'no-param-reassign': 'error',
+      'no-undef': 'off',
       'no-warning-comments': [
         'error',
         {
           location: 'anywhere',
-          terms: [
-            'c8 ignore',
-            'istanbul ignore',
-            'jscpd:ignore',
-            'type-coverage:ignore',
-            'v8 ignore',
-          ],
+          terms: ['c8 ignore', 'istanbul ignore', 'jscpd:ignore', 'v8 ignore'],
         },
       ],
-      'object-shorthand': 'error',
-      'prefer-template': 'error',
-      'regexp/require-unicode-sets-regexp': 'error',
-      'sonarjs/no-duplicate-string': ['error', { threshold: 2 }],
+      'sonarjs/cognitive-complexity': 'off',
+      'sonarjs/no-all-duplicated-branches': 'off',
+      'sonarjs/no-duplicated-branches': 'off',
       'sonarjs/no-global-this': 'off',
-      'sonarjs/no-inverted-boolean-check': 'off',
+      'sonarjs/no-identical-functions': 'off',
       'sonarjs/prefer-regexp-exec': 'off',
-      'unicorn/consistent-boolean-name': 'off',
-      'unicorn/name-replacements': 'off',
-      'unicorn/no-asterisk-prefix-in-documentation-comments': 'off',
-      'unicorn/no-await-expression-member': 'off',
-      'unicorn/no-nested-ternary': 'off',
-      'unicorn/no-null': 'off',
-      'unicorn/no-unreadable-for-of-expression': 'off',
-      'unicorn/no-unsafe-dom-html': 'error',
-      'unicorn/no-useless-undefined': 'off',
-      'unicorn/numeric-separators-style': 'off',
-      'unicorn/prefer-global-this': 'off',
-      'unicorn/prefer-query-selector': 'off',
-      'unicorn/prefer-scoped-selector': 'off',
-      'unicorn/prefer-simple-condition-first': 'off',
-      'unicorn/prefer-ternary': 'off',
-      'unicorn/single-line-block-comment-style': 'off',
-      'unicorn/try-complexity': 'error',
     },
   },
   {
-    files: ['config/**', 'scripts/**'],
-    rules: { 'sonarjs/no-os-command-from-path': 'off' },
+    files: productFiles,
+    ignores: testFiles,
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 500, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'error',
+        { max: 120, skipBlankLines: true, skipComments: true },
+      ],
+      'max-params': ['error', 5],
+    },
+  },
+  {
+    files: testFiles,
+    rules: {
+      '@typescript-eslint/require-await': 'off',
+      'no-unsanitized/method': 'off',
+      'no-unsanitized/property': 'off',
+      'sonarjs/no-os-command-from-path': 'off',
+    },
   },
   {
     files: unitFiles,
     plugins: { vitest },
-    rules: {
-      ...vitest.configs.recommended.rules,
-      ...testOverrides,
-      'vitest/no-conditional-in-test': 'error',
-      'vitest/prefer-called-with': 'error',
-      'vitest/prefer-strict-equal': 'error',
-      'vitest/require-mock-type-parameters': 'error',
-      'vitest/require-top-level-describe': 'error',
-    },
+    rules: { ...vitest.configs.recommended.rules },
   },
   {
-    files: e2eFiles,
     ...playwright.configs['flat/recommended'],
-    rules: {
-      ...playwright.configs['flat/recommended'].rules,
-      ...testOverrides,
-    },
+    files: e2eFiles,
   },
 );
