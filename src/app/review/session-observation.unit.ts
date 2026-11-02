@@ -52,8 +52,13 @@ describe('projection key', () => {
     extension.extension = null;
     const anchor = file();
     anchor.anchor = 'diff-other';
+    const linguist = file();
+    linguist.labels = [{ facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true }];
+    const plain = file();
+    plain.labels = [{ facet: 'languages', value: 'TypeScript' }];
     expect(key(extension)).not.toBe(original);
     expect(key(anchor)).not.toBe(original);
+    expect(key(linguist)).not.toBe(key(plain));
   });
 });
 

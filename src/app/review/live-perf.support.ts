@@ -73,6 +73,7 @@ export function defaultLivePerfBudgets(
     actionReconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_ACTION_RECONCILES, 40),
     treeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_TREE_REBUILDS, 0),
     panelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_PANEL_REBUILDS, 0),
+    // Cold and warm default to 1 to leave room for GitHub's optional load redraw; hot stays at 0.
     coldTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_TREE_REBUILDS, 1),
     coldPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANEL_REBUILDS, 1),
     warmTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_TREE_REBUILDS, 1),

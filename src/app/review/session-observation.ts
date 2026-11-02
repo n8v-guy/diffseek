@@ -16,6 +16,7 @@ import {
 } from '@diffseek/repository-metadata';
 import {
   labelFiles,
+  type FileLabel,
   type FileRecord,
   type FilterState,
 } from '@diffseek/review';
@@ -106,7 +107,7 @@ export function projectionKeyFor(options: {
   ].join('\n--\n');
 }
 
-/** A new FileRecord field that is left out of this map is a type error. */
+/** A new FileRecord or FileLabel field left out of these maps is a type error. */
 function fileProjection(file: FileRecord): string {
   const capabilities = {
     collapse: flag(file.capabilities.collapse),
@@ -117,13 +118,22 @@ function fileProjection(file: FileRecord): string {
     capabilities: Object.values(capabilities).join('\0'),
     extension: file.extension ?? '',
     generated: flag(file.generated),
-    labels: file.labels.map((label) => `${label.facet}=${label.value}`).join(','),
+    labels: file.labels.map(labelProjection).join(','),
     owners: file.owners.join(','),
     path: file.path,
     status: file.status,
     viewed: flag(file.viewed),
   } satisfies Record<keyof FileRecord, string>;
   return Object.values(parts).join('\0');
+}
+
+function labelProjection(label: FileLabel): string {
+  const parts = {
+    facet: label.facet,
+    fromLinguistLanguage: flag(label.fromLinguistLanguage ?? false),
+    value: label.value,
+  } satisfies Record<keyof FileLabel, string>;
+  return Object.values(parts).join('=');
 }
 
 function flag(value: boolean): string {
