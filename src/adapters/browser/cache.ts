@@ -73,21 +73,21 @@ function cacheKey(repository: RepositoryRef): string {
 function isCacheEntry(value: unknown): value is CacheEntry {
   return (
     isRecord(value) &&
-    value.version === cacheEntryVersion &&
-    typeof value.codeowners === 'string' &&
-    typeof value.attributes === 'string'
+    value['version'] === cacheEntryVersion &&
+    typeof value['codeowners'] === 'string' &&
+    typeof value['attributes'] === 'string'
   );
 }
 
 function isPullCacheEntry(value: unknown): value is PullCacheEntry {
   return (
     isRecord(value) &&
-    typeof value.owner === 'string' &&
-    typeof value.repo === 'string' &&
-    typeof value.pull === 'number' &&
-    typeof value.sha === 'string' &&
-    typeof value.codeowners === 'string' &&
-    typeof value.attributes === 'string'
+    typeof value['owner'] === 'string' &&
+    typeof value['repo'] === 'string' &&
+    typeof value['pull'] === 'number' &&
+    typeof value['sha'] === 'string' &&
+    typeof value['codeowners'] === 'string' &&
+    typeof value['attributes'] === 'string'
   );
 }
 

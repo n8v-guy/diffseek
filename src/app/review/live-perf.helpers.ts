@@ -100,42 +100,42 @@ export function defaultLivePerfBudgets(
   // temporary, revisit when GitHub stops it.
   return {
     actionReconciles: numberEnv(
-      env.DIFFSEEK_LIVE_BUDGET_ACTION_RECONCILES,
+      env['DIFFSEEK_LIVE_BUDGET_ACTION_RECONCILES'],
       actionReconcileBudget,
     ),
     coldFirstRenderSeconds: numberEnv(
-      env.DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S,
+      env['DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S'],
       coldRenderBudgetSeconds,
     ),
-    coldPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANEL_REBUILDS, 1),
+    coldPanelRebuilds: numberEnv(env['DIFFSEEK_LIVE_BUDGET_COLD_PANEL_REBUILDS'], 1),
     coldPanelsSeconds: numberEnv(
-      env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S,
+      env['DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S'],
       panelsLimitSeconds,
     ),
-    coldTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_TREE_REBUILDS, 1),
-    domMutations: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MUTATIONS, mutationBudget),
+    coldTreeRebuilds: numberEnv(env['DIFFSEEK_LIVE_BUDGET_COLD_TREE_REBUILDS'], 1),
+    domMutations: numberEnv(env['DIFFSEEK_LIVE_BUDGET_MUTATIONS'], mutationBudget),
     hotFirstRenderSeconds: numberEnv(
-      env.DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S,
+      env['DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S'],
       hotRenderBudgetSeconds,
     ),
     hotPanelsSeconds: numberEnv(
-      env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S,
+      env['DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S'],
       panelsLimitSeconds,
     ),
-    menuOpenSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MENU_S, menuBudgetSeconds),
-    panelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_PANEL_REBUILDS, 0),
-    reconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_RECONCILES, reconcileBudget),
-    treeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_TREE_REBUILDS, 0),
+    menuOpenSeconds: numberEnv(env['DIFFSEEK_LIVE_BUDGET_MENU_S'], menuBudgetSeconds),
+    panelRebuilds: numberEnv(env['DIFFSEEK_LIVE_BUDGET_PANEL_REBUILDS'], 0),
+    reconciles: numberEnv(env['DIFFSEEK_LIVE_BUDGET_RECONCILES'], reconcileBudget),
+    treeRebuilds: numberEnv(env['DIFFSEEK_LIVE_BUDGET_TREE_REBUILDS'], 0),
     warmFirstRenderSeconds: numberEnv(
-      env.DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S,
+      env['DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S'],
       warmRenderBudgetSeconds,
     ),
-    warmPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANEL_REBUILDS, 1),
+    warmPanelRebuilds: numberEnv(env['DIFFSEEK_LIVE_BUDGET_WARM_PANEL_REBUILDS'], 1),
     warmPanelsSeconds: numberEnv(
-      env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S,
+      env['DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S'],
       panelsLimitSeconds,
     ),
-    warmTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_TREE_REBUILDS, 1),
+    warmTreeRebuilds: numberEnv(env['DIFFSEEK_LIVE_BUDGET_WARM_TREE_REBUILDS'], 1),
   };
 }
 
@@ -222,7 +222,7 @@ export function livePerfSummary(report: {
 }
 
 export function liveSampleCount(env: NodeJS.ProcessEnv = process.env): number {
-  const samples = numberEnv(env.DIFFSEEK_LIVE_SAMPLES, defaultLiveSamples);
+  const samples = numberEnv(env['DIFFSEEK_LIVE_SAMPLES'], defaultLiveSamples);
   return Math.max(1, Math.floor(samples));
 }
 
@@ -307,7 +307,7 @@ export function parseInlineStorageState(source: string): unknown {
 }
 
 export function parseStorageCookies(raw: unknown): CookieLike[] {
-  const cookies = isRecord(raw) ? raw.cookies : undefined;
+  const cookies = isRecord(raw) ? raw['cookies'] : undefined;
   if (!isUnknownArray(cookies)) {
     throw new Error('storageState JSON must include a cookies array');
   }
@@ -355,8 +355,8 @@ function cookieIdentity(
   cookie: Record<string, unknown>,
   index: number,
 ): { name: string; value: string } {
-  const name = cookie.name;
-  const value = cookie.value;
+  const name = cookie['name'];
+  const value = cookie['value'];
   if (typeof name !== 'string' || typeof value !== 'string') {
     throw new TypeError(`storageState cookies[${index}] is missing name/value`);
   }
@@ -395,15 +395,15 @@ function readCookie(cookie: unknown, index: number): CookieLike {
     throw new Error(`storageState cookies[${index}] is invalid`);
   }
   const identity = cookieIdentity(cookie, index);
-  const domain = cookie.domain;
+  const domain = cookie['domain'];
   if (typeof domain !== 'string') {
     throw new TypeError(`storageState cookies[${index}] is missing domain`);
   }
-  const expires = optionalNumber(cookie.expires);
-  const httpOnly = optionalBoolean(cookie.httpOnly);
-  const path = optionalString(cookie.path);
-  const sameSite = optionalSameSite(cookie.sameSite);
-  const secure = optionalBoolean(cookie.secure);
+  const expires = optionalNumber(cookie['expires']);
+  const httpOnly = optionalBoolean(cookie['httpOnly']);
+  const path = optionalString(cookie['path']);
+  const sameSite = optionalSameSite(cookie['sameSite']);
+  const secure = optionalBoolean(cookie['secure']);
   return {
     domain,
     name: identity.name,

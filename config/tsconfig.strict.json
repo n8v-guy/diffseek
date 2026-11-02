@@ -1,5 +1,5 @@
 {
-  "extends": ["@tsconfig/strictest/tsconfig.json", "../tsconfig.json"],
+  "extends": "../tsconfig.json",
   "compilerOptions": {
     "erasableSyntaxOnly": true
   }

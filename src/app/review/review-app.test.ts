@@ -398,7 +398,7 @@ async function repairsAnOwnedMenuAfterGitHubReplacesItsChildren(): Promise<void>
   const menu = document.querySelector<HTMLElement>(
     '[role="menu"][aria-label="Filter options"]',
   );
-  expect(menu?.dataset.diffseekMenuOwned).toBe('true');
+  expect(menu?.dataset['diffseekMenuOwned']).toBe('true');
 
   await nextReconcile(() => {
     menu?.querySelector('[data-diffseek="filters"]')?.remove();
@@ -412,7 +412,7 @@ async function repairsAnOwnedMenuAfterGitHubReplacesItsChildren(): Promise<void>
     [...(menu?.children ?? [])].some(
       (child) =>
         child instanceof HTMLElement &&
-        child.dataset.diffseek !== 'filters' &&
+        child.dataset['diffseek'] !== 'filters' &&
         child.hidden === false,
     ),
   ).toBe(false);

@@ -142,8 +142,8 @@ function rowsMatchButtons(
   for (const [index, row] of rows.entries()) {
     const button = buttons.at(index);
     if (
-      button?.dataset.filterKind !== row.facet ||
-      button.dataset.filterValue !== row.value ||
+      button?.dataset['filterKind'] !== row.facet ||
+      button.dataset['filterValue'] !== row.value ||
       !sectionShortcutMatches(button, row)
     ) {
       return false;

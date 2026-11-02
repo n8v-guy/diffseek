@@ -115,12 +115,12 @@ export function noteReconcile(root: Document): void {
     trace.reconciles += 1;
     publish(root, trace);
   }
-  const epoch = root.documentElement.dataset.diffseekFirstRenderEpoch;
+  const epoch = root.documentElement.dataset['diffseekFirstRenderEpoch'];
   if (
     (epoch === undefined || epoch === '') &&
     root.querySelector('[data-diffseek-viewed-action]')
   ) {
-    root.documentElement.dataset.diffseekFirstRenderEpoch = String(Date.now());
+    root.documentElement.dataset['diffseekFirstRenderEpoch'] = String(Date.now());
   }
 }
 

@@ -42,7 +42,7 @@ export async function quietProfile(page: Page): Promise<void> {
 
 /** STORAGE_STATE: a Playwright storage-state JSON path. Never printed. */
 export function storageStatePath(): string {
-  const storageState = process.env.STORAGE_STATE;
+  const storageState = process.env['STORAGE_STATE'];
   if (storageState === undefined || storageState === '') {
     throw new Error('Set STORAGE_STATE to a Playwright storage state JSON path.');
   }
@@ -62,7 +62,7 @@ export async function withPage<T>(
     ],
     channel: 'chromium',
     deviceScaleFactor: scale,
-    headless: process.env.HEADLESS !== '0',
+    headless: process.env['HEADLESS'] !== '0',
     viewport,
   });
   try {

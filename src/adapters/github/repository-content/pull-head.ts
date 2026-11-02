@@ -33,8 +33,8 @@ export async function fetchPullHead(
 export function isPullHeadRequest(value: unknown): value is PullHeadRequest {
   return (
     isRecord(value) &&
-    typeof value.repo === 'string' &&
-    typeof value.pull === 'number'
+    typeof value['repo'] === 'string' &&
+    typeof value['pull'] === 'number'
   );
 }
 

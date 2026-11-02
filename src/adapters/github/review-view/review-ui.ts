@@ -65,7 +65,7 @@ export function filterMenus(root: Document): HTMLElement[] {
 
 export function menuNeedsRemount(menu: HTMLElement): boolean {
   if (
-    menu.dataset.diffseekMenuOwned !== 'true' ||
+    menu.dataset['diffseekMenuOwned'] !== 'true' ||
     !menu.querySelector(':scope > [data-diffseek="filters"]')
   ) {
     return true;
@@ -73,7 +73,7 @@ export function menuNeedsRemount(menu: HTMLElement): boolean {
   return [...menu.children].some(
     (child) =>
       child instanceof HTMLElement &&
-      child.dataset.diffseek !== 'filters' &&
+      child.dataset['diffseek'] !== 'filters' &&
       child.hidden === false,
   );
 }
@@ -93,13 +93,13 @@ export function removeInjected(root: Document): void {
     '[data-diffseek-native-hidden="true"]',
   )) {
     element.hidden = false;
-    delete element.dataset.diffseekNativeHidden;
+    delete element.dataset['diffseekNativeHidden'];
   }
   for (const menu of root.querySelectorAll<HTMLElement>(
     '[data-diffseek-menu-owned]',
   )) {
-    delete menu.dataset.diffseekMenuOwned;
-    delete menu.dataset.diffseekNativeClearing;
+    delete menu.dataset['diffseekMenuOwned'];
+    delete menu.dataset['diffseekNativeClearing'];
   }
 }
 
@@ -110,7 +110,7 @@ export function removeUnavailable(root: Document): void {
 export function showUnavailable(root: Document, reason: string): void {
   if (root.querySelector(unavailableSelector)) return;
   const status = root.createElement('span');
-  status.dataset.diffseek = 'unavailable';
+  status.dataset['diffseek'] = 'unavailable';
   status.setAttribute('role', 'status');
   status.textContent = `DiffSeek unavailable. ${reason}`;
   placeStatus(root, status);
@@ -222,11 +222,11 @@ function batchMessages(target: ViewedTarget, viewed: boolean): BatchMessages {
 }
 
 function settleAfterMinimum(snackbar: HTMLElement): void {
-  snackbar.dataset.diffseekSnackbarKind = 'status';
-  delete snackbar.dataset.diffseekSnackbarSettled;
+  snackbar.dataset['diffseekSnackbarKind'] = 'status';
+  delete snackbar.dataset['diffseekSnackbarSettled'];
   const view = snackbar.ownerDocument.defaultView;
   view?.setTimeout(() => {
-    if (snackbar.isConnected) snackbar.dataset.diffseekSnackbarSettled = 'true';
+    if (snackbar.isConnected) snackbar.dataset['diffseekSnackbarSettled'] = 'true';
   }, snackbarMinimumMs);
 }
 
@@ -247,13 +247,13 @@ function showSnackbar(
   let stack = root.querySelector<HTMLElement>('[data-diffseek="snackbars"]');
   if (!stack) {
     stack = root.createElement('div');
-    stack.dataset.diffseek = 'snackbars';
+    stack.dataset['diffseek'] = 'snackbars';
     stack.setAttribute('aria-live', 'polite');
     root.body.append(stack);
   }
   const snackbar = root.createElement('div');
-  snackbar.dataset.diffseek = 'snackbar';
-  snackbar.dataset.diffseekSnackbarKind = kind;
+  snackbar.dataset['diffseek'] = 'snackbar';
+  snackbar.dataset['diffseekSnackbarKind'] = kind;
   snackbar.setAttribute('role', 'status');
   snackbar.textContent = message;
   stack.append(snackbar);

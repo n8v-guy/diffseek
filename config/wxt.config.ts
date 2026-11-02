@@ -10,7 +10,7 @@ const packageVersion =
   )?.[1] ?? '0.0.0';
 
 const branchCommitCount = Number(
-  process.env.DIFFSEEK_BUILD_NUMBER ??
+  process.env['DIFFSEEK_BUILD_NUMBER'] ??
     execFileSync('git', ['rev-list', '--count', 'HEAD'], {
       encoding: 'utf8',
     }).trim(),

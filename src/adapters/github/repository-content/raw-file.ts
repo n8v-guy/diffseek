@@ -44,9 +44,9 @@ export async function fetchRawFile(
 export function isRawFileRequest(value: unknown): value is RawFileRequest {
   if (!isRecord(value)) return false;
   return (
-    typeof value.repo === 'string' &&
-    typeof value.ref === 'string' &&
-    typeof value.path === 'string'
+    typeof value['repo'] === 'string' &&
+    typeof value['ref'] === 'string' &&
+    typeof value['path'] === 'string'
   );
 }
 

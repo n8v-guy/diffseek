@@ -1,34 +1,34 @@
 const filterKindSelector = '[data-filter-kind]';
 
 export function itemKey(button: HTMLButtonElement): string {
-  if (present(button.dataset.resetFilters)) return 'reset-filters';
-  if (present(button.dataset.diffseekAlwaysRead)) return 'always-read';
-  if (present(button.dataset.filterOnly)) return rowActionKey('only', button);
-  if (present(button.dataset.filterAll)) {
+  if (present(button.dataset['resetFilters'])) return 'reset-filters';
+  if (present(button.dataset['diffseekAlwaysRead'])) return 'always-read';
+  if (present(button.dataset['filterOnly'])) return rowActionKey('only', button);
+  if (present(button.dataset['filterAll'])) {
     const facet = button
       .closest('.diffseek-menu-section')
       ?.querySelector<HTMLButtonElement>(filterKindSelector);
-    return ['all', facet?.dataset.filterKind].join('\0');
+    return ['all', facet?.dataset['filterKind']].join('\0');
   }
-  if (present(button.dataset.diffseekMenuCountAction)) {
+  if (present(button.dataset['diffseekMenuCountAction'])) {
     return [
       'viewed-count',
-      button.dataset.viewedFacet,
-      button.dataset.viewedValue,
+      button.dataset['viewedFacet'],
+      button.dataset['viewedValue'],
     ].join('\0');
   }
-  if (present(button.dataset.diffseekMenuViewedAction)) {
+  if (present(button.dataset['diffseekMenuViewedAction'])) {
     return [
       'viewed-overlay',
-      button.dataset.viewedFacet,
-      button.dataset.viewedValue,
+      button.dataset['viewedFacet'],
+      button.dataset['viewedValue'],
     ].join('\0');
   }
   return [
     'filter',
-    button.dataset.filterKind,
-    button.dataset.filterValue,
-    button.dataset.batchViewed,
+    button.dataset['filterKind'],
+    button.dataset['filterValue'],
+    button.dataset['batchViewed'],
   ].join('\0');
 }
 
@@ -63,7 +63,7 @@ function rowActionKey(action: string, button: HTMLButtonElement): string {
   const item = button
     .closest('.diffseek-menu-row')
     ?.querySelector<HTMLButtonElement>(filterKindSelector);
-  return [action, item?.dataset.filterKind, item?.dataset.filterValue].join(
+  return [action, item?.dataset['filterKind'], item?.dataset['filterValue']].join(
     '\0',
   );
 }

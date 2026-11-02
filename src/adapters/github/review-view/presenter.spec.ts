@@ -209,7 +209,7 @@ describe('ReviewPresenter hiding', () => {
 
     expect(document.getElementById(configPath)?.hidden).toBe(false);
     expect(
-      (document.getElementById(diffConfig))?.dataset.diffseekFilteredOut,
+      (document.getElementById(diffConfig))?.dataset['diffseekFilteredOut'],
     ).toBeUndefined();
   });
 
@@ -235,14 +235,14 @@ describe('ReviewPresenter collapse', () => {
     const { presenter, snapshot, state } = excludingConfig();
 
     presenter.apply(snapshot, state);
-    expect((document.getElementById(diffConfig))?.dataset.diffseekFilteredOut).toBe(
+    expect((document.getElementById(diffConfig))?.dataset['diffseekFilteredOut']).toBe(
       'true',
     );
     expect(buttonLabel()).toBe(expandFile);
 
     presenter.clear(snapshot);
     expect(
-      (document.getElementById(diffConfig))?.dataset.diffseekFilteredOut,
+      (document.getElementById(diffConfig))?.dataset['diffseekFilteredOut'],
     ).toBeUndefined();
     await untilDom(() => {
       expect(buttonLabel()).toBe(collapseFile);

@@ -1,9 +1,7 @@
 {
-  "extends": "./.wxt/tsconfig.json",
+  "extends": ["./.wxt/tsconfig.json", "@tsconfig/strictest/tsconfig.json"],
   "compilerOptions": {
     "noEmitOnError": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "paths": {
       "@diffseek/app/*": ["./src/app/*"],
       "@diffseek/browser/*": ["./src/adapters/browser/*"],

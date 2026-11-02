@@ -37,7 +37,7 @@ import {
 import { quietProfile, storageStatePath, withPage } from './store-screenshots/session.ts';
 import { sourcesSplit } from './store-screenshots/sources.ts';
 
-const replay = Boolean(process.env.REPLAY);
+const replay = Boolean(process.env['REPLAY']);
 
 async function firstRun(page: Page): Promise<NoiseCutCapture> {
   try {
@@ -67,12 +67,12 @@ async function stage<T>(id: string, capture: () => Promise<T>, layout: (data: T)
 
 if (!replay) storageStatePath();
 await mkdir(shotDir, { recursive: true });
-const baselineOnly = process.env.BASELINE;
+const baselineOnly = process.env['BASELINE'];
 if (baselineOnly === undefined || baselineOnly === '') {
   console.log('Shots land in', shotDir);
   for (const [file, caption] of shots) console.log(`${file} — ${caption}`);
 
-  const pick = new Set((process.env.SHOTS ?? '1,2,3,4').split(',').map((part) => part.trim()));
+  const pick = new Set((process.env['SHOTS'] ?? '1,2,3,4').split(',').map((part) => part.trim()));
   if (pick.has('1')) await stage('1', () => withPage(firstRun, null), noiseCutLayout);
   if (pick.has('2')) await stage('2', () => withPage(onlySplit), onlySplitLayout);
   if (pick.has('3')) await stage('3', () => withPage(viewedBadges), viewedBadgesLayout);

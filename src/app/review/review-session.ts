@@ -149,7 +149,7 @@ export class ReviewSession {
     };
     options.root.addEventListener('click', this.onNativeClick, { capture: true });
     installRedrawTrace(options.root);
-    delete options.root.documentElement.dataset.diffseekFirstRenderEpoch;
+    delete options.root.documentElement.dataset['diffseekFirstRenderEpoch'];
     this.observer = new MutationObserver((records): void => {
       const mode = scheduleForMutations(records);
       if (mode) this.schedule(mode);

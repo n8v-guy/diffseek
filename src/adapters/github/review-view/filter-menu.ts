@@ -20,7 +20,7 @@ export function mountFilterMenu(
   options: FilterMenuOptions,
 ): void {
   if (
-    menu.dataset.diffseekMenuOwned === 'true' &&
+    menu.dataset['diffseekMenuOwned'] === 'true' &&
     patchFilterMenu(menu, options)
   ) {
     return;
@@ -117,12 +117,12 @@ function appendResetFilters(
   const reset = document.createElement('button');
   reset.type = 'button';
   reset.className = 'diffseek-reset-filters';
-  reset.dataset.resetFilters = 'true';
+  reset.dataset['resetFilters'] = 'true';
   reset.setAttribute('aria-label', resetFiltersLabel);
   reset.setAttribute('role', 'menuitem');
   reset.title = resetFiltersLabel;
   const icon = document.createElementNS(svgNamespace, 'svg');
-  icon.dataset.diffseekResetIcon = 'true';
+  icon.dataset['diffseekResetIcon'] = 'true';
   icon.setAttribute('aria-hidden', 'true');
   icon.setAttribute('viewBox', '0 0 16 16');
   const path = document.createElementNS(svgNamespace, 'path');
@@ -165,7 +165,7 @@ function appendSection(
 
 function appendSeparator(root: HTMLElement): void {
   const separator = document.createElement('div');
-  separator.dataset.diffseekSeparator = 'true';
+  separator.dataset['diffseekSeparator'] = 'true';
   separator.setAttribute('role', 'separator');
   root.append(separator);
 }
@@ -179,11 +179,11 @@ function clearNativeFilters(menu: HTMLElement): boolean {
       item.textContent.trim() === clearFiltersLabel,
   );
   if (!clear) {
-    delete menu.dataset.diffseekNativeClearing;
+    delete menu.dataset['diffseekNativeClearing'];
     return false;
   }
-  if (!present(menu.dataset.diffseekNativeClearing)) {
-    menu.dataset.diffseekNativeClearing = 'true';
+  if (!present(menu.dataset['diffseekNativeClearing'])) {
+    menu.dataset['diffseekNativeClearing'] = 'true';
     clear.click();
   }
   return true;
@@ -194,8 +194,8 @@ function filterCheckbox(options: MenuRowModel): HTMLButtonElement {
   item.type = 'button';
   item.className = 'diffseek-menu-item';
   item.setAttribute('role', 'menuitemcheckbox');
-  item.dataset.filterKind = options.facet;
-  item.dataset.filterValue = options.value;
+  item.dataset['filterKind'] = options.facet;
+  item.dataset['filterValue'] = options.value;
   applyCheckedState(item, options);
   syncMenuItemDisabled(item, options.disabled === true);
   const text = document.createElement('span');
@@ -209,7 +209,7 @@ function filterCheckbox(options: MenuRowModel): HTMLButtonElement {
 
 function filtersRoot(options: FilterMenuOptions): HTMLElement {
   const root = document.createElement('li');
-  root.dataset.diffseek = 'filters';
+  root.dataset['diffseek'] = 'filters';
   root.setAttribute('role', 'none');
   const content = document.createElement('div');
   content.className = 'diffseek-menu-content';
@@ -264,16 +264,16 @@ function restoreFocus(root: HTMLElement, focused: null | string): void {
 }
 
 function takeOverMenu(menu: HTMLElement): void {
-  menu.dataset.diffseekMenuOwned = 'true';
+  menu.dataset['diffseekMenuOwned'] = 'true';
   for (const child of menu.children) {
     if (
       !(child instanceof HTMLElement) ||
-      child.dataset.diffseek === 'filters' ||
+      child.dataset['diffseek'] === 'filters' ||
       isElementHidden(child)
     ) {
       continue;
     }
-    child.dataset.diffseekNativeHidden = 'true';
+    child.dataset['diffseekNativeHidden'] = 'true';
     child.hidden = true;
   }
 }

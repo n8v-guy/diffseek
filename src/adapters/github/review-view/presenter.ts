@@ -85,14 +85,14 @@ function applyFile(
   state.desiredCollapsed.set(file.path, wantCollapsed);
   if (treeItem.hidden !== wantCollapsed) treeItem.hidden = wantCollapsed;
   if (matches) {
-    if (region.dataset.diffseekFilteredOut !== undefined) {
-      delete region.dataset.diffseekFilteredOut;
+    if (region.dataset['diffseekFilteredOut'] !== undefined) {
+      delete region.dataset['diffseekFilteredOut'];
     }
     restore(state, file.path);
     return;
   }
-  if (region.dataset.diffseekFilteredOut !== 'true') {
-    region.dataset.diffseekFilteredOut = 'true';
+  if (region.dataset['diffseekFilteredOut'] !== 'true') {
+    region.dataset['diffseekFilteredOut'] = 'true';
   }
   collapse(state, file.path);
 }
@@ -127,7 +127,7 @@ function clearFile(
   });
   state.desiredCollapsed.set(path, false);
   treeItem.hidden = false;
-  delete region.dataset.diffseekFilteredOut;
+  delete region.dataset['diffseekFilteredOut'];
   restore(state, path);
 }
 
@@ -232,7 +232,7 @@ function revealSnapshot(snapshot: null | SupportedSnapshot | undefined): void {
     const treeItem = snapshot.treeItem(file.path);
     const region = snapshot.region(file.path);
     if (treeItem) treeItem.hidden = false;
-    if (region) delete region.dataset.diffseekFilteredOut;
+    if (region) delete region.dataset['diffseekFilteredOut'];
   }
 }
 

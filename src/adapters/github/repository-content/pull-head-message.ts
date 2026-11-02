@@ -16,7 +16,7 @@ export type PullHeadMessageResult =
 export function isPullHeadMessage(value: unknown): value is PullHeadMessage {
   return (
     isRecord(value) &&
-    value.type === pullHeadMessageType &&
-    isPullHeadRequest(value.request)
+    value['type'] === pullHeadMessageType &&
+    isPullHeadRequest(value['request'])
   );
 }

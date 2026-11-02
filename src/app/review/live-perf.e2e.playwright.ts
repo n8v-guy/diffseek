@@ -41,7 +41,7 @@ import {
   untilDom,
 } from './live-wait';
 
-const livePrUrl = process.env.DIFFSEEK_LIVE_PR_URL ?? defaultLivePrUrl;
+const livePrUrl = process.env['DIFFSEEK_LIVE_PR_URL'] ?? defaultLivePrUrl;
 const budgets = defaultLivePerfBudgets();
 const samples = liveSampleCount();
 const generatedCounter =
@@ -333,8 +333,8 @@ async function readRedraws(page: Page): Promise<RedrawCounts> {
 }
 
 function registerLivePerf(): void {
-  if (process.env.DIFFSEEK_LIVE_E2E !== '1') return;
-  const source = process.env.DIFFSEEK_GITHUB_STORAGE_STATE;
+  if (process.env['DIFFSEEK_LIVE_E2E'] !== '1') return;
+  const source = process.env['DIFFSEEK_GITHUB_STORAGE_STATE'];
   if (source === undefined || source === '') {
     throw new Error(
       'Set DIFFSEEK_GITHUB_STORAGE_STATE to Playwright storageState JSON (inline secret or file path). Logged-out GitHub stays on classic /files and loops with DiffSeek /changes redirect.',
@@ -484,7 +484,7 @@ async function writeLiveReport(): Promise<void> {
       path.join(outDir, 'live-perf-latest.json'),
       `${JSON.stringify(report, null, 2)}\n`,
     );
-    const summary = process.env.GITHUB_STEP_SUMMARY;
+    const summary = process.env['GITHUB_STEP_SUMMARY'];
     const markdown = livePerfSummary(report);
     if (summary !== undefined && summary !== '') {
       await appendFile(summary, `${markdown}\n`);

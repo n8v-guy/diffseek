@@ -136,7 +136,7 @@ function installLiveCheckDom(): void {
       if (condition.kind === 'trace-settled') {
         const data = root.documentElement.dataset;
         return (
-          data.diffseekTreeOpen === '0' && data.diffseekPanelOpen === '0'
+          data['diffseekTreeOpen'] === '0' && data['diffseekPanelOpen'] === '0'
         );
       }
       return undefined;

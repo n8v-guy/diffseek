@@ -96,7 +96,7 @@ describe('mountFilterMenu ownership', () => {
 
 function ownerValues(element: ParentNode): (string | undefined)[] {
   return [...element.querySelectorAll('[data-filter-kind="owners"]')].map(
-    (item) => (item instanceof HTMLElement ? item.dataset.filterValue : undefined),
+    (item) => (item instanceof HTMLElement ? item.dataset['filterValue'] : undefined),
   );
 }
 
@@ -111,7 +111,7 @@ function topLevelKinds(element: ParentNode): (string | undefined)[] {
     ...element.querySelectorAll<HTMLElement>(
       '[data-diffseek="filters"] > .diffseek-menu-content > .diffseek-menu-row [data-filter-kind]',
     ),
-  ].map((item) => item.dataset.filterKind);
+  ].map((item) => item.dataset['filterKind']);
 }
 
 describe('filter menu fallback sections', () => {
@@ -158,7 +158,7 @@ describe('filter menu fallback sections', () => {
     ).not.toBeNull();
     expect(
       [...element.querySelectorAll<HTMLElement>('[data-filter-kind="groups"]')].map(
-        (item) => item.dataset.filterValue,
+        (item) => item.dataset['filterValue'],
       ),
     ).toStrictEqual(['Tests', 'No groups']);
   });

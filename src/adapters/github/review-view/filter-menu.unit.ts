@@ -71,7 +71,7 @@ describe('mountFilterMenu owner prefixes', () => {
     const owners = [
       ...element.querySelectorAll<HTMLElement>('[data-filter-kind="owners"]'),
     ];
-    expect(owners.map((owner) => owner.dataset.filterValue)).toStrictEqual([
+    expect(owners.map((owner) => owner.dataset['filterValue'])).toStrictEqual([
       '@team/backend',
       '@team/platform',
       'Unmapped',

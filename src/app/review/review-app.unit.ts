@@ -334,7 +334,7 @@ async function rollsBackPresentationWhenGitHubContractsDisappear(): Promise<void
     .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
     ?.click();
   expect(
-    (document.getElementById('diff-app'))?.dataset.diffseekFilteredOut,
+    (document.getElementById('diff-app'))?.dataset['diffseekFilteredOut'],
   ).toBe('true');
 
   await nextReconcile(() => {
@@ -342,7 +342,7 @@ async function rollsBackPresentationWhenGitHubContractsDisappear(): Promise<void
   });
 
   expect(
-    (document.getElementById('diff-config'))?.dataset.diffseekFilteredOut,
+    (document.getElementById('diff-config'))?.dataset['diffseekFilteredOut'],
   ).toBeUndefined();
   expect(
     document.querySelector('#diff-config button')?.getAttribute('aria-label'),

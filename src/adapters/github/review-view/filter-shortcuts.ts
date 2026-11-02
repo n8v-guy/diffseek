@@ -17,7 +17,7 @@ export function alwaysReadAction(options: {
   const action = document.createElement('button');
   action.type = buttonType;
   action.className = 'diffseek-menu-always-read';
-  action.dataset.diffseekAlwaysRead = 'true';
+  action.dataset['diffseekAlwaysRead'] = 'true';
   action.textContent = 'auto-view';
   action.title = alwaysReadTitle;
   setAlwaysRead(action, options.enabled);
@@ -41,7 +41,7 @@ export function itemOnlyAction(
   const action = document.createElement('button');
   action.type = buttonType;
   action.className = 'diffseek-menu-only';
-  action.dataset.filterOnly = 'true';
+  action.dataset['filterOnly'] = 'true';
   action.setAttribute(ariaLabel, `Show only ${options.label}`);
   action.setAttribute(
     ariaPressed,
@@ -75,7 +75,7 @@ export function sectionAllAction(
   const action = document.createElement('button');
   action.type = buttonType;
   action.className = 'diffseek-menu-all';
-  action.dataset.filterAll = 'true';
+  action.dataset['filterAll'] = 'true';
   action.setAttribute(ariaLabel, `Show all ${options.heading}`);
   action.textContent = 'all';
   action.addEventListener('click', () => {

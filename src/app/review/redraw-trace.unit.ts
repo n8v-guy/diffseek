@@ -62,7 +62,7 @@ describe('redraw trace', () => {
     tree.setAttribute('role', 'tree');
     document.body.append(tree);
     const control = document.createElement('span');
-    control.dataset.diffseekViewedAction = 'true';
+    control.dataset['diffseekViewedAction'] = 'true';
     tree.append(control);
     const rows = Array.from({ length: 10 }, (_item, index) => {
       const row = document.createElement('li');

@@ -16,7 +16,7 @@ export type RawFileMessageResult =
 export function isRawFileMessage(value: unknown): value is RawFileMessage {
   return (
     isRecord(value) &&
-    value.type === rawFileMessageType &&
-    isRawFileRequest(value.request)
+    value['type'] === rawFileMessageType &&
+    isRawFileRequest(value['request'])
   );
 }
