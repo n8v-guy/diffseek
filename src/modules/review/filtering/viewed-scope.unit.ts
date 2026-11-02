@@ -13,22 +13,22 @@ import {
 function file(
   path: string,
   options: {
-    viewed?: boolean;
+    capability?: boolean;
     generated?: boolean;
     labels?: FileRecord['labels'];
-    capability?: boolean;
+    viewed?: boolean;
   } = {},
 ): FileRecord {
   return {
-    path,
     anchor: `diff-${path}`,
+    capabilities: { collapse: true, viewed: options.capability !== false },
     extension: '.ts',
-    owners: [],
     generated: options.generated === true,
+    labels: options.labels ?? [],
+    owners: [],
+    path,
     status: 'modified',
     viewed: options.viewed === true,
-    capabilities: { collapse: true, viewed: options.capability !== false },
-    labels: options.labels ?? [],
   };
 }
 
@@ -54,7 +54,6 @@ describe('viewed scope', () => {
     filters.get('languages')?.add('sql');
     const include = includeCountedFiles(filters);
     const viewed = file('web/src/app/App.tsx', {
-      viewed: true,
       labels: [
         { facet: 'viewed', value: 'true' },
         { facet: 'owners', value: '@acme/web-platform' },
@@ -62,6 +61,7 @@ describe('viewed scope', () => {
         { facet: 'languages', value: 'TypeScript' },
         { facet: 'generated', value: 'false' },
       ],
+      viewed: true,
     });
     const unread = file('web/src/app/routes.tsx', {
       labels: [

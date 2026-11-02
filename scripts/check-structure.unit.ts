@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { findStructureViolations } from './check-structure';
+import { findStructureViolations } from './structure-violations';
 
 describe('repository structure', () => {
   it('accepts configured product, test, tooling, and documentation roots', () => {
@@ -15,7 +15,7 @@ describe('repository structure', () => {
         'scripts/check-structure.ts',
         'scripts/check-structure.unit.ts',
       ]),
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it('allows Playwright e2e without a product namesake module', () => {
@@ -23,13 +23,13 @@ describe('repository structure', () => {
       findStructureViolations([
         'src/app/review/live-perf.e2e.playwright.ts',
       ]),
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it('rejects a colocated test without its namesake module', () => {
     expect(
       findStructureViolations(['src/app/orphan.spec.ts']),
-    ).toEqual([
+    ).toStrictEqual([
       'src/app/orphan.spec.ts: missing namesake module src/app/orphan.ts',
     ]);
   });
@@ -40,7 +40,7 @@ describe('repository structure', () => {
         'README.md',
         'docs/superpowers/plans/generated-plan.md',
       ]),
-    ).toEqual([
+    ).toStrictEqual([
       'docs/superpowers/plans/generated-plan.md: generated planning artifact is tracked',
     ]);
   });
@@ -53,7 +53,7 @@ describe('repository structure', () => {
         'utilities/helper.ts',
         'src/app/review-app.tests.ts',
       ]),
-    ).toEqual([
+    ).toStrictEqual([
       'eslint.config.ts: TypeScript is outside configured roots',
       'src/app/review-app.tests.ts: unsupported test suffix',
       'tests/e2e/diffseek.spec.ts: TypeScript is outside configured roots',
@@ -64,7 +64,7 @@ describe('repository structure', () => {
   it('rejects a tooling test without its adjacent namesake module', () => {
     expect(
       findStructureViolations(['scripts/orphan.unit.ts']),
-    ).toEqual([
+    ).toStrictEqual([
       'scripts/orphan.unit.ts: missing namesake module scripts/orphan.ts',
     ]);
   });
@@ -76,7 +76,7 @@ describe('repository structure', () => {
         'src/github/page-adapter.ts',
         'src/metadata/reader.ts',
       ]),
-    ).toEqual([
+    ).toStrictEqual([
       'src/domain/file.ts: source is outside an architectural layer',
       'src/github/page-adapter.ts: source is outside an architectural layer',
       'src/metadata/reader.ts: source is outside an architectural layer',

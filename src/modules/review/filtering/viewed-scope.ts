@@ -3,18 +3,14 @@ import type { FileRecord, FilterState } from '../model/file';
 
 import { matchesFacets } from './facets';
 
-export type ViewedMark = 'empty' | 'partial' | 'filled';
-
-export type CountBucket = {
+export interface CountBucket {
   counted: number;
-  viewed: number;
-  unreadPaths: string[];
   countedPaths: string[];
-};
-
-export function emptyCountBucket(): CountBucket {
-  return { counted: 0, viewed: 0, unreadPaths: [], countedPaths: [] };
+  unreadPaths: string[];
+  viewed: number;
 }
+
+export type ViewedMark = 'empty' | 'filled' | 'partial';
 
 export function addCountedFile(bucket: CountBucket, file: FileRecord): void {
   bucket.counted += 1;
@@ -23,17 +19,19 @@ export function addCountedFile(bucket: CountBucket, file: FileRecord): void {
   else bucket.unreadPaths.push(file.path);
 }
 
-export function viewedMark(viewed: number, counted: number): ViewedMark {
-  if (counted <= 0 || viewed <= 0) return 'empty';
-  if (viewed >= counted) return 'filled';
-  return 'partial';
-}
-
 /** Paths the click will change. Filled clears every counted file; otherwise only unread ones. */
 export function bucketActionPaths(bucket: CountBucket): string[] {
   return viewedMark(bucket.viewed, bucket.counted) === 'filled'
     ? bucket.countedPaths
     : bucket.unreadPaths;
+}
+
+export function emptyCountBucket(): CountBucket {
+  return { counted: 0, countedPaths: [], unreadPaths: [], viewed: 0 };
+}
+
+export function fileViewedLabel(viewed: boolean): string {
+  return viewed ? 'Unmark' : 'Mark viewed';
 }
 
 /** Tree folders: markable files that pass every filter except Viewed's hiding. */
@@ -45,28 +43,30 @@ export function includeCountedFiles(
     file.capabilities.viewed && matchesFacets(file.labels, counted);
 }
 
-export function fileViewedLabel(viewed: boolean): string {
-  return viewed ? 'Unmark' : 'Mark viewed';
+export function viewedMark(viewed: number, counted: number): ViewedMark {
+  if (counted <= 0 || viewed <= 0) return 'empty';
+  if (viewed >= counted) return 'filled';
+  return 'partial';
 }
 
 const scopeViewedLabels: Record<ViewedMark, string> = {
   empty: 'Mark all viewed',
-  partial: 'Mark the rest viewed',
   filled: 'Unmark all',
+  partial: 'Mark the rest viewed',
 };
-
-export function scopeViewedLabel(viewed: number, counted: number): string {
-  return scopeViewedLabels[viewedMark(viewed, counted)];
-}
 
 export function scopeAriaPressed(
   viewed: number,
   counted: number,
-): 'true' | 'false' | 'mixed' {
+): 'false' | 'mixed' | 'true' {
   const state = viewedMark(viewed, counted);
   if (state === 'filled') return 'true';
   if (state === 'partial') return 'mixed';
   return 'false';
+}
+
+export function scopeViewedLabel(viewed: number, counted: number): string {
+  return scopeViewedLabels[viewedMark(viewed, counted)];
 }
 
 function filtersIgnoringHides(
@@ -76,7 +76,7 @@ function filtersIgnoringHides(
   let next: FilterState | null = null;
   for (const facet of facets) {
     const values = (next ?? filters).get(facet);
-    if (!values?.has('true')) continue;
+    if (values?.has('true') !== true) continue;
     next ??= new Map(filters);
     const remaining = new Set(values);
     remaining.delete('true');

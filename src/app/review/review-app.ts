@@ -24,129 +24,197 @@ import {
 
 import { ReviewSession } from './review-session';
 
-type ReviewAppOptions = {
-  root?: Document;
-  pathname?: () => string;
-  search?: () => string;
-  hash?: () => string;
-  replace?: (url: string) => void;
-  readImmediate?: (repository: RepositoryRef) => Promise<RepositoryMetadata>;
-  refreshDefault?: (
+export interface ReviewApp {
+  reconcile: () => void;
+  stop: () => void;
+}
+
+interface AppDependencies {
+  markFiles: typeof markViewed;
+  readFilterDefaults: () => Promise<FilterDefaults>;
+  readImmediate: (repository: RepositoryRef) => Promise<RepositoryMetadata>;
+  readPull: (
+    review: ReviewRef,
+    fallback: RepositoryMetadata,
+  ) => Promise<RepositoryMetadata>;
+  refreshDefault: (
     repository: RepositoryRef,
-  ) => Promise<{ metadata: RepositoryMetadata; changed: boolean }>;
+  ) => Promise<{ changed: boolean; metadata: RepositoryMetadata; }>;
+  writeFilterDefaults: (defaults: FilterDefaults) => Promise<void>;
+}
+
+interface ReviewAppOptions {
+  hash?: () => string;
+  markFiles?: typeof markViewed;
+  pathname?: () => string;
+  readFilterDefaults?: () => Promise<FilterDefaults>;
+  readImmediate?: (repository: RepositoryRef) => Promise<RepositoryMetadata>;
   readPull?: (
     review: ReviewRef,
     fallback: RepositoryMetadata,
   ) => Promise<RepositoryMetadata>;
-  markFiles?: typeof markViewed;
-  readFilterDefaults?: () => Promise<FilterDefaults>;
+  refreshDefault?: (
+    repository: RepositoryRef,
+  ) => Promise<{ changed: boolean; metadata: RepositoryMetadata; }>;
+  replace?: (url: string) => void;
+  root?: Document;
+  search?: () => string;
   writeFilterDefaults?: (defaults: FilterDefaults) => Promise<void>;
+}
+
+const idleReview: ReviewApp = {
+  reconcile(): void {
+    // The classic route redirected before a session existed.
+  },
+  stop(): void {
+    // The classic route redirected before a session existed.
+  },
 };
 
-export type ReviewApp = {
-  reconcile: () => void;
-  stop: () => void;
-};
+class ActiveReview implements ReviewApp {
+  private readonly dependencies: AppDependencies;
+  private readonly filterDefaults: FilterDefaults;
+  private generation = 0;
+  private readonly lifecycle = new AbortController();
+  private readonly metadataCommits: MetadataCommitGuard;
+  private readonly observer: MutationObserver;
+  private readonly pathname: () => string;
+  private review: null | ReviewRef = null;
+  private readonly root: Document;
+  private scheduled = false;
+  private session: null | ReviewSession = null;
+
+  constructor(
+    root: Document,
+    pathname: () => string,
+    dependencies: AppDependencies,
+    filterDefaults: FilterDefaults,
+  ) {
+    this.root = root;
+    this.pathname = pathname;
+    this.dependencies = dependencies;
+    this.filterDefaults = filterDefaults;
+    this.metadataCommits = new MetadataCommitGuard(writeCache);
+    this.observer = new MutationObserver((): void => {
+      this.onMutation();
+    });
+  }
+
+  onMutation(): void {
+    if (this.lifecycle.signal.aborted || this.scheduled) return;
+    this.scheduled = true;
+    queueMicrotask((): void => {
+      this.onMutationTask();
+    });
+  }
+
+  onMutationTask(): void {
+    this.scheduled = false;
+    const next = reviewFromPath(this.pathname());
+    if (next?.key !== this.review?.key) void this.replaceSession(next);
+  }
+
+  async open(): Promise<void> {
+    this.observer.observe(this.root.body, { childList: true, subtree: true });
+    await this.replaceSession(reviewFromPath(this.pathname()));
+  }
+
+  reconcile(): void {
+    if (this.lifecycle.signal.aborted) return;
+    const next = reviewFromPath(this.pathname());
+    if (next?.key === this.review?.key) {
+      this.session?.reconcile();
+      return;
+    }
+    void this.replaceSession(next);
+  }
+
+  replaced(expectedGeneration: number, next: ReviewRef): boolean {
+    return (
+      this.lifecycle.signal.aborted ||
+      expectedGeneration !== this.generation ||
+      this.review?.key !== next.key
+    );
+  }
+
+  async replaceSession(next: null | ReviewRef): Promise<void> {
+    const expectedGeneration = ++this.generation;
+    this.session?.stop();
+    this.session = null;
+    this.review = next;
+    if (next === null) {
+      this.root.dispatchEvent(new CustomEvent('diffseek-reconciled'));
+      return;
+    }
+    const metadata = await this.dependencies.readImmediate(next);
+    if (this.replaced(expectedGeneration, next)) return;
+    this.session = new ReviewSession({
+      filterDefaults: this.filterDefaults,
+      markFiles: this.dependencies.markFiles,
+      metadata,
+      metadataCommits: this.metadataCommits,
+      readPull: this.dependencies.readPull,
+      refreshDefault: this.dependencies.refreshDefault,
+      review: next,
+      root: this.root,
+      writeFilterDefaults: this.dependencies.writeFilterDefaults,
+    });
+    this.session.start();
+  }
+
+  stop(): void {
+    if (this.lifecycle.signal.aborted) return;
+    this.lifecycle.abort();
+    this.generation += 1;
+    this.observer.disconnect();
+    this.session?.stop();
+    this.session = null;
+    this.review = null;
+  }
+}
 
 export async function startReviewApp(
   options: ReviewAppOptions = {},
 ): Promise<ReviewApp> {
   const root = options.root ?? document;
-  const pathname = options.pathname ?? (() => location.pathname);
-  const search = options.search ?? (() => location.search);
+  const pathname = options.pathname ?? ((): string => location.pathname);
+  const search = options.search ?? ((): string => location.search);
   const changesPath = isSignedOut(root)
     ? null
     : changesPathFromClassic(pathname(), search());
-  if (changesPath) {
-    const hash = options.hash?.() ?? location.hash;
-    (options.replace ?? location.replace.bind(location))(`${changesPath}${hash}`);
-    return { reconcile() {}, stop() {} };
+  if (changesPath !== null) {
+    redirectClassic(options, changesPath);
+    return idleReview;
   }
-  const dependencies = {
-    readImmediate: options.readImmediate ?? readImmediateMetadata,
-    refreshDefault: options.refreshDefault ?? refreshDefaultMetadata,
-    readPull: options.readPull ?? readPullMetadata,
+  const dependencies = dependenciesFrom(options);
+  const app = new ActiveReview(
+    root,
+    pathname,
+    dependencies,
+    await dependencies.readFilterDefaults(),
+  );
+  await app.open();
+  return app;
+}
+
+function dependenciesFrom(options: ReviewAppOptions): AppDependencies {
+  return {
     markFiles: options.markFiles ?? markViewed,
     readFilterDefaults: options.readFilterDefaults ?? readFilterDefaults,
+    readImmediate: options.readImmediate ?? readImmediateMetadata,
+    readPull: options.readPull ?? readPullMetadata,
+    refreshDefault: options.refreshDefault ?? refreshDefaultMetadata,
     writeFilterDefaults: options.writeFilterDefaults ?? writeFilterDefaults,
-  };
-  const filterDefaults = await dependencies.readFilterDefaults();
-  const metadataCommits = new MetadataCommitGuard(writeCache);
-  const lifecycle = new AbortController();
-  let session: ReviewSession | null = null;
-  let review: ReviewRef | null = null;
-  let generation = 0;
-  let scheduled = false;
-
-  const replaceSession = async (next: ReviewRef | null) => {
-    const expectedGeneration = ++generation;
-    session?.stop();
-    session = null;
-    review = next;
-    if (!next) {
-      root.dispatchEvent(new CustomEvent('diffseek-reconciled'));
-      return;
-    }
-
-    const metadata = await dependencies.readImmediate(next);
-    if (
-      lifecycle.signal.aborted ||
-      expectedGeneration !== generation ||
-      review?.key !== next.key
-    ) {
-      return;
-    }
-    session = new ReviewSession({
-      root,
-      review: next,
-      metadata,
-      metadataCommits,
-      refreshDefault: dependencies.refreshDefault,
-      readPull: dependencies.readPull,
-      markFiles: dependencies.markFiles,
-      filterDefaults,
-      writeFilterDefaults: dependencies.writeFilterDefaults,
-    });
-    session.start();
-  };
-
-  const reconcile = () => {
-    if (lifecycle.signal.aborted) return;
-    const next = reviewFromPath(pathname());
-    if (next?.key === review?.key) {
-      session?.reconcile();
-      return;
-    }
-    void replaceSession(next);
-  };
-
-  const observer = new MutationObserver(() => {
-    if (lifecycle.signal.aborted || scheduled) return;
-    scheduled = true;
-    queueMicrotask(() => {
-      scheduled = false;
-      const next = reviewFromPath(pathname());
-      if (next?.key !== review?.key) void replaceSession(next);
-    });
-  });
-  observer.observe(root.body, { childList: true, subtree: true });
-  await replaceSession(reviewFromPath(pathname()));
-
-  return {
-    reconcile,
-    stop() {
-      if (lifecycle.signal.aborted) return;
-      lifecycle.abort();
-      generation += 1;
-      observer.disconnect();
-      session?.stop();
-      session = null;
-      review = null;
-    },
   };
 }
 
 /** GitHub renders an empty `user-login` meta for signed-out visitors. */
 function isSignedOut(root: Document): boolean {
   return root.querySelector('meta[name="user-login"]')?.getAttribute('content') === '';
+}
+
+function redirectClassic(options: ReviewAppOptions, changesPath: string): void {
+  const hash = options.hash?.() ?? location.hash;
+  const replace = options.replace ?? location.replace.bind(location);
+  replace(`${changesPath}${hash}`);
 }

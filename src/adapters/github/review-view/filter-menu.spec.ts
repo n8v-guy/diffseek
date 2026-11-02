@@ -1,112 +1,20 @@
+import { describe, expect, it } from 'vitest';
 
-import { describe, expect, it, vi } from 'vitest';
+import type { FileRecord } from '@diffseek/review';
 
-import { emptyFacetExclusions } from '@diffseek/review';
-import type { FileRecord, FilterState } from '@diffseek/review';
+import { dataAttribute } from '../dom-data';
 
 import { mountFilterMenu } from './filter-menu';
+import { changeHandler, fallbackLabels, fileAt, files, filters, menu, menuExcludingGroup, viewedHandler, withoutGenerated } from './filter-menu.fixture';
 
-const files: FileRecord[] = [
-  {
-    path: 'src/app.test.ts',
-    anchor: 'diff-app',
-    extension: '.ts',
-    owners: ['@owner'],
-    generated: false,
-    status: 'modified',
-    viewed: false,
-    capabilities: { collapse: true, viewed: true },
-    labels: [
-      { facet: 'groups', value: 'Tests' },
-      { facet: 'owners', value: '@owner' },
-      { facet: 'languages', value: 'ts' },
-      { facet: 'generated', value: 'false' },
-      { facet: 'statuses', value: 'modified' },
-    ],
-  },
-  {
-    path: 'docs/guide.md',
-    anchor: 'diff-docs',
-    extension: '.md',
-    owners: ['@docs'],
-    generated: true,
-    status: 'added',
-    viewed: true,
-    capabilities: { collapse: true, viewed: true },
-    labels: [
-      { facet: 'viewed', value: 'true' },
-      { facet: 'groups', value: 'Docs' },
-      { facet: 'owners', value: '@docs' },
-      { facet: 'languages', value: 'md' },
-      { facet: 'generated', value: 'true' },
-      { facet: 'statuses', value: 'added' },
-    ],
-  },
-  {
-    path: 'unmapped.txt',
-    anchor: 'diff-unmapped',
-    extension: '.txt',
-    owners: [],
-    generated: false,
-    status: 'modified',
-    viewed: false,
-    capabilities: { collapse: true, viewed: true },
-    labels: [
-      { facet: 'owners', value: 'Unmapped' },
-      { facet: 'generated', value: 'false' },
-      { facet: 'statuses', value: 'modified' },
-    ],
-  },
-];
-
-const filters = (): FilterState => emptyFacetExclusions();
-
-const fallbackLabels: FileRecord['labels'] = [
-  { facet: 'groups', value: 'No groups' },
-  { facet: 'owners', value: 'Unmapped' },
-  { facet: 'languages', value: 'No extension' },
-  { facet: 'generated', value: 'false' },
-  { facet: 'statuses', value: 'modified' },
-];
-
-function withOwners(first: string, second: string): FileRecord[] {
-  return files.map((file, index) => ({
-    ...file,
-    labels: file.labels.map((label) =>
-      label.facet === 'owners' && label.value !== 'Unmapped'
-        ? { ...label, value: index === 0 ? first : second }
-        : label,
-    ),
-  }));
-}
-
-function menu(): HTMLElement {
-  document.body.innerHTML = `
-    <ul role="menu" aria-label="Filter options">
-      <li role="menuitemcheckbox" aria-label=".ts">native extension</li>
-      <li role="separator">native separator</li>
-    </ul>
-  `;
-  const element = document.querySelector<HTMLElement>('[role="menu"]');
-  if (!element) throw new Error('Missing menu fixture');
-  return element;
-}
-
-describe('mountFilterMenu', () => {
+describe('mountFilterMenu ownership', () => {
   it('owns the menu contents while retaining hidden native items', () => {
     const element = menu();
     const state = filters();
+    const onChange = changeHandler();
 
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange: vi.fn(),
-    });
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange: vi.fn(),
-    });
+    mountFilterMenu(element, { files, filters: state, onChange });
+    mountFilterMenu(element, { files, filters: state, onChange });
 
     expect(
       element.querySelector('[aria-label=".ts"]')?.hasAttribute('hidden'),
@@ -124,31 +32,20 @@ describe('mountFilterMenu', () => {
     expect(element.textContent).toContain('Viewed files');
     expect(element.textContent).toContain('Generated files');
     expect(element.textContent).toContain('Change status');
+    expect(sectionHeadings(element)).toStrictEqual([
+      'Owners',
+      'Groups',
+      'Formats',
+      'Change status',
+    ]);
     expect(
-      [...element.querySelectorAll('.diffseek-menu-section h3')].map(
-        (heading) => heading.textContent,
-      ),
-    ).toEqual(['Owners', 'Groups', 'Formats', 'Change status']);
-    expect(
-      element.querySelector(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      )?.closest('.diffseek-menu-section'),
+      element
+        .querySelector('[data-filter-kind="generated"][data-filter-value="true"]')
+        ?.closest('.diffseek-menu-section'),
     ).toBeNull();
     expect(element.querySelectorAll('[data-diffseek-separator]')).toHaveLength(4);
-    expect(
-      [
-        ...element.querySelectorAll<HTMLElement>(
-          '[data-diffseek="filters"] > .diffseek-menu-content > .diffseek-menu-row [data-filter-kind]',
-        ),
-      ].map(({ dataset }) => dataset.filterKind),
-    ).toEqual(['viewed', 'generated']);
-    expect(
-      [
-        ...element.querySelectorAll(
-          '[data-filter-kind="owners"]',
-        ),
-      ].map((item) => item.getAttribute('data-filter-value')),
-    ).toEqual(['@docs', '@owner', 'Unmapped']);
+    expect(topLevelKinds(element)).toStrictEqual(['viewed', 'generated']);
+    expect(ownerValues(element)).toStrictEqual(['@docs', '@owner', 'Unmapped']);
     expect(element.textContent).toContain('No owner');
     expect(element.textContent).not.toContain('Unmapped');
     expect(element.textContent).not.toContain('matching files');
@@ -160,17 +57,17 @@ describe('mountFilterMenu', () => {
     const element = menu();
     const clear = document.createElement('button');
     clear.textContent = 'Clear filters';
-    const onClear = vi.fn();
+    const onClear = changeHandler();
     clear.addEventListener('click', onClear);
     element.append(clear);
 
     mountFilterMenu(element, {
       files,
       filters: filters(),
-      onChange: vi.fn(),
+      onChange: changeHandler(),
     });
 
-    expect(onClear).toHaveBeenCalledOnce();
+    expect(onClear).toHaveBeenCalledExactlyOnceWith(expect.any(MouseEvent));
     expect(element.querySelector('[data-diffseek="filters"]')).toBeNull();
     expect(element.querySelector('[data-diffseek-native-hidden]')).toBeNull();
   });
@@ -179,371 +76,84 @@ describe('mountFilterMenu', () => {
     const element = menu();
 
     mountFilterMenu(element, {
-      files: files.map((file) => ({
-        ...file,
-        generated: false,
-        labels: file.labels.filter(
-          (label) =>
-            label.facet !== 'generated' || label.value === 'false',
-        ),
-      })),
+      files: withoutGenerated(files),
       filters: filters(),
-      onChange: vi.fn(),
+      onChange: changeHandler(),
     });
 
-    expect(
-      element.querySelector('[data-filter-kind="generated"]'),
-    ).toBeNull();
+    expect(element.querySelector('[data-filter-kind="generated"]')).toBeNull();
     expect(element.textContent).not.toContain('Generated files');
   });
+});
 
-  it('starts observed values checked and unchecks an excluded value', () => {
+function ownerValues(element: ParentNode): (string | undefined)[] {
+  return [...element.querySelectorAll('[data-filter-kind="owners"]')].map(
+    (item) => (item instanceof HTMLElement ? dataAttribute(item, 'filterValue') : undefined),
+  );
+}
+
+function sectionHeadings(element: ParentNode): (null | string)[] {
+  return [...element.querySelectorAll('.diffseek-menu-section h3')].map(
+    (heading) => heading.textContent,
+  );
+}
+
+function topLevelKinds(element: ParentNode): (string | undefined)[] {
+  return [
+    ...element.querySelectorAll<HTMLElement>(
+      '[data-diffseek="filters"] > .diffseek-menu-content > .diffseek-menu-row [data-filter-kind]',
+    ),
+  ].map((item) => dataAttribute(item, 'filterKind'));
+}
+
+describe('filter menu fallback sections', () => {
+  it('hides sections whose only choice is their fallback', () => {
     const element = menu();
-    const state = filters();
-    const onChange = vi.fn();
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange,
-    });
-
-    const tests = element.querySelector<HTMLElement>(
-      '[data-filter-kind="groups"][data-filter-value="Tests"]',
-    );
-    expect(tests?.getAttribute('aria-checked')).toBe('true');
-    tests?.click();
-    expect(state.get('groups')).toEqual(new Set(['Tests']));
-    expect(tests?.getAttribute('aria-checked')).toBe('false');
-    expect(onChange).toHaveBeenCalledOnce();
-  });
-
-  it('adds only shortcuts exclusively to multi-item sections', () => {
-    const single = menu();
-    mountFilterMenu(single, {
-      files: [files[0]!],
-      filters: filters(),
-      onChange: vi.fn(),
-    });
-    expect(single.querySelector('[data-filter-only]')).toBeNull();
-
-    const multiple = menu();
-    mountFilterMenu(multiple, {
-      files,
-      filters: filters(),
-      onChange: vi.fn(),
-    });
-    expect(multiple.querySelector('[data-filter-only]')).not.toBeNull();
-  });
-
-  it('does not show reset for exclusions backed only by defaults', () => {
-    const element = menu();
-    const state = filters();
-    const filterDefaults = {
-      hidden: new Set<'viewed' | 'generated'>(['viewed', 'generated']),
-      viewed: new Set<'generated'>(['generated']),
+    const fallbackOnly: FileRecord = {
+      ...fileAt(2),
+      labels: fallbackLabels,
     };
-    state.get('viewed')?.add('true');
-    state.get('generated')?.add('true');
 
     mountFilterMenu(element, {
-      files,
-      filters: state,
-      filterDefaults,
-      onChange: vi.fn(),
+      files: [fallbackOnly],
+      filters: filters(),
+      onChange: changeHandler(),
     });
 
-    expect(element.querySelector('[data-reset-filters]')).toBeNull();
-  });
-
-  it('resets transient exclusions without changing defaults', () => {
-    const element = menu();
-    const state = filters();
-    const filterDefaults = {
-      hidden: new Set<'viewed' | 'generated'>(['viewed', 'generated']),
-      viewed: new Set<'generated'>(['generated']),
-    };
-    const onChange = vi.fn();
-    const onFilterDefaultChange = vi.fn();
-    state.get('groups')?.add('Tests');
-    state.get('viewed')?.add('true');
-    state.get('generated')?.add('true');
-
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      filterDefaults,
-      onChange,
-      onFilterDefaultChange,
-    });
-
-    const reset = element.querySelector<HTMLButtonElement>(
-      '[data-reset-filters]',
-    );
-    expect(reset?.textContent).toBe('');
     expect(
-      reset?.querySelector('svg[data-diffseek-reset-icon]'),
-    ).not.toBeNull();
-    expect(
-      reset?.querySelector('svg[data-diffseek-reset-icon] path'),
-    ).not.toBeNull();
-    expect(reset?.getAttribute('aria-label')).toBe('Reset filters');
-    expect(
-      reset?.closest('[data-diffseek="filters"]')?.querySelectorAll(
-        '[data-diffseek-separator]',
+      [...element.querySelectorAll('.diffseek-menu-section h3')].map(
+        (heading) => heading.textContent,
       ),
-    ).toHaveLength(4);
-    reset?.click();
-    expect(state.get('groups')).toEqual(new Set());
-    expect(state.get('viewed')).toEqual(new Set(['true']));
-    expect(state.get('generated')).toEqual(new Set(['true']));
-    expect(filterDefaults).toEqual({
-      hidden: new Set(['viewed', 'generated']),
-      viewed: new Set(['generated']),
-    });
-    expect(onFilterDefaultChange).not.toHaveBeenCalled();
-    expect(onChange).toHaveBeenCalledOnce();
-
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      filterDefaults,
-      onChange,
-      onFilterDefaultChange,
-    });
-    expect(element.querySelector('[data-reset-filters]')).toBeNull();
+    ).toStrictEqual(['Change status']);
+    expect(element.textContent).not.toContain('No owner');
+    expect(element.textContent).not.toContain('No groups');
+    expect(element.textContent).not.toContain('No extension');
   });
 
-  it('shows visible and total counters for every category', () => {
+  it('shows a fallback section when another choice exists', () => {
     const element = menu();
+    const untyped: FileRecord = {
+      ...fileAt(2),
+      labels: fallbackLabels,
+    };
+
     mountFilterMenu(element, {
-      files,
+      files: [fileAt(0), untyped],
       filters: filters(),
-      onChange: vi.fn(),
+      onChange: changeHandler(),
     });
 
     expect(
       element.querySelector(
-        '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Tests"]) .diffseek-menu-count',
-      )?.textContent,
-    ).toContain('1/1');
+        '[data-filter-kind="groups"][data-filter-value="No groups"]',
+      ),
+    ).not.toBeNull();
     expect(
-      element.querySelector(
-        '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
-      )?.textContent,
-    ).toContain('1/1');
+      [...element.querySelectorAll<HTMLElement>('[data-filter-kind="groups"]')].map(
+        (item) => dataAttribute(item, 'filterValue'),
+      ),
+    ).toStrictEqual(['Tests', 'No groups']);
   });
-
-  it('updates visible counts when files are filtered out', () => {
-    const element = menu();
-    const state = filters();
-    state.get('groups')?.add('Tests');
-
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange: vi.fn(),
-    });
-
-    expect(
-      element.querySelector(
-        '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Tests"]) .diffseek-menu-count',
-      )?.textContent,
-    ).toContain('0/1');
-    expect(
-      element.querySelector(
-        '.diffseek-menu-row:has([data-filter-kind="statuses"][data-filter-value="modified"]) .diffseek-menu-count',
-      )?.textContent,
-    ).toContain('1/2');
-  });
-
-  it('removes a shared owner prefix from two or more mapped owners', () => {
-    const element = menu();
-    mountFilterMenu(element, {
-      files: withOwners('@team/backend', '@team/platform'),
-      filters: filters(),
-      onChange: vi.fn(),
-    });
-
-    const owners = [
-      ...element.querySelectorAll<HTMLElement>('[data-filter-kind="owners"]'),
-    ];
-    expect(owners.map(({ dataset }) => dataset.filterValue)).toEqual([
-      '@team/backend',
-      '@team/platform',
-      'Unmapped',
-    ]);
-    expect(owners.map((owner) => owner.textContent)).toEqual([
-      expect.stringContaining('backend'),
-      expect.stringContaining('platform'),
-      expect.stringContaining('No owner'),
-    ]);
-    expect(owners.map((owner) => owner.textContent).join(' ')).not.toContain(
-      '@team/',
-    );
-  });
-
-  it('keeps owner prefixes when fewer than two owners share one', () => {
-    const element = menu();
-
-    mountFilterMenu(element, {
-      files,
-      filters: filters(),
-      onChange: vi.fn(),
-    });
-
-    expect(element.textContent).toContain('@docs');
-    expect(element.textContent).toContain('@owner');
-  });
-
-  it('keeps owner prefixes when mapped owners belong to different organizations', () => {
-    const element = menu();
-    mountFilterMenu(element, {
-      files: withOwners('@team/backend', '@other/platform'),
-      filters: filters(),
-      onChange: vi.fn(),
-    });
-
-    expect(element.textContent).toContain('@team/backend');
-    expect(element.textContent).toContain('@other/platform');
-  });
-
-  it('marks only the currently visible files for a label', () => {
-    const element = menu();
-    const state = filters();
-    const onChange = vi.fn();
-    const onViewed = vi.fn();
-    state.get('groups')?.add('Tests');
-
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange,
-      onViewed,
-    });
-
-    const action = element.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-viewed-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
-    );
-    const counter = element.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-count-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
-    );
-    expect(action?.title).toBe(
-      'Mark all viewed',
-    );
-    expect(counter?.title).toBe(
-      'Mark all viewed',
-    );
-    expect(action?.getAttribute('aria-pressed')).toBe('false');
-    const tests = element.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Tests"]',
-    );
-    expect(tests?.title).toBe(
-      'Mark all viewed',
-    );
-    counter?.click();
-    expect(onViewed).toHaveBeenCalledWith(
-      true,
-      ['src/app.test.ts', 'unmapped.txt'],
-    );
-    onViewed.mockClear();
-    action?.click();
-    expect(onViewed).toHaveBeenCalledWith(
-      true,
-      ['src/app.test.ts', 'unmapped.txt'],
-    );
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it('offers to mark a fully viewed visible label as not viewed', () => {
-    const element = menu();
-    const onViewed = vi.fn();
-
-    mountFilterMenu(element, {
-      files,
-      filters: filters(),
-      onChange: vi.fn(),
-      onViewed,
-    });
-
-    const action = element.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]',
-    );
-    const counter = element.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-count-action][data-viewed-facet="generated"][data-viewed-value="true"]',
-    );
-    expect(action?.title).toBe('Unmark all');
-    expect(counter?.title).toBe('Unmark all');
-    counter?.click();
-    expect(onViewed).toHaveBeenCalledWith(
-      false,
-      ['docs/guide.md'],
-    );
-    onViewed.mockClear();
-    action?.click();
-    expect(onViewed).toHaveBeenCalledWith(
-      false,
-      ['docs/guide.md'],
-    );
-  });
-
-  it('marks visible unread files when some counted files are hidden as viewed', () => {
-    const element = menu();
-    const state = filters();
-    const onViewed = vi.fn();
-    const sharedOwnerFiles = files.map((file) =>
-      file.path === 'docs/guide.md'
-        ? {
-            ...file,
-            labels: file.labels.map((label) =>
-              label.facet === 'owners'
-                ? { ...label, value: '@owner' }
-                : label,
-            ),
-          }
-        : file,
-    );
-    state.get('viewed')?.add('true');
-
-    mountFilterMenu(element, {
-      files: sharedOwnerFiles,
-      filters: state,
-      onChange: vi.fn(),
-      onViewed,
-    });
-
-    const row = element.querySelector(
-      '.diffseek-menu-row:has([data-filter-kind="owners"][data-filter-value="@owner"])',
-    );
-    const action = row?.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-viewed-action]',
-    );
-    const counter = row?.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-count-action]',
-    );
-    expect(counter?.textContent).toBe('1/2');
-    expect(action?.title).toBe(
-      'Mark the rest viewed',
-    );
-    expect(counter?.title).toBe(
-      'Mark the rest viewed',
-    );
-    expect(action?.getAttribute('aria-pressed')).toBe('mixed');
-    expect(action?.classList.contains('diffseek-viewed-partial')).toBe(true);
-    expect(counter?.classList.contains('diffseek-viewed-partial')).toBe(false);
-    expect(counter?.getAttribute('aria-pressed')).toBe('mixed');
-    counter?.click();
-    expect(onViewed).toHaveBeenCalledWith(
-      true,
-      ['src/app.test.ts'],
-    );
-    onViewed.mockClear();
-    action?.click();
-    expect(onViewed).toHaveBeenCalledWith(
-      true,
-      ['src/app.test.ts'],
-    );
-  });
-
 });
 
 describe('mountFilterMenu focus', () => {
@@ -555,7 +165,7 @@ describe('mountFilterMenu focus', () => {
     mountFilterMenu(element, {
       files,
       filters: state,
-      onChange: vi.fn(),
+      onChange: changeHandler(),
     });
 
     expect(
@@ -566,21 +176,13 @@ describe('mountFilterMenu focus', () => {
   });
 
   it('supports roving keys without menu-level actions', () => {
-    const element = menu();
-    const state = filters();
-    state.get('groups')?.add('Tests');
-
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange: vi.fn(),
-    });
+    const element = menuExcludingGroup('Tests');
     const first = element.querySelector<HTMLButtonElement>(
       '[data-diffseek="filters"] button',
     );
     first?.focus();
     first?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'End', bubbles: true }),
+      new KeyboardEvent('keydown', { bubbles: true, key: 'End' }),
     );
     expect(document.activeElement).toBe(
       [...element.querySelectorAll('[data-diffseek="filters"] button')].at(-1),
@@ -588,313 +190,72 @@ describe('mountFilterMenu focus', () => {
   });
 });
 
-describe('filter menu in-place patch', () => {
-  it('updates counts and viewed actions without replacing the menu root', () => {
-    const element = menu();
-    const state = filters();
-    const onViewed = vi.fn();
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange: vi.fn(),
-      onViewed,
-    });
-    const root = element.querySelector('[data-diffseek="filters"]');
-    const statusCount = element.querySelector(
-      '[data-diffseek-menu-count-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
-    );
-    expect(statusCount?.textContent).toContain('2/2');
-
-    const nextFiles = files.map((file): FileRecord =>
-      file.path === 'src/app.test.ts'
-        ? {
-            ...file,
-            viewed: true,
-            labels: [
-              { facet: 'viewed', value: 'true' },
-              ...file.labels.filter((label) => label.facet !== 'viewed'),
-            ],
-          }
-        : file,
-    );
-    mountFilterMenu(element, {
-      files: nextFiles,
-      filters: state,
-      onChange: vi.fn(),
-      onViewed,
-    });
-
-    expect(element.querySelector('[data-diffseek="filters"]')).toBe(root);
-    expect(
-      element.querySelector(
-        '[data-diffseek-menu-count-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
-      )?.textContent,
-    ).toContain('2/2');
-    element
-      .querySelector<HTMLButtonElement>(
-        '[data-diffseek-menu-count-action][data-viewed-facet="statuses"][data-viewed-value="modified"]',
-      )
-      ?.click();
-    expect(onViewed).toHaveBeenCalled();
-  });
-
-  it('keeps the generated row circle while generated files are hidden', () => {
-    const element = menu();
-    const state = filters();
-    const onViewed = vi.fn();
-    state.get('generated')?.add('true');
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      filterDefaults: {
-        hidden: new Set<'viewed' | 'generated'>(['generated']),
-        viewed: new Set<'generated'>(),
-      },
-      onChange: vi.fn(),
-      onViewed,
-    });
-
-    const row = element.querySelector(
-      '.diffseek-menu-row:has([data-filter-kind="generated"])',
-    );
-    const action = row?.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-viewed-action]',
-    );
-    const counter = row?.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-count-action]',
-    );
-    const pill = row?.querySelector('[data-diffseek-always-read]');
-    expect(counter?.textContent).toBe('0/1');
-    expect(action?.title).toBe('Unmark all');
-    expect(action?.getAttribute('aria-pressed')).toBe('true');
-    expect(action?.classList.contains('diffseek-viewed-partial')).toBe(false);
-    expect(pill).not.toBeNull();
-    expect(action).not.toBe(pill);
-    action?.click();
-    expect(onViewed).toHaveBeenCalledWith(
-      false,
-      ['docs/guide.md'],
-    );
-  });
-
-  it('rebuilds when section all shortcuts appear or disappear', () => {
-    const element = menu();
-    const state = filters();
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange: vi.fn(),
-      onViewed: vi.fn(),
-    });
-    expect(
-      element.querySelector(
-        '.diffseek-menu-section:has([data-filter-kind="owners"]) [data-filter-all]',
-      ),
-    ).toBeNull();
-
-    state.get('owners')?.add('@owner');
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange: vi.fn(),
-      onViewed: vi.fn(),
-    });
-    expect(
-      element.querySelector(
-        '.diffseek-menu-section:has([data-filter-kind="owners"]) [data-filter-all]',
-      ),
-    ).not.toBeNull();
-
-    state.get('owners')?.delete('@owner');
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      onChange: vi.fn(),
-      onViewed: vi.fn(),
-    });
-    expect(
-      element.querySelector(
-        '.diffseek-menu-section:has([data-filter-kind="owners"]) [data-filter-all]',
-      ),
-    ).toBeNull();
-  });
-});
-
-describe('generated default busy row', () => {
-  it('disables the generated row while default mark-viewed is busy', () => {
-    const element = menu();
-    const state = filters();
-    const onChange = vi.fn();
-    const onFilterDefaultChange = vi.fn();
-    const onViewed = vi.fn();
-    const filterDefaults = {
-      hidden: new Set<'viewed' | 'generated'>(['generated']),
-      viewed: new Set<'generated'>(['generated']),
-    };
-    const busyFiles: FileRecord[] = [
-      {
-        ...files[1]!,
-        viewed: false,
-        capabilities: { collapse: true, viewed: true },
-        labels: files[1]!.labels.filter((label) => label.facet !== 'viewed'),
-      },
-    ];
-
-    mountFilterMenu(element, {
-      files: busyFiles,
-      filters: state,
-      filterDefaults,
-      generatedDefaultBusy: true,
-      onChange,
-      onFilterDefaultChange,
-      onViewed,
-    });
-
-    const generated = element.querySelector<HTMLButtonElement>(
-      '[data-filter-kind="generated"][data-filter-value="true"]',
-    );
-    const viewedAction = element.querySelector<HTMLButtonElement>(
-      '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"]',
-    );
-    expect(generated?.disabled).toBe(true);
-    expect(generated?.getAttribute('aria-busy')).toBe('true');
-    expect(viewedAction?.disabled).toBe(true);
-    generated?.click();
-    viewedAction?.click();
-    element.querySelector<HTMLButtonElement>('[data-diffseek-always-read]')?.click();
-    expect(onChange).not.toHaveBeenCalled();
-    expect(onFilterDefaultChange).not.toHaveBeenCalled();
-    expect(onViewed).not.toHaveBeenCalled();
-    expect(filterDefaults.viewed.has('generated')).toBe(true);
-  });
-});
-
-describe('generated auto-view', () => {
-  it('toggles auto-view without cycling the generated filter', () => {
-    const element = menu();
-    const state = filters();
-    const filterDefaults = {
-      hidden: new Set<'viewed' | 'generated'>(['generated']),
-      viewed: new Set<'generated'>(),
-    };
-    const onChange = vi.fn();
-    const onFilterDefaultChange = vi.fn();
-    const onAlwaysReadChange = vi.fn();
-    mountFilterMenu(element, {
-      files,
-      filters: state,
-      filterDefaults,
-      onChange,
-      onFilterDefaultChange,
-      onAlwaysReadChange,
-    });
-
-    const generated = element.querySelector(
-      '[data-filter-kind="generated"][data-filter-value="true"]',
-    );
-    const alwaysRead = element.querySelector<HTMLButtonElement>(
-      '[data-diffseek-always-read]',
-    );
-    expect(alwaysRead?.textContent).toBe('auto-view');
-    expect(alwaysRead?.title).toBe('Always mark generated files viewed');
-    expect(alwaysRead?.className).toBe('diffseek-menu-always-read');
-    expect(alwaysRead?.getAttribute('aria-pressed')).toBe('false');
-    expect(generated?.getAttribute('aria-checked')).toBe('mixed');
-
-    alwaysRead?.click();
-    expect(alwaysRead?.getAttribute('aria-pressed')).toBe('true');
-    expect(filterDefaults.viewed).toEqual(new Set(['generated']));
-    expect(generated?.getAttribute('aria-checked')).toBe('mixed');
-    expect(onAlwaysReadChange).toHaveBeenCalledExactlyOnceWith(true);
-    expect(onFilterDefaultChange).not.toHaveBeenCalled();
-
-    alwaysRead?.click();
-    expect(alwaysRead?.getAttribute('aria-pressed')).toBe('false');
-    expect(filterDefaults.viewed).toEqual(new Set());
-    expect(onAlwaysReadChange).toHaveBeenLastCalledWith(false);
-    expect(onChange).toHaveBeenCalledTimes(2);
-  });
-});
+function onlyButton(element: ParentNode, value: string): HTMLButtonElement | null {
+  return element.querySelector<HTMLButtonElement>(
+    `.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="${CSS.escape(value)}"]) [data-filter-only]`,
+  );
+}
 
 describe('filter menu only focus', () => {
   it('presses the only pill whose focus is applied and updates it in place', () => {
     const element = menu();
     const state = filters();
-    const render = () => {
+    const render = (): void => {
       mountFilterMenu(element, {
         files,
         filters: state,
         onChange: render,
-        onViewed: vi.fn(),
+        onViewed: viewedHandler(),
       });
     };
-    const only = (value: string) =>
-      element.querySelector<HTMLButtonElement>(
-        `.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="${value}"]) [data-filter-only]`,
-      );
 
     render();
-    only('Tests')?.click();
-    expect(only('Tests')?.getAttribute('aria-pressed')).toBe('true');
-    expect(only('Docs')?.getAttribute('aria-pressed')).toBe('false');
+    onlyButton(element, 'Tests')?.click();
+    expect(onlyButton(element, 'Tests')?.getAttribute('aria-pressed')).toBe('true');
+    expect(onlyButton(element, 'Docs')?.getAttribute('aria-pressed')).toBe('false');
 
-    const testsOnly = only('Tests');
+    const testsOnly = onlyButton(element, 'Tests');
     state.get('groups')?.delete('Docs');
     state.get('groups')?.add('Tests');
     render();
-    expect(only('Tests')).toBe(testsOnly);
+    expect(onlyButton(element, 'Tests')).toBe(testsOnly);
     expect(testsOnly?.getAttribute('aria-pressed')).toBe('false');
-    expect(only('Docs')?.getAttribute('aria-pressed')).toBe('true');
+    expect(onlyButton(element, 'Docs')?.getAttribute('aria-pressed')).toBe('true');
   });
 });
 
-describe('filter menu fallback sections', () => {
-  it('hides sections whose only choice is their fallback', () => {
+describe('mountFilterMenu selection', () => {
+  it('starts observed values checked and unchecks an excluded value', () => {
     const element = menu();
-    const fallbackOnly: FileRecord = {
-      ...files[2]!,
-      labels: fallbackLabels,
-    };
+    const state = filters();
+    const onChange = changeHandler();
+    mountFilterMenu(element, { files, filters: state, onChange });
 
-    mountFilterMenu(element, {
-      files: [fallbackOnly],
-      filters: filters(),
-      onChange: vi.fn(),
-    });
-
-    expect(
-      [...element.querySelectorAll('.diffseek-menu-section h3')].map(
-        (heading) => heading.textContent,
-      ),
-    ).toEqual(['Change status']);
-    expect(element.textContent).not.toContain('No owner');
-    expect(element.textContent).not.toContain('No groups');
-    expect(element.textContent).not.toContain('No extension');
+    const tests = element.querySelector<HTMLElement>(
+      '[data-filter-kind="groups"][data-filter-value="Tests"]',
+    );
+    expect(tests?.getAttribute('aria-checked')).toBe('true');
+    tests?.click();
+    expect(state.get('groups')).toStrictEqual(new Set(['Tests']));
+    expect(tests?.getAttribute('aria-checked')).toBe('false');
+    expect(onChange).toHaveBeenCalledExactlyOnceWith();
   });
 
-  it('shows a fallback section when another choice exists', () => {
-    const element = menu();
-    const typed = files[0]!;
-    const untyped: FileRecord = {
-      ...files[2]!,
-      labels: fallbackLabels,
-    };
-
-    mountFilterMenu(element, {
-      files: [typed, untyped],
+  it('adds only shortcuts exclusively to multi-item sections', () => {
+    const single = menu();
+    mountFilterMenu(single, {
+      files: [fileAt(0)],
       filters: filters(),
-      onChange: vi.fn(),
+      onChange: changeHandler(),
     });
+    expect(single.querySelector('[data-filter-only]')).toBeNull();
 
-    expect(
-      element.querySelector(
-        '[data-filter-kind="groups"][data-filter-value="No groups"]',
-      ),
-    ).not.toBeNull();
-    expect(
-      [
-        ...element.querySelectorAll('[data-filter-kind="groups"]'),
-      ].map((item) => item.getAttribute('data-filter-value')),
-    ).toEqual(['Tests', 'No groups']);
+    const multiple = menu();
+    mountFilterMenu(multiple, {
+      files,
+      filters: filters(),
+      onChange: changeHandler(),
+    });
+    expect(multiple.querySelector('[data-filter-only]')).not.toBeNull();
   });
 });

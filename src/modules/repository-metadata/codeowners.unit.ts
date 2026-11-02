@@ -18,30 +18,30 @@ apps/ @apps
 
 describe('CODEOWNERS', () => {
   it('uses the last matching rule and multiple owners', () => {
-    expect(ownersForPath('src/app.ts', rules)).toEqual([
+    expect(ownersForPath('src/app.ts', rules)).toStrictEqual([
       '@global-1',
       '@global-2',
     ]);
-    expect(ownersForPath('src/app.js', rules)).toEqual(['@javascript']);
+    expect(ownersForPath('src/app.js', rules)).toStrictEqual(['@javascript']);
   });
 
   it('implements root, directory, and non-recursive wildcard semantics', () => {
-    expect(ownersForPath('build/logs/app.txt', rules)).toEqual(['@build']);
-    expect(ownersForPath('nested/build/logs/app.txt', rules)).toEqual([
+    expect(ownersForPath('build/logs/app.txt', rules)).toStrictEqual(['@build']);
+    expect(ownersForPath('nested/build/logs/app.txt', rules)).toStrictEqual([
       '@logs',
     ]);
-    expect(ownersForPath('docs/guide.md', rules)).toEqual(['docs@example.com']);
-    expect(ownersForPath('docs/deep/guide.md', rules)).toEqual([
+    expect(ownersForPath('docs/guide.md', rules)).toStrictEqual(['docs@example.com']);
+    expect(ownersForPath('docs/deep/guide.md', rules)).toStrictEqual([
       '@global-1',
       '@global-2',
     ]);
-    expect(ownersForPath('nested/apps/app.ts', rules)).toEqual(['@apps']);
-    expect(ownersForPath('src/logs/app.txt', rules)).toEqual(['@logs']);
+    expect(ownersForPath('nested/apps/app.ts', rules)).toStrictEqual(['@apps']);
+    expect(ownersForPath('src/logs/app.txt', rules)).toStrictEqual(['@logs']);
   });
 
   it('supports ownerless overrides and case-sensitive paths', () => {
-    expect(ownersForPath('apps/github/app.ts', rules)).toEqual([]);
-    expect(ownersForPath('APPS/github/app.ts', rules)).toEqual([
+    expect(ownersForPath('apps/github/app.ts', rules)).toStrictEqual([]);
+    expect(ownersForPath('APPS/github/app.ts', rules)).toStrictEqual([
       '@global-1',
       '@global-2',
     ]);
@@ -56,6 +56,6 @@ valid/** @valid
 `);
 
     expect(parsed).toHaveLength(1);
-    expect(ownersForPath('valid/app.ts', parsed)).toEqual(['@valid']);
+    expect(ownersForPath('valid/app.ts', parsed)).toStrictEqual(['@valid']);
   });
 });

@@ -1,4 +1,4 @@
-export function extensionOf(path: string): string | null {
+export function extensionOf(path: string): null | string {
   const name = path.split('/').at(-1) ?? '';
   const dot = name.lastIndexOf('.');
 

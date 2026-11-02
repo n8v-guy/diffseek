@@ -1,28 +1,23 @@
 import { browser } from 'wxt/browser';
 
-import { isRecord } from './record';
+import { isRecord, isUnknownArray, recordField } from './record';
 
 const rememberedFilterFacets = ['viewed', 'generated'] as const;
 
+export interface FilterDefaults {
+  hidden: Set<RememberedFilterFacet>;
+  viewed: Set<DefaultViewedFacet>;
+}
+export type FilterDefaultState = 'hidden' | 'shown';
 export type RememberedFilterFacet =
   (typeof rememberedFilterFacets)[number];
 type DefaultViewedFacet = 'generated';
-export type FilterDefaults = {
-  hidden: Set<RememberedFilterFacet>;
-  viewed: Set<DefaultViewedFacet>;
-};
-export type FilterDefaultState = 'shown' | 'hidden';
 
 const storageKey = 'diffseek:filter-defaults';
 
 export async function readFilterDefaults(): Promise<FilterDefaults> {
   try {
-    const value = (await browser.storage.local.get(storageKey))[storageKey];
-    // Unset means never configured. Chrome omits the key; the storage test
-    // double returns it as undefined. A present value, even an empty record,
-    // is an explicit preference and must not be rewritten here.
-    if (value === undefined) return unconfiguredDefaults();
-    return storedDefaults(value);
+    return await defaultsFromStorage();
   } catch {
     return emptyDefaults();
   }
@@ -32,32 +27,29 @@ export async function writeFilterDefaults(
   defaults: FilterDefaults,
 ): Promise<void> {
   const viewed = defaults.viewed.has('generated') ? ['generated'] : [];
-  await browser.storage.local
-    .set({
+  try {
+    await browser.storage.local.set({
       [storageKey]: {
         hidden: [...defaults.hidden],
         viewed,
       },
-    })
-    .catch(() => undefined);
+    });
+  } catch {
+    return;
+  }
 }
 
-function storedDefaults(value: unknown): FilterDefaults {
-  if (!isRecord(value)) return emptyDefaults();
-  const hidden = new Set(
-    Array.isArray(value.hidden)
-      ? value.hidden.filter(isRememberedFilterFacet)
-      : [],
-  );
-  // Older records stored mark-as-read only beside always-hide. `viewed`
-  // is now the independent auto-view toggle, so that pair is read as
-  // generated always-hide plus auto-view, without rewriting storage.
-  const viewed = new Set<DefaultViewedFacet>(
-    Array.isArray(value.viewed) && value.viewed.includes('generated')
-      ? ['generated']
-      : [],
-  );
-  return { hidden, viewed };
+async function defaultsFromStorage(): Promise<FilterDefaults> {
+  const value = (await browser.storage.local.get(storageKey))[storageKey];
+  // Unset means never configured. Chrome omits the key; the storage test
+  // double returns it as undefined. A present value, even an empty record,
+  // is an explicit preference and must not be rewritten here.
+  if (value === undefined) return unconfiguredDefaults();
+  return storedDefaults(value);
+}
+
+function emptyDefaults(): FilterDefaults {
+  return { hidden: new Set(), viewed: new Set() };
 }
 
 function isRememberedFilterFacet(
@@ -66,14 +58,30 @@ function isRememberedFilterFacet(
   return rememberedFilterFacets.some((facet) => facet === value);
 }
 
+function storedDefaults(value: unknown): FilterDefaults {
+  if (!isRecord(value)) return emptyDefaults();
+  const hiddenValue = recordField(value, 'hidden');
+  const hidden = new Set(
+    isUnknownArray(hiddenValue)
+      ? hiddenValue.filter(isRememberedFilterFacet)
+      : [],
+  );
+  // Older records stored mark-as-read only beside always-hide. `viewed`
+  // is now the independent auto-view toggle, so that pair is read as
+  // generated always-hide plus auto-view, without rewriting storage.
+  const viewedValue = recordField(value, 'viewed');
+  const viewed = new Set<DefaultViewedFacet>(
+    isUnknownArray(viewedValue) && viewedValue.includes('generated')
+      ? ['generated']
+      : [],
+  );
+  return { hidden, viewed };
+}
+
 /** A fresh install hides viewed and generated files and auto-views generated ones. */
 function unconfiguredDefaults(): FilterDefaults {
   return {
     hidden: new Set(rememberedFilterFacets),
     viewed: new Set(['generated']),
   };
-}
-
-function emptyDefaults(): FilterDefaults {
-  return { hidden: new Set(), viewed: new Set() };
 }

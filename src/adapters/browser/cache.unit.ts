@@ -11,37 +11,31 @@ import {
 const repository = { owner: 'owner', repo: 'repo' };
 const sha = 'a'.repeat(40);
 const metadata = {
-  codeowners: '*.ts @team',
   attributes: '*.ts group=code',
+  codeowners: '*.ts @team',
   codeownersPath: 'CODEOWNERS',
 };
 
 describe('metadata cache', () => {
-  beforeEach(() => fakeBrowser.reset());
+  beforeEach(() => { fakeBrowser.reset(); });
 
   it('round-trips default-branch metadata', async () => {
     await writeCache(repository, metadata);
-    await expect(readCache(repository)).resolves.toEqual(metadata);
+    await expect(readCache(repository)).resolves.toStrictEqual(metadata);
   });
 
   it('keeps the 10 most recent pull requests and evicts the oldest', async () => {
-    for (let pull = 1; pull <= 11; pull += 1) {
-      await writePullCache(
-        { ...repository, pull },
-        sha,
-        { ...metadata, codeowners: `*.ts @p${pull}` },
-      );
-    }
+    await rememberPulls(1);
 
     await expect(
       readPullCache({ ...repository, pull: 1 }),
     ).resolves.toBeNull();
-    await expect(readPullCache({ ...repository, pull: 2 })).resolves.toEqual({
+    await expect(readPullCache({ ...repository, pull: 2 })).resolves.toStrictEqual({
       ...metadata,
       codeowners: '*.ts @p2',
       sha,
     });
-    await expect(readPullCache({ ...repository, pull: 11 })).resolves.toEqual({
+    await expect(readPullCache({ ...repository, pull: 11 })).resolves.toStrictEqual({
       ...metadata,
       codeowners: '*.ts @p11',
       sha,
@@ -61,15 +55,9 @@ describe('metadata cache', () => {
       { ...metadata, codeowners: '*.ts @fresh' },
     );
 
-    for (let pull = 3; pull <= 11; pull += 1) {
-      await writePullCache(
-        { ...repository, pull },
-        sha,
-        { ...metadata, codeowners: `*.ts @p${pull}` },
-      );
-    }
+    await rememberPulls(3);
 
-    await expect(readPullCache({ ...repository, pull: 1 })).resolves.toEqual({
+    await expect(readPullCache({ ...repository, pull: 1 })).resolves.toStrictEqual({
       ...metadata,
       codeowners: '*.ts @fresh',
       sha: 'b'.repeat(40),
@@ -79,3 +67,14 @@ describe('metadata cache', () => {
     ).resolves.toBeNull();
   });
 });
+
+async function rememberPulls(from: number): Promise<void> {
+  const newestPull = 11;
+  for (let pull = from; pull <= newestPull; pull += 1) {
+    await writePullCache(
+      { ...repository, pull },
+      sha,
+      { ...metadata, codeowners: `*.ts @p${pull}` },
+    );
+  }
+}

@@ -5,36 +5,32 @@ import {
 import { filterMenus } from '@diffseek/github/review-view/review-ui';
 import type { RepositoryMetadata } from '@diffseek/repository-metadata';
 
-type MetadataRead = {
-  readPull: () => Promise<RepositoryMetadata>;
-  refreshDefault: () => Promise<{
-    metadata: RepositoryMetadata;
-    changed: boolean;
-  }>;
-  commit: (metadata: RepositoryMetadata) => Promise<boolean>;
-  aborted: () => boolean;
-  apply: (metadata: RepositoryMetadata) => void;
-};
-
-export type MetadataWatch = {
-  ready: boolean;
-  treeKey: string | null;
-  tree: Element | null;
-  menuOpen: boolean;
-};
-
-export type MetadataRefresh = {
-  settled: boolean;
-  flight: Promise<void> | null;
+export interface MetadataRefresh {
+  flight: null | Promise<void>;
   pending: boolean;
-};
-
-export function metadataWatch(): MetadataWatch {
-  return { ready: false, treeKey: null, tree: null, menuOpen: false };
+  settled: boolean;
 }
 
-export function metadataRefreshState(): MetadataRefresh {
-  return { settled: false, flight: null, pending: false };
+export interface MetadataWatch {
+  menuOpen: boolean;
+  ready: boolean;
+  tree: Element | null;
+  treeKey: null | string;
+}
+
+interface FlightGate {
+  flight: null | Promise<void>;
+}
+
+interface MetadataRead {
+  aborted: () => boolean;
+  apply: (metadata: RepositoryMetadata) => void;
+  commit: (metadata: RepositoryMetadata) => Promise<boolean>;
+  readPull: () => Promise<RepositoryMetadata>;
+  refreshDefault: () => Promise<{
+    changed: boolean;
+    metadata: RepositoryMetadata;
+  }>;
 }
 
 /** First observation records the baseline and does not count as a retry. */
@@ -48,7 +44,7 @@ export function consumeMetadataOpportunity(
   const changed =
     watch.ready &&
     (treeKey !== watch.treeKey ||
-      (tree != null && tree !== watch.tree) ||
+      (tree !== null && tree !== watch.tree) ||
       (menuOpen && !watch.menuOpen));
   watch.ready = true;
   watch.treeKey = treeKey;
@@ -64,26 +60,31 @@ export function loadReviewMetadata(
   beginMetadataRefresh(state, () => replaceReviewMetadata(options));
 }
 
-async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
-  let pullApplied = false;
-  await Promise.all([
-    options
-      .readPull()
-      .then((metadata) => {
-        pullApplied = true;
-        if (!options.aborted()) options.apply(metadata);
-      })
-      .catch(() => undefined),
-    options
-      .refreshDefault()
-      .then(async (result) => {
-        if (options.aborted() || !result.changed) return;
-        await options.commit(result.metadata).catch(() => false);
-        if (!pullApplied && !options.aborted()) options.apply(result.metadata);
-      })
-      .catch(() => undefined),
-  ]);
-  return pullApplied && !options.aborted();
+export function metadataRefreshState(): MetadataRefresh {
+  return { flight: null, pending: false, settled: false };
+}
+
+export function metadataWatch(): MetadataWatch {
+  return { menuOpen: false, ready: false, tree: null, treeKey: null };
+}
+
+async function applyDefaultMetadata(
+  options: MetadataRead,
+  applied: { pull: boolean },
+): Promise<void> {
+  const result = await options.refreshDefault();
+  if (options.aborted() || !result.changed) return;
+  await commitDefault(options, result.metadata);
+  if (!applied.pull && !options.aborted()) options.apply(result.metadata);
+}
+
+async function applyPullMetadata(
+  options: MetadataRead,
+  applied: { pull: boolean },
+): Promise<void> {
+  const metadata = await options.readPull();
+  applied.pull = true;
+  if (!options.aborted()) options.apply(metadata);
 }
 
 function beginMetadataRefresh(
@@ -91,22 +92,91 @@ function beginMetadataRefresh(
   start: () => Promise<boolean>,
 ): void {
   if (state.settled) return;
-  if (state.flight) {
+  if (state.flight !== null) {
     state.pending = true;
     return;
   }
   state.pending = false;
-  const flight = start()
-    .catch(() => false)
-    .then((settled) => {
-      if (settled) state.settled = true;
-    })
-    .finally(() => {
-      if (state.flight !== flight) return;
-      state.flight = null;
-      if (!state.pending || state.settled) return;
-      state.pending = false;
-      beginMetadataRefresh(state, start);
-    });
-  state.flight = flight;
+  const gate: FlightGate = { flight: null };
+  gate.flight = runMetadataFlight(state, start, gate);
+  state.flight = gate.flight;
+}
+
+async function commitDefault(
+  options: MetadataRead,
+  metadata: RepositoryMetadata,
+): Promise<void> {
+  try {
+    await options.commit(metadata);
+  } catch {
+    // The pull-head metadata still applies when the default-branch write fails.
+  }
+}
+
+function finishMetadataFlight(
+  state: MetadataRefresh,
+  start: () => Promise<boolean>,
+  gate: FlightGate,
+): void {
+  if (state.flight !== gate.flight) return;
+  state.flight = null;
+  if (!state.pending || state.settled) return;
+  state.pending = false;
+  beginMetadataRefresh(state, start);
+}
+
+async function readDefaultMetadata(
+  options: MetadataRead,
+  applied: { pull: boolean },
+): Promise<void> {
+  try {
+    await applyDefaultMetadata(options, applied);
+  } catch {
+    // A failed default refresh leaves the pull-head result in place.
+  }
+}
+
+async function readPullMetadata(
+  options: MetadataRead,
+  applied: { pull: boolean },
+): Promise<void> {
+  try {
+    await applyPullMetadata(options, applied);
+  } catch {
+    // The next tree or menu change can retry the pull-head read.
+  }
+}
+
+async function rememberSettled(
+  state: MetadataRefresh,
+  start: () => Promise<boolean>,
+): Promise<void> {
+  let settled: boolean;
+  try {
+    settled = await start();
+  } catch {
+    settled = false;
+  }
+  if (settled) state.settled = true;
+}
+
+async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
+  const applied = { pull: false };
+  await Promise.all([
+    readPullMetadata(options, applied),
+    readDefaultMetadata(options, applied),
+  ]);
+  return applied.pull && !options.aborted();
+}
+
+async function runMetadataFlight(
+  state: MetadataRefresh,
+  start: () => Promise<boolean>,
+  gate: FlightGate,
+): Promise<void> {
+  try {
+    await rememberSettled(state, start);
+  } finally {
+    finishMetadataFlight(state, start, gate);
+  }
 }

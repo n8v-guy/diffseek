@@ -1,60 +1,67 @@
 import type { PageSnapshot } from '@diffseek/github/review-page/page-adapter';
 import {
-  markViewed,
   type ActionResult,
+  markViewed,
 } from '@diffseek/github/review-page/viewed-actions';
+
+export interface ViewedCommand {
+  generation: number;
+  onProgress?: (completed: number, requested: number) => void;
+  paths: string[];
+  reviewKey: string;
+  viewed: boolean;
+}
+
+interface CurrentReviewState {
+  generation: number;
+  reviewKey: string;
+  snapshot: SupportedSnapshot;
+}
+
+interface MarkAttempt {
+  command: ViewedCommand;
+  controller: AbortController;
+  epoch: number;
+  result: ActionResult;
+  revisions: ReadonlyMap<string, number>;
+}
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
-export type ViewedCommand = {
-  reviewKey: string;
-  generation: number;
-  viewed: boolean;
-  paths: string[];
-  onProgress?: (completed: number, requested: number) => void;
-};
-
-type CurrentReviewState = {
-  reviewKey: string;
-  generation: number;
-  snapshot: SupportedSnapshot;
-};
-
-type ViewedActionExecutorOptions = {
-  current: () => CurrentReviewState | null;
+interface ViewedActionExecutorOptions {
   beforeExecute?: () => Promise<void>;
+  current: () => CurrentReviewState | null;
   markFiles?: typeof markViewed;
-};
+}
 
 export class ViewedActionExecutor {
-  private tail: Promise<unknown> = Promise.resolve();
-  private epoch = 0;
   private active: AbortController | null = null;
-  private readonly revisions = new Map<string, number>();
-  private readonly current: () => CurrentReviewState | null;
   private readonly beforeExecute: () => Promise<void>;
+  private readonly current: () => CurrentReviewState | null;
+  private epoch = 0;
   private readonly markFiles: typeof markViewed;
+  private readonly revisions = new Map<string, number>();
+  private tail: Promise<unknown> = Promise.resolve();
 
   constructor(options: ViewedActionExecutorOptions) {
     this.current = options.current;
-    this.beforeExecute = options.beforeExecute ?? (() => Promise.resolve());
+    this.beforeExecute = options.beforeExecute ?? ((): Promise<void> => Promise.resolve());
     this.markFiles = options.markFiles ?? markViewed;
   }
 
-  enqueue(command: ViewedCommand): Promise<ActionResult | null> {
-    const epoch = this.epoch;
-    const revisions = new Map(
-      command.paths.map((path) => [path, this.revision(path)]),
-    );
-    const result = this.tail.then(() =>
-      this.execute(command, epoch, revisions),
-    );
-    this.tail = result.catch(() => undefined);
-    return result;
+  advance(command: ViewedCommand, requested: number, processed: number): number {
+    const next = processed + 1;
+    command.onProgress?.(next, requested);
+    return next;
   }
 
-  invalidate(path: string): void {
-    this.revisions.set(path, this.revision(path) + 1);
+  async afterTail(
+    command: ViewedCommand,
+    epoch: number,
+    revisions: ReadonlyMap<string, number>,
+  ): Promise<ActionResult | null> {
+    await this.tail;
+    return this.execute(command, epoch, revisions);
   }
 
   cancel(): void {
@@ -63,58 +70,44 @@ export class ViewedActionExecutor {
     this.active = null;
   }
 
-  private async execute(
+  enqueue(command: ViewedCommand): Promise<ActionResult | null> {
+    const epoch = this.epoch;
+    const revisions = new Map(
+      command.paths.map((path) => [path, this.revision(path)]),
+    );
+    const result = this.afterTail(command, epoch, revisions);
+    this.tail = settleQuietly(result);
+    return result;
+  }
+
+  async execute(
     command: ViewedCommand,
     epoch: number,
     revisions: ReadonlyMap<string, number>,
   ): Promise<ActionResult | null> {
-    if (epoch !== this.epoch) return null;
-    await this.beforeExecute();
-    if (epoch !== this.epoch) return null;
+    if (!(await this.ready(epoch))) return null;
     const controller = new AbortController();
     this.active = controller;
-    const result: ActionResult = {
-      requested: command.paths.length,
-      completed: [],
-      failed: [],
-    };
-    let processed = 0;
-
-    for (const path of command.paths) {
-      if (controller.signal.aborted || epoch !== this.epoch) return null;
-      if (revisions.get(path) !== this.revision(path)) {
-        processed += 1;
-        command.onProgress?.(processed, result.requested);
-        continue;
-      }
-      const current = this.current();
-      if (
-        !current ||
-        current.reviewKey !== command.reviewKey ||
-        current.generation !== command.generation
-      ) {
-        return null;
-      }
-
-      const update = await this.markFiles(
-        current.snapshot,
-        [path],
-        command.viewed,
-        { signal: controller.signal },
-      );
-      if (controller.signal.aborted || epoch !== this.epoch) return null;
-      if (!this.isCurrent(command)) return null;
-      result.completed.push(...update.completed);
-      result.failed.push(...update.failed);
-      processed += 1;
-      command.onProgress?.(processed, result.requested);
-    }
-
+    const result = await this.markEach({
+      command,
+      controller,
+      epoch,
+      result: {
+        completed: [],
+        failed: [],
+        requested: command.paths.length,
+      },
+      revisions,
+    });
     if (this.active === controller) this.active = null;
     return result;
   }
 
-  private isCurrent(command: ViewedCommand): boolean {
+  invalidate(path: string): void {
+    this.revisions.set(path, this.revision(path) + 1);
+  }
+
+  isCurrent(command: ViewedCommand): boolean {
     const current = this.current();
     return (
       current?.reviewKey === command.reviewKey &&
@@ -122,7 +115,69 @@ export class ViewedActionExecutor {
     );
   }
 
-  private revision(path: string): number {
+  async markEach(attempt: MarkAttempt): Promise<ActionResult | null> {
+    let processed = 0;
+    for (const path of attempt.command.paths) {
+      const next = await this.markOne(attempt, path, processed);
+      if (next === null) return null;
+      processed = next;
+    }
+    return attempt.result;
+  }
+
+  async markOne(
+    attempt: MarkAttempt,
+    path: string,
+    processed: number,
+  ): Promise<null | number> {
+    if (this.stopped(attempt.controller, attempt.epoch)) return null;
+    if (attempt.revisions.get(path) !== this.revision(path)) {
+      return this.advance(attempt.command, attempt.result.requested, processed);
+    }
+    const current = this.current();
+    if (
+      current?.reviewKey !== attempt.command.reviewKey ||
+      current.generation !== attempt.command.generation
+    ) {
+      return null;
+    }
+    const update = await this.markFiles(
+      current.snapshot,
+      [path],
+      attempt.command.viewed,
+      { signal: attempt.controller.signal },
+    );
+    if (this.stopped(attempt.controller, attempt.epoch) || !this.isCurrent(attempt.command)) {
+      return null;
+    }
+    attempt.result.completed.push(...update.completed);
+    attempt.result.failed.push(...update.failed);
+    return this.advance(attempt.command, attempt.result.requested, processed);
+  }
+
+  async ready(epoch: number): Promise<boolean> {
+    if (epoch !== this.epoch) return false;
+    await this.beforeExecute();
+    return epoch === this.epoch;
+  }
+
+  revision(path: string): number {
     return this.revisions.get(path) ?? 0;
+  }
+
+  signalAborted(signal: AbortSignal): boolean {
+    return signal.aborted;
+  }
+
+  stopped(controller: AbortController, epoch: number): boolean {
+    return this.signalAborted(controller.signal) || epoch !== this.epoch;
+  }
+}
+
+async function settleQuietly(work: Promise<unknown>): Promise<void> {
+  try {
+    await work;
+  } catch {
+    // The queue continues after a rejected command.
   }
 }

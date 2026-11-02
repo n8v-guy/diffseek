@@ -9,7 +9,7 @@ describe('filter shortcuts', () => {
   it('keeps only one value without changing another facet', () => {
     const excluded = new Set<string>();
     const otherFacet = new Set(['Tests']);
-    const onChange = vi.fn();
+    const onChange = vi.fn<() => void>();
     const action = itemOnlyAction({
       excluded,
       label: 'Owner',
@@ -20,14 +20,14 @@ describe('filter shortcuts', () => {
 
     action.click();
 
-    expect(excluded).toEqual(new Set(['@docs', 'Unmapped']));
-    expect(otherFacet).toEqual(new Set(['Tests']));
-    expect(onChange).toHaveBeenCalledOnce();
+    expect(excluded).toStrictEqual(new Set(['@docs', 'Unmapped']));
+    expect(otherFacet).toStrictEqual(new Set(['Tests']));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith();
   });
 
   it('restores every value in one section', () => {
     const excluded = new Set(['@docs', 'Unmapped']);
-    const onChange = vi.fn();
+    const onChange = vi.fn<() => void>();
     const action = sectionAllAction({
       excluded,
       heading: 'Owners',
@@ -36,7 +36,7 @@ describe('filter shortcuts', () => {
 
     action.click();
 
-    expect(excluded).toEqual(new Set());
-    expect(onChange).toHaveBeenCalledOnce();
+    expect(excluded).toStrictEqual(new Set());
+    expect(onChange).toHaveBeenCalledExactlyOnceWith();
   });
 });

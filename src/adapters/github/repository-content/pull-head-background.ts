@@ -1,21 +1,8 @@
-import { isRecord } from '@diffseek/browser/record';
-
+import { fetchPullHead } from './pull-head';
 import {
-  fetchPullHead,
-  isPullHeadRequest,
-  type PullHeadRequest,
-} from './pull-head';
-
-export const pullHeadMessageType = 'diffseek:resolve-pull-head';
-
-export type PullHeadMessage = {
-  type: typeof pullHeadMessageType;
-  request: PullHeadRequest;
-};
-
-export type PullHeadMessageResult =
-  | { status: 'found'; oid: string }
-  | { status: 'error'; message: string };
+  isPullHeadMessage,
+  type PullHeadMessageResult,
+} from './pull-head-message';
 
 export async function handlePullHeadMessage(
   message: unknown,
@@ -24,22 +11,14 @@ export async function handlePullHeadMessage(
   if (!isPullHeadMessage(message)) return undefined;
   try {
     return {
-      status: 'found',
       oid: await fetchPullHead(message.request, request),
+      status: 'found',
     };
   } catch (error) {
     return {
-      status: 'error',
       message:
-        error instanceof Error ? error.message : 'Pull head request failed',
+        Error.isError(error) ? error.message : 'Pull head request failed',
+      status: 'error',
     };
   }
-}
-
-function isPullHeadMessage(value: unknown): value is PullHeadMessage {
-  return (
-    isRecord(value) &&
-    value.type === pullHeadMessageType &&
-    isPullHeadRequest(value.request)
-  );
 }

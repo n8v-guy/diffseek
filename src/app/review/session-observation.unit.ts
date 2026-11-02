@@ -2,17 +2,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   pageNodesChanged,
+  type PanelReconcileSchedule,
   queuePanelReconcile,
   scheduleForMutations,
-  type PanelReconcileSchedule,
 } from './session-observation';
 
-afterEach(() => {
-  document.body.replaceChildren();
-  vi.useRealTimers();
-});
-
 describe('panel reconcile scheduling', () => {
+  afterEach((): void => {
+    document.body.replaceChildren();
+    vi.useRealTimers();
+  });
+
   it('coalesces streamed diff panels and ignores diff-body noise', async () => {
     const region = document.createElement('div');
     region.id = 'diff-app';
@@ -20,7 +20,7 @@ describe('panel reconcile scheduling', () => {
     const records = await captureMutations(() => {
       document.body.append(region);
     });
-    expect(scheduleForMutations(records)).toEqual({ coalesce: true });
+    expect(scheduleForMutations(records)).toStrictEqual({ coalesce: true });
 
     const noise = await captureMutations(() => {
       const line = document.createElement('span');
@@ -40,7 +40,7 @@ describe('panel reconcile scheduling', () => {
       button.setAttribute('aria-label', 'Viewed');
       button.setAttribute('aria-pressed', 'true');
     });
-    expect(scheduleForMutations(viewed)).toEqual({ immediate: true });
+    expect(scheduleForMutations(viewed)).toStrictEqual({ immediate: true });
 
     const menu = await captureMutations(() => {
       const element = document.createElement('ul');
@@ -48,7 +48,7 @@ describe('panel reconcile scheduling', () => {
       element.setAttribute('aria-label', 'Filter options');
       document.body.append(element);
     });
-    expect(scheduleForMutations(menu)).toEqual({ immediate: true });
+    expect(scheduleForMutations(menu)).toStrictEqual({ immediate: true });
 
     const shell = document.createElement('div');
     const unlabelled = document.createElement('ul');
@@ -58,7 +58,7 @@ describe('panel reconcile scheduling', () => {
       document.body.append(shell);
       unlabelled.setAttribute('aria-label', 'Filter options');
     });
-    expect(scheduleForMutations(revealed)).toEqual({ immediate: true });
+    expect(scheduleForMutations(revealed)).toStrictEqual({ immediate: true });
 
     const trigger = document.createElement('button');
     trigger.setAttribute('aria-label', 'Filter options');
@@ -66,15 +66,17 @@ describe('panel reconcile scheduling', () => {
     const opened = await captureMutations(() => {
       trigger.classList.add('open');
     });
-    expect(scheduleForMutations(opened)).toEqual({ immediate: true });
+    expect(scheduleForMutations(opened)).toStrictEqual({ immediate: true });
   });
 
   it('runs a coalesced burst once at the next frame and an immediate flush first', async () => {
-    document.body.innerHTML =
-      '<ul role="menu" aria-label="Filter options"></ul>';
+    const menu = document.createElement('ul');
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Filter options');
+    document.body.append(menu);
     const state: PanelReconcileSchedule = { cancel: null, immediate: false };
     let runs = 0;
-    const run = () => {
+    const run = (): void => {
       runs += 1;
     };
     queuePanelReconcile(state, document, { coalesce: true }, run);
@@ -87,10 +89,11 @@ describe('panel reconcile scheduling', () => {
     queuePanelReconcile(state, document, { coalesce: true }, run);
     await new Promise((resolve) => {
       const channel = new MessageChannel();
-      channel.port1.onmessage = () => {
+      channel.port1.addEventListener('message', (): void => {
         channel.port1.close();
         resolve(null);
-      };
+      }, { once: true });
+      channel.port1.start();
       channel.port2.postMessage(null);
     });
     expect(runs).toBe(2);
@@ -115,8 +118,8 @@ async function captureMutations(mutate: () => void): Promise<MutationRecord[]> {
     records.push(...batch);
   });
   observer.observe(document.body, {
-    attributes: true,
     attributeFilter: ['aria-label', 'aria-pressed', 'aria-labelledby', 'class'],
+    attributes: true,
     childList: true,
     subtree: true,
   });

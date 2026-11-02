@@ -16,10 +16,10 @@ vendor/** linguist-generated
 vendor/source/** -linguist-generated
 `);
 
-    expect(attributesForPath('docs/guide.md', rules)).toEqual({
+    expect(attributesForPath('docs/guide.md', rules)).toStrictEqual({
+      generated: false,
       group: 'docs',
       language: null,
-      generated: false,
     });
     expect(attributesForPath('src/app.ts', rules).language).toBe('TypeScript');
     expect(attributesForPath('vendor/app.js', rules).generated).toBe(true);
@@ -51,10 +51,10 @@ docs/**/generated/*.md linguist-generated
 vendor/** -group !linguist-language linguist-generated=false
 `);
 
-    expect(attributesForPath('vendor/app.ts', rules)).toEqual({
+    expect(attributesForPath('vendor/app.ts', rules)).toStrictEqual({
+      generated: false,
       group: null,
       language: null,
-      generated: false,
     });
   });
 
@@ -66,10 +66,10 @@ vendor/** -group !linguist-language linguist-generated=false
 [attr]macro group=macro
 `);
 
-    expect(attributesForPath('src/app.fs', rules)).toEqual({
+    expect(attributesForPath('src/app.fs', rules)).toStrictEqual({
+      generated: false,
       group: 'typed files',
       language: 'F Sharp',
-      generated: false,
     });
     expect(attributesForPath('secret/key.fs', rules).group).toBe(
       'typed files',

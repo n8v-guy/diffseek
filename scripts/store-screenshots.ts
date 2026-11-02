@@ -16,12 +16,19 @@
  * the 12/82 baseline and checks it file by file.
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import path from 'node:path';
 
 import type { Page } from '@playwright/test';
 
+import { envValue } from '../src/adapters/browser/env.ts';
+
 import { restoreAndVerify, restoreBaseline } from './store-screenshots/baseline.ts';
-import { noiseCut, onlySplit, viewedBadges } from './store-screenshots/captures.ts';
+import {
+  noiseCut,
+  type NoiseCutCapture,
+  onlySplit,
+  viewedBadges,
+} from './store-screenshots/captures.ts';
 import { shotDir, shots } from './store-screenshots/config.ts';
 import {
   noiseCutLayout,
@@ -32,14 +39,24 @@ import {
 import { quietProfile, storageStatePath, withPage } from './store-screenshots/session.ts';
 import { sourcesSplit } from './store-screenshots/sources.ts';
 
-const replay = Boolean(process.env.REPLAY);
+const replay = Boolean(envValue(process.env, 'REPLAY'));
+
+async function firstRun(page: Page): Promise<NoiseCutCapture> {
+  try {
+    return await noiseCut(page);
+  } finally {
+    // Turn auto-view off first, or the restore's reload marks the generated files again.
+    await quietProfile(page);
+    await restoreBaseline(page);
+  }
+}
 
 /**
  * Captures a shot on GitHub, keeps the capture next to the shots, then draws
  * the callouts. REPLAY=1 redraws from the kept capture without opening GitHub.
  */
 async function stage<T>(id: string, capture: () => Promise<T>, layout: (data: T) => Promise<void>): Promise<void> {
-  const file = join(shotDir, `capture-${id}.json`);
+  const file = path.join(shotDir, `capture-${id}.json`);
   let data: T;
   if (replay) {
     data = JSON.parse(await readFile(file, 'utf8')) as T;
@@ -50,27 +67,18 @@ async function stage<T>(id: string, capture: () => Promise<T>, layout: (data: T)
   await layout(data);
 }
 
-async function firstRun(page: Page) {
-  try {
-    return await noiseCut(page);
-  } finally {
-    // Turn auto-view off first, or the restore's reload marks the generated files again.
-    await quietProfile(page);
-    await restoreBaseline(page);
-  }
-}
-
 if (!replay) storageStatePath();
 await mkdir(shotDir, { recursive: true });
-if (process.env.BASELINE) {
-  await restoreAndVerify();
-} else {
+const baselineOnly = envValue(process.env, 'BASELINE');
+if (baselineOnly === undefined || baselineOnly === '') {
   console.log('Shots land in', shotDir);
   for (const [file, caption] of shots) console.log(`${file} — ${caption}`);
 
-  const pick = new Set((process.env.SHOTS ?? '1,2,3,4').split(',').map((part) => part.trim()));
+  const pick = new Set((envValue(process.env, 'SHOTS') ?? '1,2,3,4').split(',').map((part) => part.trim()));
   if (pick.has('1')) await stage('1', () => withPage(firstRun, null), noiseCutLayout);
   if (pick.has('2')) await stage('2', () => withPage(onlySplit), onlySplitLayout);
   if (pick.has('3')) await stage('3', () => withPage(viewedBadges), viewedBadgesLayout);
   if (pick.has('4')) await stage('4', () => withPage(sourcesSplit), sourcesSplitLayout);
+} else {
+  await restoreAndVerify();
 }

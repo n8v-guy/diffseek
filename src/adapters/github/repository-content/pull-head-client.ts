@@ -2,15 +2,15 @@ import { browser } from 'wxt/browser';
 
 import type { PullHeadRequest } from './pull-head';
 import {
-  pullHeadMessageType,
   type PullHeadMessage,
   type PullHeadMessageResult,
-} from './pull-head-background';
+  pullHeadMessageType,
+} from './pull-head-message';
 
 export async function resolvePullHead(
   request: PullHeadRequest,
 ): Promise<string> {
-  const message: PullHeadMessage = { type: pullHeadMessageType, request };
+  const message: PullHeadMessage = { request, type: pullHeadMessageType };
   const result = await browser.runtime.sendMessage<
     PullHeadMessage,
     PullHeadMessageResult

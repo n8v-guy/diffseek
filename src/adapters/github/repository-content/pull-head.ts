@@ -1,37 +1,12 @@
-import { isRecord } from '@diffseek/browser/record';
+import { isRecord, recordField } from '@diffseek/browser/record';
 
-export type PullHeadRequest = {
-  repo: string;
+const commitOidPattern = /"oid":"([0-9a-f]{40})"/gv;
+const pullHeadTimeoutMs = 20_000;
+const repositorySegmentCount = 2;
+
+export interface PullHeadRequest {
   pull: number;
-};
-
-export function isPullHeadRequest(value: unknown): value is PullHeadRequest {
-  return (
-    isRecord(value) &&
-    typeof value.repo === 'string' &&
-    typeof value.pull === 'number'
-  );
-}
-
-export function pullCommitsUrl(request: PullHeadRequest): string {
-  const repository = request.repo.split('/');
-  if (
-    repository.length !== 2 ||
-    repository.some(
-      (segment) =>
-        !segment ||
-        segment === '.' ||
-        segment === '..' ||
-        segment.includes('\\'),
-    ) ||
-    !Number.isSafeInteger(request.pull) ||
-    request.pull < 1
-  ) {
-    throw new Error('Invalid pull head request');
-  }
-  return `https://github.com/${repository
-    .map(encodeURIComponent)
-    .join('/')}/pull/${request.pull}/commits`;
+  repo: string;
 }
 
 export async function fetchPullHead(
@@ -42,15 +17,47 @@ export async function fetchPullHead(
     credentials: 'include',
     redirect: 'follow',
     // Failure guard only: a hung request never settles and nothing signals it.
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(pullHeadTimeoutMs),
   });
   if (!response.ok) {
     throw new Error(`Pull head request failed with ${response.status}`);
   }
-  const commits = [
-    ...(await response.text()).matchAll(/"oid":"([0-9a-f]{40})"/g),
-  ];
+  const commits = (await response.text()).matchAll(commitOidPattern).toArray();
   const oid = commits.at(-1)?.[1];
-  if (!oid) throw new Error('Pull head commit is unavailable');
+  if (oid === undefined || oid.length === 0) {
+    throw new Error('Pull head commit is unavailable');
+  }
   return oid;
+}
+
+export function isPullHeadRequest(value: unknown): value is PullHeadRequest {
+  return (
+    isRecord(value) &&
+    typeof recordField(value, 'repo') === 'string' &&
+    typeof recordField(value, 'pull') === 'number'
+  );
+}
+
+export function pullCommitsUrl(request: PullHeadRequest): string {
+  const repository = request.repo.split('/');
+  if (
+    repository.length !== repositorySegmentCount ||
+    repository.some((segment) => !isRepositorySegment(segment)) ||
+    !Number.isSafeInteger(request.pull) ||
+    request.pull < 1
+  ) {
+    throw new Error('Invalid pull head request');
+  }
+  return `https://github.com/${repository
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')}/pull/${request.pull}/commits`;
+}
+
+function isRepositorySegment(segment: string): boolean {
+  return (
+    segment.length > 0 &&
+    segment !== '.' &&
+    segment !== '..' &&
+    !segment.includes('\\')
+  );
 }

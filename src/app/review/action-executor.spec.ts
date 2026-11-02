@@ -1,207 +1,197 @@
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
-import { scanPage } from '@diffseek/github/review-page/page-adapter';
-import { markViewed } from '@diffseek/github/review-page/viewed-actions';
+import {
+  type PageSnapshot,
+  scanPage,
+} from '@diffseek/github/review-page/page-adapter';
+import {
+  type ActionResult,
+  markViewed,
+} from '@diffseek/github/review-page/viewed-actions';
 
-import { ViewedActionExecutor } from './action-executor';
+import { ViewedActionExecutor, type ViewedCommand } from './action-executor';
+import { replaceBody } from './review-app.fixture';
+
+const reviewKey = 'octo/repo#1';
+const appPath = 'src/app.ts';
+const newPath = 'src/new.ts';
+
+type MarkFiles = typeof markViewed;
+type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 describe('ViewedActionExecutor', () => {
-  beforeEach(() => {
-    document.documentElement.innerHTML = fixture;
+  beforeEach((): void => {
+    replaceBody(fixture);
   });
 
-  it('waits for UI paint before starting a queued command', async () => {
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    let painted: (() => void) | undefined;
-    let started!: () => void;
-    const executeStarted = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const beforeExecute = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          painted = resolve;
-          started();
-        }),
-    );
-    const markFiles = vi.fn().mockResolvedValue({
-      requested: 1,
-      completed: ['src/app.ts'],
-      failed: [],
-    });
-    const executor = new ViewedActionExecutor({
-      current: () => ({
-        reviewKey: 'octo/repo#1',
-        generation: 0,
-        snapshot,
-      }),
-      beforeExecute,
-      markFiles,
-    });
-
-    const result = executor.enqueue({
-      reviewKey: 'octo/repo#1',
-      generation: 0,
-      viewed: true,
-      paths: ['src/app.ts'],
-    });
-    await executeStarted;
-    expect(beforeExecute).toHaveBeenCalledOnce();
-
-    expect(markFiles).not.toHaveBeenCalled();
-    painted?.();
-    await result;
-
-    expect(markFiles).toHaveBeenCalledOnce();
-  });
-
-  it('preserves opposing command order while GitHub commits asynchronously', async () => {
-    const firstSnapshot = scanPage(document);
-    if (!firstSnapshot.supported) throw new Error(firstSnapshot.reason);
-    const button = firstSnapshot.viewedControl('src/app.ts');
-    if (!button) throw new Error('Missing viewed control');
-
-    let firstClicked: (() => void) | undefined;
-    const clicked = new Promise<void>((resolve) => {
-      firstClicked = resolve;
-    });
-    const nativeStates: boolean[] = [];
-    button.addEventListener('click', () => {
-      const next = button.getAttribute('aria-pressed') !== 'true';
-      nativeStates.push(next);
-      if (nativeStates.length === 1) {
-        firstClicked?.();
-        return;
-      }
-      button.setAttribute('aria-pressed', 'false');
-      button.setAttribute('aria-label', 'Not Viewed');
-    });
-
-    const executor = new ViewedActionExecutor({
-      current: () => {
-        const snapshot = scanPage(document);
-        return snapshot.supported
-          ? { reviewKey: 'octo/repo#1', generation: 0, snapshot }
-          : null;
-      },
-      markFiles: (snapshot, paths, viewed) =>
-        markViewed(snapshot, paths, viewed, { timeoutMs: 50 }),
-    });
-    const mark = executor.enqueue({
-      reviewKey: 'octo/repo#1',
-      generation: 0,
-      viewed: true,
-      paths: ['src/app.ts'],
-    });
-    const unmark = executor.enqueue({
-      reviewKey: 'octo/repo#1',
-      generation: 0,
-      viewed: false,
-      paths: ['src/app.ts'],
-    });
-
-    await clicked;
-    expect(nativeStates).toEqual([true]);
-    button.setAttribute('aria-pressed', 'true');
-    button.setAttribute('aria-label', 'Viewed');
-    await Promise.all([mark, unmark]);
-
-    expect(nativeStates).toEqual([true, false]);
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.getAttribute('aria-label')).toBe('Not Viewed');
-  });
-
-  it('skips a pending path superseded by a native action', async () => {
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    let finishFirst: (() => void) | undefined;
-    const firstPending = new Promise<void>((resolve) => {
-      finishFirst = resolve;
-    });
-    let firstCalled!: () => void;
-    const firstCall = new Promise<void>((resolve) => {
-      firstCalled = resolve;
-    });
-    const markFiles = vi.fn(async (_snapshot, paths: string[]) => {
-      firstCalled();
-      if (paths[0] === 'src/app.ts') await firstPending;
-      return {
-        requested: paths.length,
-        completed: paths,
-        failed: [],
-      };
-    });
-    const executor = new ViewedActionExecutor({
-      current: () => ({
-        reviewKey: 'octo/repo#1',
-        generation: 0,
-        snapshot,
-      }),
-      markFiles,
-    });
-    const result = executor.enqueue({
-      reviewKey: 'octo/repo#1',
-      generation: 0,
-      viewed: true,
-      paths: ['src/app.ts', 'src/new.ts'],
-    });
-    await firstCall;
-    expect(markFiles).toHaveBeenCalledOnce();
-
-    executor.invalidate('src/new.ts');
-    finishFirst?.();
-
-    await expect(result).resolves.toMatchObject({
-      requested: 2,
-      completed: ['src/app.ts'],
-      failed: [],
-    });
-    expect(markFiles).toHaveBeenCalledOnce();
-  });
-
-  it('cancels an active command and drops commands already queued behind it', async () => {
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    const executor = new ViewedActionExecutor({
-      current: () => ({
-        reviewKey: 'octo/repo#1',
-        generation: 0,
-        snapshot,
-      }),
-      markFiles: async (_snapshot, paths, _viewed, options) =>
-        new Promise((resolve) => {
-          options?.signal?.addEventListener(
-            'abort',
-            () =>
-              resolve({
-                requested: paths.length,
-                completed: [],
-                failed: [],
-              }),
-            { once: true },
-          );
-        }),
-    });
-    const active = executor.enqueue({
-      reviewKey: 'octo/repo#1',
-      generation: 0,
-      viewed: true,
-      paths: ['src/app.ts'],
-    });
-    const queued = executor.enqueue({
-      reviewKey: 'octo/repo#1',
-      generation: 0,
-      viewed: false,
-      paths: ['src/new.ts'],
-    });
-
-    await Promise.resolve();
-    executor.cancel();
-
-    await expect(active).resolves.toBeNull();
-    await expect(queued).resolves.toBeNull();
-  });
+  it('waits for UI paint before starting a queued command', waitsForPaint);
+  it('preserves opposing command order while GitHub commits asynchronously', preservesCommandOrder);
+  it('skips a pending path superseded by a native action', skipsSupersededPath);
+  it('cancels an active command and drops commands already queued behind it', cancelsQueuedCommands);
 });
+
+async function cancelsQueuedCommands(): Promise<void> {
+  const snapshot = supportedSnapshot(scanPage(document));
+  const executor = new ViewedActionExecutor({
+    current: (): { generation: number; reviewKey: string; snapshot: SupportedSnapshot } => ({
+      generation: 0,
+      reviewKey,
+      snapshot,
+    }),
+    markFiles: (_snapshot, paths, _viewed, options): Promise<ActionResult> =>
+      new Promise((resolve) => {
+        options?.signal?.addEventListener('abort', (): void => {
+          resolve(marked(paths, []));
+        }, { once: true });
+      }),
+  });
+  const active = executor.enqueue(command([appPath], true));
+  const queued = executor.enqueue(command([newPath], false));
+  await Promise.resolve();
+  executor.cancel();
+  await expect(active).resolves.toBeNull();
+  await expect(queued).resolves.toBeNull();
+}
+
+function command(paths: string[], viewed: boolean): ViewedCommand {
+  return { generation: 0, paths, reviewKey, viewed };
+}
+
+function holdFirstPath(pending: Promise<undefined>, started: () => void): MarkFiles {
+  return async (_snapshot, paths): Promise<ActionResult> => {
+    started();
+    if (paths[0] === appPath) await pending;
+    return marked(paths);
+  };
+}
+
+function marked(paths: string[], completed: string[] = paths): ActionResult {
+  return { completed, failed: [], requested: paths.length };
+}
+
+async function preservesCommandOrder(): Promise<void> {
+  const firstSnapshot = supportedSnapshot(scanPage(document));
+  const button = viewedButton(firstSnapshot, appPath);
+  const clicked = Promise.withResolvers<undefined>();
+  const nativeStates: boolean[] = [];
+  button.addEventListener('click', (): void => {
+    recordNativePress(button, nativeStates, (): void => { clicked.resolve(undefined); });
+  });
+  const executor = new ViewedActionExecutor({
+    current: (): null | { generation: number; reviewKey: string; snapshot: SupportedSnapshot } => {
+      const snapshot = scanPage(document);
+      return snapshot.supported
+        ? { generation: 0, reviewKey, snapshot }
+        : null;
+    },
+    markFiles: (snapshot, paths, viewed): Promise<ActionResult> =>
+      markViewed(snapshot, paths, viewed, { timeoutMs: 50 }),
+  });
+  const mark = executor.enqueue(command([appPath], true));
+  const unmark = executor.enqueue(command([appPath], false));
+  await clicked.promise;
+  expect(nativeStates).toStrictEqual([true]);
+  button.setAttribute('aria-pressed', 'true');
+  button.setAttribute('aria-label', 'Viewed');
+  await Promise.all([mark, unmark]);
+  expect(nativeStates).toStrictEqual([true, false]);
+  expect(button.getAttribute('aria-pressed')).toBe('false');
+  expect(button.getAttribute('aria-label')).toBe('Not Viewed');
+}
+
+function recordNativePress(
+  button: HTMLButtonElement,
+  nativeStates: boolean[],
+  firstClicked: () => void,
+): void {
+  const next = button.getAttribute('aria-pressed') !== 'true';
+  nativeStates.push(next);
+  if (nativeStates.length === 1) {
+    firstClicked();
+    return;
+  }
+  button.setAttribute('aria-pressed', 'false');
+  button.setAttribute('aria-label', 'Not Viewed');
+}
+
+async function skipsSupersededPath(): Promise<void> {
+  const snapshot = supportedSnapshot(scanPage(document));
+  const firstPending = Promise.withResolvers<undefined>();
+  const firstCall = Promise.withResolvers<undefined>();
+  const seen: { signal?: AbortSignal } = {};
+  const markFiles = vi.fn<MarkFiles>(async (_snapshot, paths, _viewed, options): Promise<ActionResult> => {
+    if (options?.signal !== undefined) seen.signal = options.signal;
+    return holdFirstPath(firstPending.promise, (): void => {
+      firstCall.resolve(undefined);
+    })(_snapshot, paths, true, options);
+  });
+  const executor = new ViewedActionExecutor({
+    current: (): { generation: number; reviewKey: string; snapshot: SupportedSnapshot } => ({
+      generation: 0,
+      reviewKey,
+      snapshot,
+    }),
+    markFiles,
+  });
+  const result = executor.enqueue(command([appPath, newPath], true));
+  await firstCall.promise;
+  expect(markFiles).toHaveBeenCalledExactlyOnceWith(snapshot, [appPath], true, {
+    signal: seen.signal,
+  });
+  executor.invalidate(newPath);
+  firstPending.resolve(undefined);
+  await expect(result).resolves.toMatchObject({
+    completed: [appPath],
+    failed: [],
+    requested: 2,
+  });
+  expect(markFiles).toHaveBeenCalledExactlyOnceWith(snapshot, [appPath], true, {
+    signal: seen.signal,
+  });
+}
+
+function supportedSnapshot(snapshot: PageSnapshot): SupportedSnapshot {
+  if (!snapshot.supported) throw new Error(snapshot.reason);
+  return snapshot;
+}
+
+function viewedButton(snapshot: SupportedSnapshot, path: string): HTMLButtonElement {
+  const button = snapshot.viewedControl(path);
+  if (button === null) throw new Error('Missing viewed control');
+  return button;
+}
+
+async function waitsForPaint(): Promise<void> {
+  const snapshot = supportedSnapshot(scanPage(document));
+  const painted = Promise.withResolvers<undefined>();
+  const executeStarted = Promise.withResolvers<undefined>();
+  const beforeExecute = vi.fn<() => Promise<void>>(async () => {
+    executeStarted.resolve(undefined);
+    await painted.promise;
+  });
+  const seen: { signal?: AbortSignal } = {};
+  const markFiles = vi.fn<MarkFiles>((_snapshot, _paths, _viewed, options): Promise<ActionResult> => {
+    if (options?.signal !== undefined) seen.signal = options.signal;
+    return Promise.resolve(marked([appPath]));
+  });
+  const executor = new ViewedActionExecutor({
+    beforeExecute,
+    current: (): { generation: number; reviewKey: string; snapshot: SupportedSnapshot } => ({
+      generation: 0,
+      reviewKey,
+      snapshot,
+    }),
+    markFiles,
+  });
+
+  const result = executor.enqueue(command([appPath], true));
+  await executeStarted.promise;
+  expect(beforeExecute).toHaveBeenCalledExactlyOnceWith();
+  expect(markFiles).not.toHaveBeenCalled();
+  painted.resolve(undefined);
+  await result;
+  expect(markFiles).toHaveBeenCalledExactlyOnceWith(snapshot, [appPath], true, {
+    signal: seen.signal,
+  });
+}

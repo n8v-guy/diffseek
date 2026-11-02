@@ -1,21 +1,23 @@
 import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import path from 'node:path';
 
-import { chromium } from '@playwright/test';
+import { type Browser, chromium, type Page } from '@playwright/test';
+
+import '@diffseek/browser/page-globals';
 
 import type { Layer, Note, Scene, Tag } from './canvas-types.ts';
 import { canvasScript, renderSceneName } from './canvas.ts';
 import {
   accent,
+  type Box,
   outHeight,
   outWidth,
   scale,
   shotDir,
-  type Box,
 } from './config.ts';
 import { pngSize } from './geometry.ts';
 
-type Composition = { layers: Layer[]; masks?: Box[]; tags: Tag[]; notes: Note[] };
+interface Composition { layers: Layer[]; masks?: Box[]; notes: Note[]; tags: Tag[]; }
 
 const pageStyle = `<!doctype html><style>
       html,body{margin:0;width:${outWidth}px;height:${outHeight}px;overflow:hidden;font-family:Inter,'Noto Sans',sans-serif}
@@ -36,54 +38,63 @@ const pageStyle = `<!doctype html><style>
  * Lays out shot crops on a 1280x800 canvas and draws callouts on top:
  * an outline on the target, a thin leader line, and a white label.
  */
-export async function compose(
-  name: string,
-  { layers, masks = [], tags, notes }: Composition,
-): Promise<void> {
+export async function compose(name: string, composition: Composition): Promise<void> {
   const browser = await chromium.launch({ channel: 'chromium', headless: true });
   try {
-    const context = await browser.newContext({
-      viewport: { width: outWidth, height: outHeight },
-      deviceScaleFactor: 1,
-    });
-    const host = await context.newPage();
-    await host.setContent(pageStyle);
-    await host.addScriptTag({ content: canvasScript });
-    const scene: Scene = {
-      layers: layers.map(({ shot, left, width, crop }) => ({
-        left,
-        width,
-        crop,
-        ratio: (shot.clip.zoom ?? scale) / scale,
-        x0: Math.round(shot.clip.x * (shot.clip.zoom ?? scale)),
-        y0: Math.round(shot.clip.y * (shot.clip.zoom ?? scale)),
-        width0: shot.width,
-        height0: shot.height,
-        src: `data:image/png;base64,${shot.png}`,
-      })),
-      masks,
-      tags,
-      notes,
-      accent,
-    };
-    await host.evaluate(
-      ({ entry, value }) => {
-        const render = (globalThis as unknown as Record<string, (scene: unknown) => void>)[entry];
-        if (!render) throw new Error(`${entry} is not loaded`);
-        render(value);
-      },
-      { entry: renderSceneName, value: scene },
-    );
-    await host.evaluate(() => Promise.all([...document.images].map((image) => image.decode())));
-    await host.evaluate(() => document.fonts.ready);
-    const buffer = await host.screenshot({ type: 'png' });
-    const { width, height } = pngSize(buffer);
-    if (width !== outWidth || height !== outHeight) {
-      throw new Error(`Annotated shot is ${width}x${height}, expected ${outWidth}x${outHeight}`);
-    }
-    await writeFile(join(shotDir, name), buffer);
-    console.log('wrote', join(shotDir, name), `${width}x${height}`);
+    await drawComposition(browser, name, composition);
   } finally {
     await browser.close();
   }
+}
+
+async function drawComposition(
+  browser: Browser,
+  name: string,
+  { layers, masks = [], notes, tags }: Composition,
+): Promise<void> {
+  const context = await browser.newContext({
+    deviceScaleFactor: 1,
+    viewport: { height: outHeight, width: outWidth },
+  });
+  const host = await context.newPage();
+  await host.setContent(pageStyle);
+  await host.addScriptTag({ content: canvasScript });
+  const scene: Scene = {
+    accent,
+    layers: layers.map(({ crop, left, shot, width }) => ({
+      crop,
+      height0: shot.height,
+      left,
+      ratio: (shot.clip.zoom ?? scale) / scale,
+      src: `data:image/png;base64,${shot.png}`,
+      width,
+      width0: shot.width,
+      x0: Math.round(shot.clip.x * (shot.clip.zoom ?? scale)),
+      y0: Math.round(shot.clip.y * (shot.clip.zoom ?? scale)),
+    })),
+    masks,
+    notes,
+    tags,
+  };
+  await paintScene(host, scene);
+  const buffer = await host.screenshot({ type: 'png' });
+  const { height, width } = pngSize(buffer);
+  if (width !== outWidth || height !== outHeight) {
+    throw new Error(`Annotated shot is ${width}x${height}, expected ${outWidth}x${outHeight}`);
+  }
+  const file = path.join(shotDir, name);
+  await writeFile(file, buffer);
+  console.log('wrote', file, `${width}x${height}`);
+}
+
+async function paintScene(host: Page, scene: Scene): Promise<void> {
+  await host.evaluate(
+    ({ entry, value }) => {
+      if (entry !== 'renderScene') throw new Error(`${entry} is not loaded`);
+      globalThis.renderScene(value);
+    },
+    { entry: renderSceneName, value: scene },
+  );
+  await host.evaluate(() => Promise.all([...document.images].map((image) => image.decode())));
+  await host.evaluate(() => document.fonts.ready);
 }

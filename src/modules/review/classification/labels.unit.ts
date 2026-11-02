@@ -7,7 +7,18 @@ import {
 
 import type { FileRecord } from '../model/file';
 
+import type { FileLabel } from './label';
 import { labelFiles, type LabelSource } from './labels';
+
+const typeScriptLanguage: FileLabel = {
+  facet: 'languages',
+  fromLinguistLanguage: true,
+  value: 'TypeScript',
+};
+
+const customGroupSource: LabelSource = {
+  prepare: () => customGroupLabels,
+};
 
 describe('file labels', () => {
   it('labels every independent facet from repository metadata', () => {
@@ -24,21 +35,19 @@ src/app.test.ts linguist-generated
       codeowners: parseCodeowners('src/** @team'),
     });
 
-    expect(files[0]?.labels).toEqual(
+    const generated = fileAt(files, 0);
+    const extension = fileAt(files, 1);
+    expect(generated.labels).toStrictEqual(
       expect.arrayContaining([
         { facet: 'groups', value: 'code' },
         { facet: 'owners', value: '@team' },
-        { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
+        typeScriptLanguage,
         { facet: 'statuses', value: 'added' },
         { facet: 'generated', value: 'true' },
       ]),
     );
-    expect(languageLabels(files[0]!)).toEqual([
-      { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
-    ]);
-    expect(languageLabels(files[1]!)).toEqual([
-      { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
-    ]);
+    expect(languageLabels(generated)).toStrictEqual([typeScriptLanguage]);
+    expect(languageLabels(extension)).toStrictEqual([typeScriptLanguage]);
   });
 
   it('falls back to the file extension or No extension', () => {
@@ -55,94 +64,96 @@ src/app.test.ts linguist-generated
       codeowners: [],
     });
 
-    expect(languageLabels(files[0]!)).toEqual([
-      { facet: 'languages', value: 'TypeScript', fromLinguistLanguage: true },
-    ]);
-    expect(languageLabels(files[1]!)).toEqual([
+    expect(languageLabels(fileAt(files, 0))).toStrictEqual([typeScriptLanguage]);
+    expect(languageLabels(fileAt(files, 1))).toStrictEqual([
       { facet: 'languages', value: 'MJS' },
     ]);
-    expect(languageLabels(files[2]!)).toEqual([
+    expect(languageLabels(fileAt(files, 2))).toStrictEqual([
       { facet: 'languages', value: 'No extension' },
     ]);
   });
 
   it('labels only viewed files with the viewed facet', () => {
-    const files = [
-      file('src/viewed.ts', '.ts'),
-      file('src/pending.ts', '.ts'),
-    ];
-    files[0]!.viewed = true;
+    const viewed = file('src/viewed.ts', '.ts');
+    const pending = file('src/pending.ts', '.ts');
+    viewed.viewed = true;
 
-    labelFiles(files, { attributes: [], codeowners: [] });
+    labelFiles([viewed, pending], { attributes: [], codeowners: [] });
 
-    expect(files[0]?.labels).toContainEqual({
-      facet: 'viewed',
-      value: 'true',
-    });
-    expect(files[1]?.labels).not.toContainEqual({
+    expect(viewed.labels).toContainEqual({ facet: 'viewed', value: 'true' });
+    expect(pending.labels).not.toContainEqual({
       facet: 'viewed',
       value: 'true',
     });
   });
 
   it('labels files without a resolved owner as Unmapped', () => {
-    const files = [file('docs/readme.md', '.md')];
-    files[0]!.owners = [];
+    const readme = file('docs/readme.md', '.md');
+    readme.owners = [];
 
-    labelFiles(files, {
+    labelFiles([readme], {
       attributes: [],
       codeowners: parseCodeowners('src/** @team'),
     });
 
-    expect(files[0]?.labels).toContainEqual({
+    expect(readme.labels).toContainEqual({
       facet: 'owners',
       value: 'Unmapped',
     });
   });
 
   it('labels files without a repository group as No groups', () => {
-    const files = [file('misc/notes.txt', '.txt')];
+    const notes = file('misc/notes.txt', '.txt');
 
-    labelFiles(files, { attributes: [], codeowners: [] });
+    labelFiles([notes], { attributes: [], codeowners: [] });
 
-    expect(files[0]?.labels).toContainEqual({
+    expect(notes.labels).toContainEqual({
       facet: 'groups',
       value: 'No groups',
     });
   });
+});
 
+describe('replaceable label sources', () => {
   it('composes independently replaceable label sources', () => {
     const files = [file('src/app.ts', '.ts')];
-    const source: LabelSource = {
-      prepare: () => () => [{ facet: 'groups', value: 'custom' }],
-    };
 
     labelFiles(
       files,
       { attributes: [], codeowners: [] },
-      [source],
+      [customGroupSource],
     );
 
-    expect(files[0]?.labels).toEqual([
+    expect(fileAt(files, 0).labels).toStrictEqual([
       { facet: 'groups', value: 'custom' },
     ]);
   });
 });
 
-function file(path: string, extension: string | null): FileRecord {
+function customGroupLabels(): FileLabel[] {
+  return [{ facet: 'groups', value: 'custom' }];
+}
+
+function file(path: string, extension: null | string): FileRecord {
   return {
-    path,
     anchor: `diff-${path}`,
+    capabilities: { collapse: true, viewed: true },
     extension,
-    owners: ['@native'],
     generated: false,
+    labels: [],
+    owners: ['@native'],
+    path,
     status: 'added',
     viewed: false,
-    capabilities: { collapse: true, viewed: true },
-    labels: [],
   };
 }
 
-function languageLabels(file: FileRecord) {
-  return file.labels.filter((label) => label.facet === 'languages');
+function fileAt(files: readonly FileRecord[], index: number): FileRecord {
+  const record = files[index];
+  if (record === undefined) throw new Error(`Missing fixture file ${index}`);
+  return record;
+}
+
+function languageLabels(record: FileRecord): FileLabel[] {
+  return record.labels.filter((label) => label.facet === 'languages');
 }

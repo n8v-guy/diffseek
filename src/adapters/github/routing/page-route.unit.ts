@@ -20,11 +20,11 @@ describe('isReviewFilesPath', () => {
   });
 
   it('gives each pull request a distinct review identity', () => {
-    expect(reviewFromPath('/owner/repo/pull/41/changes')).toEqual({
-      owner: 'owner',
-      repo: 'repo',
-      pull: 41,
+    expect(reviewFromPath('/owner/repo/pull/41/changes')).toStrictEqual({
       key: 'owner/repo#41',
+      owner: 'owner',
+      pull: 41,
+      repo: 'repo',
     });
     expect(reviewFromPath('/owner/repo/pull/42/files')).toBeNull();
   });

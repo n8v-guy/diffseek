@@ -15,20 +15,20 @@ describe('ReviewIndex', () => {
     ];
     const index = new ReviewIndex(files);
 
-    expect(index.filesUnder('src').map(({ path }) => path)).toEqual([
+    expect(index.filesUnder('src').map(({ path }) => path)).toStrictEqual([
       'src/app.ts',
       'src/components/button.ts',
     ]);
-    expect(index.filesUnder('src/app.ts')).toEqual([files[0]]);
+    expect(index.filesUnder('src/app.ts')).toStrictEqual([files[0]]);
     expect(
       index.visibleItems(['src/components/button.ts', 'missing/file.bin']),
-    ).toEqual(
+    ).toStrictEqual(
       new Set([
+        'missing',
+        'missing/file.bin',
         'src',
         'src/components',
         'src/components/button.ts',
-        'missing',
-        'missing/file.bin',
       ]),
     );
   });
@@ -69,11 +69,11 @@ describe('ReviewIndex', () => {
     expect(folders.get('web')).toMatchObject({ counted: 11, viewed: 10 });
     expect(folders.get('web/src')).toMatchObject({
       counted: 1,
-      viewed: 1,
       unreadPaths: [],
+      viewed: 1,
     });
     expect(folders.has('web/src/generated.ts')).toBe(false);
-    expect(folders.get('services/payments/db')?.unreadPaths).toEqual([
+    expect(folders.get('services/payments/db')?.unreadPaths).toStrictEqual([
       'services/payments/db/schema.sql',
     ]);
     expect(folders.get('services')).toMatchObject({ counted: 1, viewed: 0 });
@@ -106,18 +106,18 @@ function labeled(
   labels: FileRecord['labels'] = [{ facet: 'generated', value: 'false' }],
 ): FileRecord {
   return {
-    path,
     anchor: `diff-${path}`,
+    capabilities: { collapse: true, viewed: true },
     extension: '.ts',
-    owners: [],
     generated: labels.some(
       (label) => label.facet === 'generated' && label.value === 'true',
     ),
-    status: 'modified',
-    viewed,
-    capabilities: { collapse: true, viewed: true },
     labels: viewed
       ? [{ facet: 'viewed', value: 'true' }, ...labels.filter((label) => label.facet !== 'viewed')]
       : labels.filter((label) => label.facet !== 'viewed'),
+    owners: [],
+    path,
+    status: 'modified',
+    viewed,
   };
 }

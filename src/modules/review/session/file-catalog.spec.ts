@@ -6,15 +6,15 @@ import { FileCatalog } from './file-catalog';
 
 function file(path: string, viewed = false): FileRecord {
   return {
-    path,
     anchor: `diff-${path}`,
+    capabilities: { collapse: true, viewed: true },
     extension: '.ts',
-    owners: [],
     generated: false,
+    labels: [],
+    owners: [],
+    path,
     status: 'modified',
     viewed,
-    capabilities: { collapse: true, viewed: true },
-    labels: [],
   };
 }
 
@@ -25,7 +25,7 @@ describe('FileCatalog', () => {
 
     catalog.merge([file('src/first.ts', true)]);
 
-    expect(catalog.files().map(({ path }) => path)).toEqual([
+    expect(catalog.files().map(({ path }) => path)).toStrictEqual([
       'src/first.ts',
       'src/second.ts',
     ]);
@@ -38,35 +38,35 @@ describe('FileCatalog', () => {
       {
         ...file('src/generated.ts', true),
         generated: true,
-        owners: ['@octo'],
         labels: [
           { facet: 'generated', value: 'true' },
           { facet: 'viewed', value: 'true' },
           { facet: 'owners', value: '@octo' },
         ],
+        owners: ['@octo'],
       },
     ]);
 
     catalog.merge([
       {
         ...file('src/generated.ts'),
-        viewed: false,
         capabilities: { collapse: false, viewed: false },
-        owners: [],
         labels: [],
+        owners: [],
+        viewed: false,
       },
     ]);
 
     expect(catalog.files()[0]).toMatchObject({
-      generated: true,
-      viewed: true,
-      owners: ['@octo'],
       capabilities: { collapse: false, viewed: false },
+      generated: true,
       labels: [
         { facet: 'generated', value: 'true' },
         { facet: 'viewed', value: 'true' },
         { facet: 'owners', value: '@octo' },
       ],
+      owners: ['@octo'],
+      viewed: true,
     });
   });
 });

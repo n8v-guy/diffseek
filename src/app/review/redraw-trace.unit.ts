@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { setDataAttribute } from '@diffseek/github/dom-data';
+
 import {
   installRedrawTrace,
   noteReconcile,
@@ -8,12 +10,12 @@ import {
   trackDiffseekWrites,
 } from './redraw-trace';
 
-afterEach(() => {
-  document.body.replaceChildren();
-  resetRedrawTrace(document);
-});
-
 describe('redraw trace', () => {
+  afterEach((): void => {
+    document.body.replaceChildren();
+    resetRedrawTrace(document);
+  });
+
   it('counts diffseek writes, reconcile passes, and a tree rebuild', async () => {
     installRedrawTrace(document);
     const tree = document.createElement('ul');
@@ -62,7 +64,7 @@ describe('redraw trace', () => {
     tree.setAttribute('role', 'tree');
     document.body.append(tree);
     const control = document.createElement('span');
-    control.dataset.diffseekViewedAction = 'true';
+    setDataAttribute(control, 'diffseekViewedAction', 'true');
     tree.append(control);
     const rows = Array.from({ length: 10 }, (_item, index) => {
       const row = document.createElement('li');

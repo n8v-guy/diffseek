@@ -1,20 +1,27 @@
-import {
-  type FilterDefaults,
-  type FilterDefaultState,
-  type RememberedFilterFacet,
+import type {
+  FilterDefaults,
+  FilterDefaultState,
+  RememberedFilterFacet,
 } from '@diffseek/browser/filter-defaults';
 import type { LabelFacet } from '@diffseek/review';
 
-export type FilterDefaultOptions = {
-  facet: LabelFacet;
-  value: string;
+export interface FilterDefaultOptions {
   excluded: Set<string>;
+  facet: LabelFacet;
   filterDefaults?: FilterDefaults;
   onFilterDefaultChange?: (
     facet: RememberedFilterFacet,
     state: FilterDefaultState,
   ) => void;
-};
+  value: string;
+}
+
+const alwaysHide = 'Always hide';
+const hideNow = 'Hide now';
+const showNow = 'Show now';
+const cycleSteps = [showNow, hideNow, alwaysHide] as const;
+const alwaysHideIndex = cycleSteps.indexOf(alwaysHide);
+const hideNowIndex = cycleSteps.indexOf(hideNow);
 
 export function applyCheckedState(
   item: HTMLButtonElement,
@@ -22,7 +29,7 @@ export function applyCheckedState(
 ): void {
   const remembered =
     isRememberedFilterFacet(options.facet) &&
-    options.filterDefaults?.hidden.has(options.facet);
+    (options.filterDefaults?.hidden.has(options.facet) ?? false);
   const checked = remembered
     ? 'mixed'
     : String(!options.excluded.has(options.value));
@@ -37,11 +44,8 @@ export function applyCheckedState(
       .join('\n'),
   );
   const name = options.facet === 'generated' ? 'Generated' : 'Viewed';
-  setChanged(
-    item,
-    'aria-label',
-    `${name}: ${cycleSteps[current]}, click for ${cycleSteps[(current + 1) % cycleSteps.length]}`,
-  );
+  const next = cycleSteps[(current + 1) % cycleSteps.length];
+  setChanged(item, 'aria-label', `${name}: ${cycleSteps[current]}, click for ${next}`);
 }
 
 export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
@@ -62,11 +66,9 @@ export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
   return true;
 }
 
-const cycleSteps = ['Show now', 'Hide now', 'Always hide'] as const;
-
 function cycleIndex(checked: string): number {
-  if (checked === 'false') return 1;
-  if (checked === 'mixed') return 2;
+  if (checked === 'false') return hideNowIndex;
+  if (checked === 'mixed') return alwaysHideIndex;
   return 0;
 }
 

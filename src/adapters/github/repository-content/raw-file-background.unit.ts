@@ -5,11 +5,11 @@ import { handleRawFileMessage } from './raw-file-background';
 import { readRawFile } from './raw-file-client';
 
 describe('raw file messaging', () => {
-  beforeEach(() => fakeBrowser.reset());
+  beforeEach(() => { fakeBrowser.reset(); });
 
   it('ignores unrelated messages', async () => {
     await expect(
-      handleRawFileMessage({ type: 'other' }, async () => new Response('no')),
+      handleRawFileMessage({ type: 'other' }, () => Promise.resolve(new Response('no'))),
     ).resolves.toBeUndefined();
   });
 
@@ -17,44 +17,44 @@ describe('raw file messaging', () => {
     await expect(
       handleRawFileMessage(
         {
+          request: { path: 'CODEOWNERS', ref: 'HEAD', repo: 'owner/repo' },
           type: 'diffseek:read-raw-file',
-          request: { repo: 'owner/repo', ref: 'HEAD', path: 'CODEOWNERS' },
         },
-        async () => new Response('', { status: 500 }),
+        () => Promise.resolve(new Response('', { status: 500 })),
       ),
-    ).resolves.toEqual({
-      status: 'error',
+    ).resolves.toStrictEqual({
       message: 'Raw file request failed with 500',
+      status: 'error',
     });
   });
 
   it('returns the typed background result to the client', async () => {
-    fakeBrowser.runtime.onMessage.addListener((_message, _sender, sendResponse) => {
+    fakeBrowser.runtime.onMessage.addListener((_message: unknown, _sender, sendResponse) => {
       sendResponse({
+        contentType: 'text/plain',
         status: 'found',
         text: '*.ts @owner',
-        contentType: 'text/plain',
         url: 'https://raw.githubusercontent.com/owner/repo/HEAD/CODEOWNERS',
       });
       return true;
     });
 
     await expect(
-      readRawFile({ repo: 'owner/repo', ref: 'HEAD', path: 'CODEOWNERS' }),
+      readRawFile({ path: 'CODEOWNERS', ref: 'HEAD', repo: 'owner/repo' }),
     ).resolves.toMatchObject({ status: 'found', text: '*.ts @owner' });
   });
 
   it('turns a serialized background failure into a rejected client request', async () => {
-    fakeBrowser.runtime.onMessage.addListener((_message, _sender, sendResponse) => {
+    fakeBrowser.runtime.onMessage.addListener((_message: unknown, _sender, sendResponse) => {
       sendResponse({
-        status: 'error',
         message: 'offline',
+        status: 'error',
       });
       return true;
     });
 
     await expect(
-      readRawFile({ repo: 'owner/repo', ref: 'HEAD', path: 'CODEOWNERS' }),
+      readRawFile({ path: 'CODEOWNERS', ref: 'HEAD', repo: 'owner/repo' }),
     ).rejects.toThrow('offline');
   });
 });

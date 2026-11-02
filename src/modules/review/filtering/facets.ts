@@ -1,49 +1,105 @@
 import {
-  labelFacets,
   type FileLabel,
   type LabelFacet,
-} from '../classification/labels';
+  labelFacets,
+} from '../classification/label';
 
-export type FacetExclusions = Map<LabelFacet, Set<string>>;
+import type { FacetExclusions } from './exclusions';
 
-export type FacetDefinition = {
+export type { FacetExclusions } from './exclusions';
+
+const extensionSortGroup = 1;
+const fallbackSortGroup = 2;
+
+export interface FacetDefinition {
   facet: LabelFacet;
   heading: string;
-  native: boolean;
   label: (value: string) => string;
-};
+  native: boolean;
+}
 
 export const facetDefinitions: FacetDefinition[] = [
   {
     facet: 'owners',
     heading: 'Owners',
-    native: false,
     label: (value) => (value === 'Unmapped' ? 'No owner' : value),
+    native: false,
   },
-  { facet: 'groups', heading: 'Groups', native: false, label: identity },
-  { facet: 'languages', heading: 'Formats', native: false, label: identity },
+  { facet: 'groups', heading: 'Groups', label: identity, native: false },
+  { facet: 'languages', heading: 'Formats', label: identity, native: false },
   {
     facet: 'viewed',
     heading: 'Viewed',
-    native: false,
     label: (value) => (value === 'true' ? 'Viewed files' : 'Not viewed'),
+    native: false,
   },
   {
     facet: 'statuses',
     heading: 'Change status',
-    native: false,
     label: (value) => `${value[0]?.toUpperCase()}${value.slice(1)}`,
+    native: false,
   },
   {
     facet: 'generated',
     heading: 'Generated',
-    native: false,
     label: (value) => (value === 'true' ? 'Generated' : 'Not generated'),
+    native: false,
   },
 ];
 
 export function emptyFacetExclusions(): FacetExclusions {
   return new Map(labelFacets.map((facet) => [facet, new Set<string>()]));
+}
+
+export function excludedFacetCount(excluded: FacetExclusions): number {
+  return excluded.values().reduce(
+    (count, values) => count + values.size,
+    0,
+  );
+}
+
+export function facetChoices(
+  facet: LabelFacet,
+  labelSets: FileLabel[][],
+  excluded: FacetExclusions,
+): string[] {
+  const sortGroup = new Map<string, number>();
+  for (const label of labelSets.flat()) {
+    if (label.facet !== facet) continue;
+    const group = facetSortGroup(facet, label);
+    const previous = sortGroup.get(label.value);
+    sortGroup.set(
+      label.value,
+      previous === undefined ? group : Math.min(previous, group),
+    );
+  }
+  for (const value of excluded.get(facet) ?? []) {
+    if (!sortGroup.has(value)) {
+      sortGroup.set(
+        value,
+        isFallbackFacetValue(facet, value) ? fallbackSortGroup : 0,
+      );
+    }
+  }
+  return sortGroup.keys().toArray().toSorted((left, right) => {
+    const byGroup = (sortGroup.get(left) ?? 0) - (sortGroup.get(right) ?? 0);
+    return (
+      byGroup ||
+      textOrder(left.toLocaleLowerCase(), right.toLocaleLowerCase()) ||
+      textOrder(left, right)
+    );
+  });
+}
+
+export function isFallbackFacetValue(
+  facet: LabelFacet,
+  value: string,
+): boolean {
+  return (
+    (facet === 'owners' && value === 'Unmapped') ||
+    (facet === 'languages' && value === 'No extension') ||
+    (facet === 'groups' && value === 'No groups')
+  );
 }
 
 export function matchesFacets(
@@ -60,66 +116,20 @@ export function matchesFacets(
   return true;
 }
 
-export function facetChoices(
-  facet: LabelFacet,
-  labelSets: FileLabel[][],
-  excluded: FacetExclusions,
-): string[] {
-  const sortGroup = new Map<string, number>();
-  for (const label of labelSets.flat()) {
-    if (label.facet !== facet) continue;
-    const group = facetSortGroup(facet, label);
-    const previous = sortGroup.get(label.value);
-    sortGroup.set(
-      label.value,
-      previous == null ? group : Math.min(previous, group),
-    );
-  }
-  for (const value of excluded.get(facet) ?? []) {
-    if (!sortGroup.has(value)) {
-      sortGroup.set(value, isFallbackFacetValue(facet, value) ? 2 : 0);
-    }
-  }
-  return [...sortGroup.keys()].sort((left, right) => {
-    const byGroup = (sortGroup.get(left) ?? 0) - (sortGroup.get(right) ?? 0);
-    return (
-      byGroup ||
-      textOrder(left.toLocaleLowerCase(), right.toLocaleLowerCase()) ||
-      textOrder(left, right)
-    );
-  });
-}
-
-function textOrder(left: string, right: string): number {
-  if (left < right) return -1;
-  if (left > right) return 1;
-  return 0;
-}
-
 function facetSortGroup(facet: LabelFacet, label: FileLabel): number {
-  if (isFallbackFacetValue(facet, label.value)) return 2;
-  if (facet === 'languages' && !label.fromLinguistLanguage) return 1;
+  if (isFallbackFacetValue(facet, label.value)) return fallbackSortGroup;
+  if (facet === 'languages' && label.fromLinguistLanguage !== true) {
+    return extensionSortGroup;
+  }
   return 0;
-}
-
-export function excludedFacetCount(excluded: FacetExclusions): number {
-  return [...excluded.values()].reduce(
-    (count, values) => count + values.size,
-    0,
-  );
 }
 
 function identity(value: string): string {
   return value;
 }
 
-export function isFallbackFacetValue(
-  facet: LabelFacet,
-  value: string,
-): boolean {
-  return (
-    (facet === 'owners' && value === 'Unmapped') ||
-    (facet === 'languages' && value === 'No extension') ||
-    (facet === 'groups' && value === 'No groups')
-  );
+function textOrder(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }

@@ -1,22 +1,8 @@
-import { isRecord } from '@diffseek/browser/record';
-
+import { fetchRawFile } from './raw-file';
 import {
-  fetchRawFile,
-  isRawFileRequest,
-  type RawFileRequest,
-  type RawFileResult,
-} from './raw-file';
-
-export const rawFileMessageType = 'diffseek:read-raw-file';
-
-export type RawFileMessage = {
-  type: typeof rawFileMessageType;
-  request: RawFileRequest;
-};
-
-export type RawFileMessageResult =
-  | RawFileResult
-  | { status: 'error'; message: string };
+  isRawFileMessage,
+  type RawFileMessageResult,
+} from './raw-file-message';
 
 export async function handleRawFileMessage(
   message: unknown,
@@ -27,17 +13,9 @@ export async function handleRawFileMessage(
     return await fetchRawFile(message.request, request);
   } catch (error) {
     return {
-      status: 'error',
       message:
-        error instanceof Error ? error.message : 'Raw file request failed',
+        Error.isError(error) ? error.message : 'Raw file request failed',
+      status: 'error',
     };
   }
-}
-
-function isRawFileMessage(value: unknown): value is RawFileMessage {
-  return (
-    isRecord(value) &&
-    value.type === rawFileMessageType &&
-    isRawFileRequest(value.request)
-  );
 }

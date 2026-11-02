@@ -3,6 +3,10 @@ import type { FileRecord } from '../model/file';
 export class FileCatalog {
   private readonly records = new Map<string, FileRecord>();
 
+  files(): FileRecord[] {
+    return this.records.values().toArray();
+  }
+
   merge(files: readonly FileRecord[]): void {
     for (const file of files) {
       const existing = this.records.get(file.path);
@@ -20,10 +24,6 @@ export class FileCatalog {
       if (next.owners.length === 0) next.owners = [...existing.owners];
       Object.assign(existing, next);
     }
-  }
-
-  files(): FileRecord[] {
-    return [...this.records.values()];
   }
 }
 

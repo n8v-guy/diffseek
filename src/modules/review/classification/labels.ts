@@ -8,49 +8,68 @@ import {
 
 import type { FileRecord } from '../model/file';
 
-export const labelFacets = [
-  'viewed',
-  'groups',
-  'owners',
-  'languages',
-  'generated',
-  'statuses',
-] as const;
+import type { FileLabel } from './label';
 
-export type LabelFacet = (typeof labelFacets)[number];
+export { type FileLabel, type LabelFacet } from './label';
 
-export type FileLabel = {
-  facet: LabelFacet;
-  value: string;
-  fromLinguistLanguage?: boolean;
-};
-
-export type LabelContext = {
+export interface LabelContext {
   attributes: GitAttributeRule[];
   codeowners: CodeownersRule[];
-};
+}
 
-type ClassifiedFile = {
-  file: FileRecord;
-  attributes: DiffSeekAttributes;
-};
-
-export type LabelSource = {
+export interface LabelSource {
   prepare: (
     files: readonly ClassifiedFile[],
     context: LabelContext,
   ) => (file: ClassifiedFile) => FileLabel[];
-};
+}
+
+interface ClassifiedFile {
+  attributes: DiffSeekAttributes;
+  file: FileRecord;
+}
+
+function generatedLabels({ attributes }: ClassifiedFile): FileLabel[] {
+  return [{ facet: 'generated', value: String(attributes.generated) }];
+}
+
+function groupLabels({ attributes }: ClassifiedFile): FileLabel[] {
+  return [{ facet: 'groups', value: attributes.group ?? 'No groups' }];
+}
+
+function languageLabel({ attributes, file }: ClassifiedFile): FileLabel {
+  const language = attributes.language;
+  if (language !== null && language.length > 0) {
+    return {
+      facet: 'languages',
+      fromLinguistLanguage: true,
+      value: language,
+    };
+  }
+  return {
+    facet: 'languages',
+    value: file.extension?.slice(1) ?? 'No extension',
+  };
+}
+
+function languageLabels(classified: ClassifiedFile): FileLabel[] {
+  return [languageLabel(classified)];
+}
+
+function statusLabels({ file }: ClassifiedFile): FileLabel[] {
+  return [{ facet: 'statuses', value: file.status }];
+}
+
+function viewedLabels({ file }: ClassifiedFile): FileLabel[] {
+  return file.viewed ? [{ facet: 'viewed', value: 'true' }] : [];
+}
 
 const viewedLabelSource: LabelSource = {
-  prepare: () => ({ file }) =>
-    file.viewed ? [{ facet: 'viewed', value: 'true' }] : [],
+  prepare: () => viewedLabels,
 };
 
 const groupLabelSource: LabelSource = {
-  prepare: () => ({ attributes }) => [
-    { facet: 'groups', value: attributes.group ?? 'No groups' },
-  ],
+  prepare: () => groupLabels,
 };
 
 const ownerLabelSource: LabelSource = {
@@ -65,28 +84,15 @@ const ownerLabelSource: LabelSource = {
 };
 
 const languageLabelSource: LabelSource = {
-  prepare: () => ({ file, attributes }) => [
-    attributes.language
-      ? {
-          facet: 'languages',
-          value: attributes.language,
-          fromLinguistLanguage: true,
-        }
-      : {
-          facet: 'languages',
-          value: file.extension?.slice(1) ?? 'No extension',
-        },
-  ],
+  prepare: () => languageLabels,
 };
 
 const generatedLabelSource: LabelSource = {
-  prepare: () => ({ attributes }) => [
-    { facet: 'generated', value: String(attributes.generated) },
-  ],
+  prepare: () => generatedLabels,
 };
 
 const statusLabelSource: LabelSource = {
-  prepare: () => ({ file }) => [{ facet: 'statuses', value: file.status }],
+  prepare: () => statusLabels,
 };
 
 const defaultLabelSources: LabelSource[] = [
@@ -104,13 +110,13 @@ export function labelFiles(
   sources: LabelSource[] = defaultLabelSources,
 ): void {
   const classified = files.map((file) => ({
-    file,
     attributes: attributesForPath(file.path, context.attributes),
+    file,
   }));
   const labelers = sources.map((source) => source.prepare(classified, context));
 
   for (const classifiedFile of classified) {
-    const { file, attributes } = classifiedFile;
+    const { attributes, file } = classifiedFile;
     file.generated = attributes.generated;
     file.labels = uniqueLabels(
       labelers.flatMap((labels) => labels(classifiedFile)),
@@ -121,7 +127,7 @@ export function labelFiles(
 function uniqueLabels(labels: FileLabel[]): FileLabel[] {
   const seen = new Set<string>();
   return labels.filter((label) => {
-    const key = `${label.facet}\u0000${label.value}`;
+    const key = `${label.facet}\0${label.value}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

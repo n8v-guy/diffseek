@@ -2,15 +2,15 @@ import { browser } from 'wxt/browser';
 
 import type { RawFileRequest, RawFileResult } from './raw-file';
 import {
-  rawFileMessageType,
   type RawFileMessage,
   type RawFileMessageResult,
-} from './raw-file-background';
+  rawFileMessageType,
+} from './raw-file-message';
 
 export async function readRawFile(
   request: RawFileRequest,
 ): Promise<RawFileResult> {
-  const message: RawFileMessage = { type: rawFileMessageType, request };
+  const message: RawFileMessage = { request, type: rawFileMessageType };
   const result = await browser.runtime.sendMessage<
     RawFileMessage,
     RawFileMessageResult

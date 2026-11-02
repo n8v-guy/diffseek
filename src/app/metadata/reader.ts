@@ -19,42 +19,39 @@ const codeownersPaths = [
   'docs/CODEOWNERS',
 ];
 
+type CodeownersRead =
+  | { path: string; status: 'found'; text: string }
+  | { status: 'failed' }
+  | { status: 'missing' };
+interface MetadataRead {
+  fallback: RepositoryMetadata;
+  preferredPath?: string;
+  ref: string;
+  repository: RepositoryRef;
+  request: ReadRawFile;
+}
+
 type ReadRawFile = (request: RawFileRequest) => Promise<RawFileResult>;
+
 type ResolvePullHead = (request: PullHeadRequest) => Promise<string>;
+
+type TextRead =
+  | { status: 'failed' }
+  | { status: 'found'; text: string }
+  | { status: 'missing' };
+
+const bundledMetadata: RepositoryMetadata = {
+  attributes: bundledGitAttributes,
+  codeowners: '',
+};
 
 export async function readImmediateMetadata(
   repository: RepositoryRef & { pull?: number },
 ): Promise<RepositoryMetadata> {
   try {
-    if (repository.pull != null) {
-      const cachedPull = await readPullCache({
-        ...repository,
-        pull: repository.pull,
-      });
-      if (cachedPull != null) {
-        const { sha: _sha, ...metadata } = cachedPull;
-        return metadata;
-      }
-    }
-    return (await readCache(repository)) ?? bundledMetadata;
+    return await immediateOrBundled(repository);
   } catch {
     return bundledMetadata;
-  }
-}
-
-export async function refreshDefaultMetadata(
-  repository: RepositoryRef,
-  request: ReadRawFile = readRawFile,
-): Promise<{ metadata: RepositoryMetadata; changed: boolean }> {
-  const cached = await readCache(repository).catch(() => null);
-  if (cached != null) return { metadata: cached, changed: false };
-  try {
-    return {
-      metadata: await readSettled(repository, 'HEAD', bundledMetadata, request),
-      changed: true,
-    };
-  } catch {
-    return { metadata: bundledMetadata, changed: false };
   }
 }
 
@@ -65,85 +62,59 @@ export async function readPullMetadata(
   resolveHead: ResolvePullHead = resolvePullHead,
 ): Promise<RepositoryMetadata> {
   const ref = await resolveHead({
-    repo: `${review.owner}/${review.repo}`,
     pull: review.pull,
+    repo: `${review.owner}/${review.repo}`,
   });
-  const cached = await readPullCache(review).catch(() => null);
+  const cached = await settledOrNull(readPullCache(review));
   if (cached?.sha === ref) {
-    const { sha, ...metadata } = cached;
-    await writePullCache(review, sha, metadata).catch(() => undefined);
+    const metadata = withoutSha(cached);
+    await settledOrUndefined(writePullCache(review, cached.sha, metadata));
     return metadata;
   }
-  const metadata = await readSettled(
-    review,
-    ref,
+  const preferredPath = (await settledOrNull(readCache(review)))?.codeownersPath;
+  const metadata = await readSettled({
     fallback,
+    ref,
+    repository: review,
     request,
-    (await readCache(review).catch(() => null))?.codeownersPath,
-  );
-  await writePullCache(review, ref, metadata).catch(() => undefined);
+    ...(preferredPath !== undefined && { preferredPath }),
+  });
+  await settledOrUndefined(writePullCache(review, ref, metadata));
   return metadata;
 }
 
-type TextRead =
-  | { status: 'found'; text: string }
-  | { status: 'missing' }
-  | { status: 'failed' };
-
-type CodeownersRead =
-  | { status: 'found'; path: string; text: string }
-  | { status: 'missing' }
-  | { status: 'failed' };
-
-async function readSettled(
+export async function refreshDefaultMetadata(
   repository: RepositoryRef,
-  ref: string,
-  fallback: RepositoryMetadata,
-  request: ReadRawFile,
-  preferredPath?: string,
-): Promise<RepositoryMetadata> {
-  const read = await readMetadata(
-    repository,
-    ref,
-    fallback,
-    request,
-    preferredPath,
-  );
-  if (!read.settled) throw new Error('Repository metadata request failed');
-  return read.metadata;
+  request: ReadRawFile = readRawFile,
+): Promise<{ changed: boolean; metadata: RepositoryMetadata; }> {
+  const cached = await settledOrNull(readCache(repository));
+  if (cached !== null) return { changed: false, metadata: cached };
+  try {
+    return {
+      changed: true,
+      metadata: await readSettled({
+        fallback: bundledMetadata,
+        ref: 'HEAD',
+        repository,
+        request,
+      }),
+    };
+  } catch {
+    return { changed: false, metadata: bundledMetadata };
+  }
 }
 
-async function readMetadata(
-  repository: RepositoryRef,
-  ref: string,
-  fallback: RepositoryMetadata,
-  request: ReadRawFile,
-  preferredPath?: string,
-): Promise<{ metadata: RepositoryMetadata; settled: boolean }> {
-  const paths =
-    preferredPath != null && codeownersPaths.includes(preferredPath)
-      ? [
-          preferredPath,
-          ...codeownersPaths.filter((path) => path !== preferredPath),
-        ]
-      : codeownersPaths;
-  const [codeowners, attributes] = await Promise.all([
-    readFirst(repository, ref, paths, request),
-    readText(repository, ref, '.gitattributes', request),
-  ]);
-  return {
-    settled: codeowners.status !== 'failed' && attributes.status !== 'failed',
-    metadata: {
-      codeowners:
-        codeowners.status === 'found' ? codeowners.text : fallback.codeowners,
-      attributes:
-        attributes.status === 'found' ? attributes.text : fallback.attributes,
-      codeownersPath:
-        codeowners.status === 'found'
-          ? codeowners.path
-          : fallback.codeownersPath,
-    },
-  };
+async function immediateOrBundled(
+  repository: RepositoryRef & { pull?: number },
+): Promise<RepositoryMetadata> {
+  if (repository.pull !== undefined) {
+    const cachedPull = await readPullCache({
+      ...repository,
+      pull: repository.pull,
+    });
+    if (cachedPull !== null) return withoutSha(cachedPull);
+  }
+  return (await readCache(repository)) ?? bundledMetadata;
 }
 
 async function readFirst(
@@ -155,11 +126,43 @@ async function readFirst(
   for (const path of paths) {
     const value = await readText(repository, ref, path, request);
     if (value.status === 'found') {
-      return { status: 'found', path, text: value.text };
+      return { path, status: 'found', text: value.text };
     }
     if (value.status === 'failed') return { status: 'failed' };
   }
   return { status: 'missing' };
+}
+
+async function readMetadata(
+  read: MetadataRead,
+): Promise<{ metadata: RepositoryMetadata; settled: boolean }> {
+  const preferred = read.preferredPath;
+  const paths =
+    preferred !== undefined && codeownersPaths.includes(preferred)
+      ? [preferred, ...codeownersPaths.filter((path) => path !== preferred)]
+      : codeownersPaths;
+  const [codeowners, attributes] = await Promise.all([
+    readFirst(read.repository, read.ref, paths, read.request),
+    readText(read.repository, read.ref, '.gitattributes', read.request),
+  ]);
+  const codeownersPath =
+    codeowners.status === 'found' ? codeowners.path : read.fallback.codeownersPath;
+  return {
+    metadata: {
+      attributes:
+        attributes.status === 'found' ? attributes.text : read.fallback.attributes,
+      codeowners:
+        codeowners.status === 'found' ? codeowners.text : read.fallback.codeowners,
+      ...(codeownersPath !== undefined && { codeownersPath }),
+    },
+    settled: codeowners.status !== 'failed' && attributes.status !== 'failed',
+  };
+}
+
+async function readSettled(read: MetadataRead): Promise<RepositoryMetadata> {
+  const loaded = await readMetadata(read);
+  if (!loaded.settled) throw new Error('Repository metadata request failed');
+  return loaded.metadata;
 }
 
 async function readText(
@@ -169,20 +172,47 @@ async function readText(
   request: ReadRawFile,
 ): Promise<TextRead> {
   try {
-    const result = await request({
-      repo: `${repository.owner}/${repository.repo}`,
-      ref,
+    return textRead(await request({
       path,
-    });
-    return result.status === 'found'
-      ? { status: 'found', text: result.text }
-      : { status: 'missing' };
+      ref,
+      repo: `${repository.owner}/${repository.repo}`,
+    }));
   } catch {
     return { status: 'failed' };
   }
 }
 
-const bundledMetadata: RepositoryMetadata = {
-  codeowners: '',
-  attributes: bundledGitAttributes,
-};
+async function settledOrNull<T>(work: Promise<T>): Promise<null | T> {
+  try {
+    return await work;
+  } catch {
+    return null;
+  }
+}
+
+async function settledOrUndefined(work: Promise<void>): Promise<void> {
+  try {
+    await work;
+  } catch {
+    // A cache write failure leaves the fetched metadata usable.
+  }
+}
+
+function textRead(result: RawFileResult): TextRead {
+  return result.status === 'found'
+    ? { status: 'found', text: result.text }
+    : { status: 'missing' };
+}
+
+function withoutSha(
+  cached: RepositoryMetadata & { sha: string },
+): RepositoryMetadata {
+  const metadata: RepositoryMetadata = {
+    attributes: cached.attributes,
+    codeowners: cached.codeowners,
+  };
+  if (cached.codeownersPath !== undefined) {
+    metadata.codeownersPath = cached.codeownersPath;
+  }
+  return metadata;
+}

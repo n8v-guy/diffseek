@@ -1,11 +1,14 @@
+const globstarSlashWidth = 2;
+const regexpSyntax = /[\|\\\{\}\(\)\[\]^$+?.]/gv;
+
 export function globSource(pattern: string): string {
   let source = '';
   for (let index = 0; index < pattern.length; index += 1) {
     const character = pattern[index];
     if (character === '*' && pattern[index + 1] === '*') {
-      if (pattern[index + 2] === '/') {
+      if (pattern[index + globstarSlashWidth] === '/') {
         source += '(?:.*/)?';
-        index += 2;
+        index += globstarSlashWidth;
       } else {
         source += '.*';
         index += 1;
@@ -15,7 +18,7 @@ export function globSource(pattern: string): string {
     } else if (character === '?') {
       source += '[^/]';
     } else {
-      source += character?.replace(/[|\\{}()[\]^$+?.]/g, '\\$&') ?? '';
+      source += character?.replaceAll(regexpSyntax, '\\$&') ?? '';
     }
   }
   return source;

@@ -1,21 +1,21 @@
-import type { FileLabel } from '../classification/labels';
-import type { FacetExclusions } from '../filtering/facets';
+import type { FileLabel } from '../classification/label';
+import type { FacetExclusions } from '../filtering/exclusions';
 
-export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
+export type ChangeStatus = 'added' | 'deleted' | 'modified' | 'renamed';
 
-export type FileRecord = {
-  path: string;
+export interface FileRecord {
   anchor: `diff-${string}`;
-  extension: string | null;
-  owners: string[];
-  generated: boolean;
-  status: ChangeStatus;
-  viewed: boolean;
   capabilities: {
     collapse: boolean;
     viewed: boolean;
   };
+  extension: null | string;
+  generated: boolean;
   labels: FileLabel[];
-};
+  owners: string[];
+  path: string;
+  status: ChangeStatus;
+  viewed: boolean;
+}
 
 export type FilterState = FacetExclusions;

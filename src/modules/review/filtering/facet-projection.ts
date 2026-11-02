@@ -5,20 +5,20 @@ import { matchesFacets } from './facets';
 import {
   addCountedFile,
   bucketActionPaths,
+  type CountBucket,
   emptyCountBucket,
   viewedMark,
-  type CountBucket,
   type ViewedMark,
 } from './viewed-scope';
 
-export type FacetProjection = {
+export interface FacetProjection {
   counted: number;
   paths: string[];
   total: number;
   viewedCount: number;
   viewedState: ViewedMark;
   visible: number;
-};
+}
 
 export function projectFacet(
   facet: LabelFacet,
@@ -28,9 +28,9 @@ export function projectFacet(
   const rows = new Map<
     string,
     {
+      bucket: CountBucket;
       total: number;
       visible: number;
-      bucket: CountBucket;
     }
   >();
   for (const file of files) {
@@ -43,9 +43,9 @@ export function projectFacet(
     const counted = file.capabilities.viewed;
     for (const value of values) {
       const row = rows.get(value) ?? {
+        bucket: emptyCountBucket(),
         total: 0,
         visible: 0,
-        bucket: emptyCountBucket(),
       };
       row.total += 1;
       if (visible) row.visible += 1;

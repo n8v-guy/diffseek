@@ -39,7 +39,7 @@ describe('filter facets', () => {
     const excluded = emptyFacetExclusions();
     excluded.set('owners', new Set(['@team']));
     expect(matchesFacets(labels, excluded)).toBe(true);
-    excluded.set('owners', new Set(['@team', '@other']));
+    excluded.set('owners', new Set(['@other', '@team']));
     expect(matchesFacets(labels, excluded)).toBe(false);
 
     const viewed = emptyFacetExclusions();
@@ -51,7 +51,7 @@ describe('filter facets', () => {
     const selected = emptyFacetExclusions();
     selected.set('groups', new Set(['Unavailable']));
 
-    expect(facetChoices('groups', [labels], selected)).toEqual([
+    expect(facetChoices('groups', [labels], selected)).toStrictEqual([
       'Tests',
       'Unavailable',
     ]);
@@ -63,8 +63,8 @@ describe('filter facets', () => {
       [
         { facet: 'languages', value: 'No extension' },
         { facet: 'languages', value: 'zsh' },
-        { facet: 'languages', value: 'typescript', fromLinguistLanguage: true },
-        { facet: 'languages', value: 'CSS', fromLinguistLanguage: true },
+        { facet: 'languages', fromLinguistLanguage: true, value: 'typescript' },
+        { facet: 'languages', fromLinguistLanguage: true, value: 'CSS' },
         { facet: 'languages', value: 'bash' },
         { facet: 'languages', value: 'YAML' },
         { facet: 'owners', value: 'Unmapped' },
@@ -77,7 +77,7 @@ describe('filter facets', () => {
       ],
     ];
 
-    expect(facetChoices('languages', choices, selected)).toEqual([
+    expect(facetChoices('languages', choices, selected)).toStrictEqual([
       'CSS',
       'typescript',
       'bash',
@@ -85,13 +85,13 @@ describe('filter facets', () => {
       'zsh',
       'No extension',
     ]);
-    expect(facetChoices('owners', choices, selected)).toEqual([
+    expect(facetChoices('owners', choices, selected)).toStrictEqual([
       '@Alpha',
       '@beta',
       '@zeta',
       'Unmapped',
     ]);
-    expect(facetChoices('groups', choices, selected)).toEqual([
+    expect(facetChoices('groups', choices, selected)).toStrictEqual([
       'Code',
       'Tests',
       'No groups',

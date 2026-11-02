@@ -7,11 +7,11 @@ import {
 } from '@diffseek/browser/filter-defaults';
 
 describe('filter defaults', () => {
-  beforeEach(() => fakeBrowser.reset());
+  beforeEach(() => { fakeBrowser.reset(); });
 
   it('hides viewed and generated files and auto-views generated when nothing is saved', async () => {
-    expect(await readFilterDefaults()).toEqual({
-      hidden: new Set(['viewed', 'generated']),
+    expect(await readFilterDefaults()).toStrictEqual({
+      hidden: new Set(['generated', 'viewed']),
       viewed: new Set(['generated']),
     });
     expect(
@@ -27,13 +27,13 @@ describe('filter defaults', () => {
       viewed: new Set(),
     });
 
-    expect(await readFilterDefaults()).toEqual({
+    expect(await readFilterDefaults()).toStrictEqual({
       hidden: new Set(),
       viewed: new Set(),
     });
     expect(
       await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
-    ).toEqual({
+    ).toStrictEqual({
       'diffseek:filter-defaults': { hidden: [], viewed: [] },
     });
   });
@@ -46,13 +46,13 @@ describe('filter defaults', () => {
       },
     });
 
-    expect(await readFilterDefaults()).toEqual({
+    expect(await readFilterDefaults()).toStrictEqual({
       hidden: new Set(['generated']),
       viewed: new Set(['generated']),
     });
     expect(
       await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
-    ).toEqual({
+    ).toStrictEqual({
       'diffseek:filter-defaults': {
         hidden: ['generated'],
         viewed: ['generated'],
@@ -62,19 +62,19 @@ describe('filter defaults', () => {
 
   it('stores auto-view independently of always hide', async () => {
     await writeFilterDefaults({
-      hidden: new Set(['viewed', 'generated']),
+      hidden: new Set(['generated', 'viewed']),
       viewed: new Set(['generated']),
     });
 
-    expect(await readFilterDefaults()).toEqual({
-      hidden: new Set(['viewed', 'generated']),
+    expect(await readFilterDefaults()).toStrictEqual({
+      hidden: new Set(['generated', 'viewed']),
       viewed: new Set(['generated']),
     });
     expect(
       await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
-    ).toEqual({
+    ).toStrictEqual({
       'diffseek:filter-defaults': {
-        hidden: ['viewed', 'generated'],
+        hidden: ['generated', 'viewed'],
         viewed: ['generated'],
       },
     });
@@ -83,11 +83,15 @@ describe('filter defaults', () => {
       hidden: new Set(),
       viewed: new Set(['generated']),
     });
-    expect(await readFilterDefaults()).toEqual({
+    expect(await readFilterDefaults()).toStrictEqual({
       hidden: new Set(),
       viewed: new Set(['generated']),
     });
   });
+});
+
+describe('stored filter defaults', () => {
+  beforeEach(() => { fakeBrowser.reset(); });
 
   it('reads a saved preference and ignores malformed values', async () => {
     await fakeBrowser.storage.local.set({
@@ -96,7 +100,7 @@ describe('filter defaults', () => {
         viewed: ['owners', 'generated'],
       },
     });
-    expect(await readFilterDefaults()).toEqual({
+    expect(await readFilterDefaults()).toStrictEqual({
       hidden: new Set(['viewed']),
       viewed: new Set(['generated']),
     });
@@ -104,7 +108,7 @@ describe('filter defaults', () => {
     await fakeBrowser.storage.local.set({
       'diffseek:filter-defaults': 4,
     });
-    expect(await readFilterDefaults()).toEqual({
+    expect(await readFilterDefaults()).toStrictEqual({
       hidden: new Set(),
       viewed: new Set(),
     });
@@ -112,7 +116,7 @@ describe('filter defaults', () => {
     vi.spyOn(fakeBrowser.storage.local, 'get').mockRejectedValueOnce(
       new Error('storage unavailable'),
     );
-    await expect(readFilterDefaults()).resolves.toEqual({
+    await expect(readFilterDefaults()).resolves.toStrictEqual({
       hidden: new Set(),
       viewed: new Set(),
     });

@@ -1,91 +1,55 @@
 import {
   bucketActionPaths,
+  type CountBucket,
   emptyFacetExclusions,
+  type FileRecord,
   fileViewedLabel,
+  type FilterState,
   includeCountedFiles,
+  ReviewIndex,
   scopeAriaPressed,
   scopeViewedLabel,
-  type CountBucket,
-  type FileRecord,
-  type FilterState,
-  ReviewIndex,
 } from '@diffseek/review';
 
-import {
-  type PageSnapshot,
-  viewedControlState,
-} from './page-adapter';
+import { type PageSnapshot, viewedControlState } from './page-adapter';
 
 /** How long a native click may go unanswered before it counts as ignored. */
 const ignoredClickGuardMs = 1_500;
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
+const actionHandlers = new WeakMap<Element, () => void>();
+const ariaLabel = 'aria-label';
+const ariaPressed = 'aria-pressed';
+const hitSlopPx = 4;
+const listeningDocuments = new WeakSet<Document>();
+const titleAttribute = 'title';
+const viewedActionAttribute = 'data-diffseek-viewed-action';
+const viewedActionClass = 'diffseek-viewed-icon-anchor';
+const viewedActionSelector = '[data-diffseek-viewed-action]';
+const viewedPartialClass = 'diffseek-viewed-partial';
 
-export type ActionResult = {
-  requested: number;
+export interface ActionResult {
   completed: string[];
   failed: string[];
-};
+  requested: number;
+}
 
 /** What a viewed batch covers; picks the toast wording. */
-export type ViewedTarget = 'file' | 'folder' | 'category' | 'auto-view';
+export type ViewedTarget = 'auto-view' | 'category' | 'file' | 'folder';
 
-export async function markViewed(
-  snapshot: SupportedSnapshot,
-  paths: string[],
-  viewed: boolean,
-  options: {
-    timeoutMs?: number;
-    signal?: AbortSignal;
-    onProgress?: (completed: number, requested: number) => void;
-  } = {},
-): Promise<ActionResult> {
-  const result: ActionResult = {
-    requested: paths.length,
-    completed: [],
-    failed: [],
-  };
+interface MarkOptions {
+  onProgress?: (completed: number, requested: number) => void;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
 
-  for (const path of paths) {
-    if (options.signal?.aborted) break;
-    const resolveButton = () => snapshot.viewedControl(path);
-    const button = resolveButton();
-    if (!button) {
-      result.failed.push(path);
-      options.onProgress?.(
-        result.completed.length + result.failed.length,
-        result.requested,
-      );
-      continue;
-    }
-    if (isViewed(button) === viewed) {
-      result.completed.push(path);
-      options.onProgress?.(result.completed.length, result.requested);
-      continue;
-    }
+type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
-    const confirmed = waitForViewedState(
-      resolveButton,
-      button,
-      viewed,
-      options.timeoutMs ?? ignoredClickGuardMs,
-      options.signal,
-    );
-    button.click();
-    if (await confirmed) {
-      const file = snapshot.files.find((candidate) => candidate.path === path);
-      if (file) file.viewed = viewed;
-      result.completed.push(path);
-    } else {
-      result.failed.push(path);
-    }
-    options.onProgress?.(
-      result.completed.length + result.failed.length,
-      result.requested,
-    );
-  }
-
-  return result;
+interface ViewedWait {
+  button: HTMLButtonElement;
+  resolveButton: () => HTMLButtonElement | null;
+  signal?: AbortSignal;
+  timeoutMs: number;
+  viewed: boolean;
 }
 
 /**
@@ -93,12 +57,37 @@ export async function markViewed(
  * wrapper; no nodes are inserted into the React-owned tree (inserting nodes
  * before hydration finishes makes React discard and remount the whole tree).
  */
-const viewedActionSelector = '[data-diffseek-viewed-action]';
-const viewedActionClass = 'diffseek-viewed-icon-anchor';
-const viewedPartialClass = 'diffseek-viewed-partial';
-const actionHandlers = new WeakMap<Element, () => void>();
-const listeningDocuments = new WeakSet<Document>();
-const hitSlopPx = 4;
+export function clearViewedAction(anchor: Element): void {
+  actionHandlers.delete(anchor);
+  anchor.classList.remove(viewedActionClass, viewedPartialClass);
+  if (anchor.getAttribute('class') === '') anchor.removeAttribute('class');
+  for (const name of [
+    viewedActionAttribute,
+    ariaLabel,
+    ariaPressed,
+    titleAttribute,
+  ]) {
+    anchor.removeAttribute(name);
+  }
+}
+
+export async function markViewed(
+  snapshot: SupportedSnapshot,
+  paths: string[],
+  viewed: boolean,
+  options: MarkOptions = {},
+): Promise<ActionResult> {
+  const result: ActionResult = {
+    completed: [],
+    failed: [],
+    requested: paths.length,
+  };
+  for (const path of paths) {
+    if (options.signal?.aborted === true) break;
+    await markPath(snapshot, path, viewed, { options, result });
+  }
+  return result;
+}
 
 export function mountViewedActions(
   snapshot: SupportedSnapshot,
@@ -109,13 +98,12 @@ export function mountViewedActions(
   const tree = snapshot.tree();
   if (!tree) return;
   listenForViewedActions(tree.ownerDocument);
-  const stale = new Set(tree.querySelectorAll<HTMLElement>(viewedActionSelector));
+  const stale = new Set(
+    tree.querySelectorAll<HTMLElement>(viewedActionSelector),
+  );
   const counts = includeCountedFiles(filters);
   const folders = index.folderViewed(counts);
-  const filesByPath = new Map(
-    snapshot.files.map((file) => [file.path, file]),
-  );
-
+  const filesByPath = new Map(snapshot.files.map((file) => [file.path, file]));
   for (const item of tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')) {
     const file = filesByPath.get(item.id);
     const bucket = file ? fileBucket(file, counts) : folders.get(item.id);
@@ -123,24 +111,47 @@ export function mountViewedActions(
     const anchor = iconAnchor(item);
     if (!anchor) continue;
     stale.delete(anchor);
-    bindViewedAnchor(anchor, bucket, file != null, onAction);
+    bindViewedAnchor(anchor, bucket, file !== undefined, onAction);
   }
-
   for (const anchor of stale) clearViewedAction(anchor);
+}
+
+function bindViewedAnchor(
+  anchor: HTMLElement,
+  bucket: CountBucket,
+  file: boolean,
+  onAction: (target: ViewedTarget, viewed: boolean, paths: string[]) => void,
+): void {
+  if (!anchor.classList.contains(viewedActionClass)) {
+    anchor.classList.add(viewedActionClass);
+  }
+  setAttribute(anchor, viewedActionAttribute, 'true');
+  const label = file
+    ? fileViewedLabel(bucket.viewed === bucket.counted)
+    : scopeViewedLabel(bucket.viewed, bucket.counted);
+  const pressed = pressedValue(file, bucket);
+  setAttribute(anchor, ariaLabel, label);
+  setAttribute(anchor, ariaPressed, pressed);
+  setAttribute(anchor, titleAttribute, label);
+  anchor.classList.toggle(viewedPartialClass, pressed === 'mixed');
+  const paths = bucketActionPaths(bucket);
+  const marking = pressed !== 'true';
+  actionHandlers.set(anchor, () => {
+    onAction(file ? 'file' : 'folder', marking, paths);
+  });
 }
 
 function fileBucket(
   file: FileRecord,
-  counts: (file: FileRecord) => boolean,
+  counts: (candidate: FileRecord) => boolean,
 ): CountBucket | null {
   if (!counts(file)) return null;
-  const bucket = {
+  return {
     counted: 1,
-    viewed: file.viewed ? 1 : 0,
-    unreadPaths: file.viewed ? [] : [file.path],
     countedPaths: [file.path],
+    unreadPaths: file.viewed ? [] : [file.path],
+    viewed: file.viewed ? 1 : 0,
   };
-  return bucket;
 }
 
 function iconAnchor(item: HTMLElement): HTMLElement | null {
@@ -155,63 +166,72 @@ function iconAnchor(item: HTMLElement): HTMLElement | null {
   return anchor;
 }
 
-function bindViewedAnchor(
-  anchor: HTMLElement,
-  bucket: CountBucket,
-  file: boolean,
-  onAction: (target: ViewedTarget, viewed: boolean, paths: string[]) => void,
-): void {
-  if (!anchor.classList.contains(viewedActionClass)) {
-    anchor.classList.add(viewedActionClass);
-  }
-  setAttribute(anchor, 'data-diffseek-viewed-action', 'true');
-  const label = file
-    ? fileViewedLabel(bucket.viewed === bucket.counted)
-    : scopeViewedLabel(bucket.viewed, bucket.counted);
-  const pressed = file
-    ? bucket.viewed === bucket.counted
-      ? 'true'
-      : 'false'
-    : scopeAriaPressed(bucket.viewed, bucket.counted);
-  setAttribute(anchor, 'aria-label', label);
-  setAttribute(anchor, 'aria-pressed', pressed);
-  setAttribute(anchor, 'title', label);
-  anchor.classList.toggle(viewedPartialClass, pressed === 'mixed');
-  const paths = bucketActionPaths(bucket);
-  const markViewed = pressed !== 'true';
-  actionHandlers.set(anchor, () =>
-    onAction(file ? 'file' : 'folder', markViewed, paths),
-  );
+function isPageElement(target: EventTarget | null): target is Element {
+  if (!(target instanceof Node) || target.ownerDocument === null) return false;
+  const ownerDocument = target.ownerDocument;
+  const ElementType = ownerDocument.defaultView?.Element;
+  return ElementType !== undefined && target instanceof ElementType;
 }
 
-export function clearViewedAction(anchor: Element): void {
-  actionHandlers.delete(anchor);
-  anchor.classList.remove(viewedActionClass, viewedPartialClass);
-  if (anchor.getAttribute('class') === '') anchor.removeAttribute('class');
-  for (const name of [
-    'data-diffseek-viewed-action',
-    'aria-label',
-    'aria-pressed',
-    'title',
-  ]) {
-    anchor.removeAttribute(name);
-  }
-}
-
-function setAttribute(element: Element, name: string, value: string): void {
-  if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+function isViewed(button: HTMLButtonElement): boolean {
+  return viewedControlState(button) === true;
 }
 
 function listenForViewedActions(document: Document): void {
   if (listeningDocuments.has(document)) return;
   listeningDocuments.add(document);
-  document.addEventListener('click', onViewedActionClick, true);
+  document.addEventListener('click', onViewedActionClick, { capture: true });
+}
+
+async function markPath(
+  snapshot: SupportedSnapshot,
+  path: string,
+  viewed: boolean,
+  attempt: { options: MarkOptions; result: ActionResult },
+): Promise<void> {
+  const { options, result } = attempt;
+  const resolveButton = (): HTMLButtonElement | null =>
+    snapshot.viewedControl(path);
+  const button = resolveButton();
+  if (!button) {
+    result.failed.push(path);
+    report(
+      options,
+      result.completed.length + result.failed.length,
+      result.requested,
+    );
+    return;
+  }
+  if (isViewed(button) === viewed) {
+    result.completed.push(path);
+    report(options, result.completed.length, result.requested);
+    return;
+  }
+  const confirmed = waitForViewedState({
+    button,
+    resolveButton,
+    timeoutMs: options.timeoutMs ?? ignoredClickGuardMs,
+    viewed,
+    ...(options.signal !== undefined && { signal: options.signal }),
+  });
+  button.click();
+  if (await confirmed) {
+    const file = snapshot.files.find((candidate) => candidate.path === path);
+    if (file) file.viewed = viewed;
+    result.completed.push(path);
+  } else {
+    result.failed.push(path);
+  }
+  report(
+    options,
+    result.completed.length + result.failed.length,
+    result.requested,
+  );
 }
 
 function onViewedActionClick(event: MouseEvent): void {
   const target = event.target;
-  const ElementType = (target as Node | null)?.ownerDocument?.defaultView?.Element;
-  if (!ElementType || !(target instanceof ElementType)) return;
+  if (!isPageElement(target)) return;
   const anchor = target.closest(viewedActionSelector);
   if (!anchor) return;
   const handler = actionHandlers.get(anchor);
@@ -220,6 +240,59 @@ function onViewedActionClick(event: MouseEvent): void {
   event.stopPropagation();
   event.stopImmediatePropagation();
   handler();
+}
+
+function pressedValue(file: boolean, bucket: CountBucket): string {
+  if (!file) return scopeAriaPressed(bucket.viewed, bucket.counted);
+  if (bucket.viewed === bucket.counted) return 'true';
+  return 'false';
+}
+
+function report(options: MarkOptions, completed: number, requested: number): void {
+  options.onProgress?.(completed, requested);
+}
+
+function setAttribute(element: Element, name: string, value: string): void {
+  if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+}
+
+function waitForViewedState(wait: ViewedWait): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (confirmed: boolean): void => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      clearTimeout(timeout);
+      wait.signal?.removeEventListener('abort', abort);
+      resolve(confirmed);
+    };
+    const check = (): void => {
+      const current = wait.resolveButton();
+      if (current && isViewed(current) === wait.viewed) finish(true);
+    };
+    const root =
+      wait.button.closest('[role="region"]') ??
+      wait.button.closest('[data-diff-header-wrapper="true"]') ??
+      wait.button;
+    const observer = new MutationObserver(check);
+    observer.observe(root, {
+      attributeFilter: [ariaLabel, ariaPressed],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    // Failure guard only: success is the attribute change above; nothing
+    // signals a click GitHub ignored.
+    const timeout = setTimeout(() => {
+      finish(false);
+    }, wait.timeoutMs);
+    const abort = (): void => {
+      finish(false);
+    };
+    wait.signal?.addEventListener('abort', abort, { once: true });
+    queueMicrotask(check);
+  });
 }
 
 function withinHitArea(anchor: Element, event: MouseEvent): boolean {
@@ -234,49 +307,4 @@ function withinHitArea(anchor: Element, event: MouseEvent): boolean {
     event.clientY >= rect.top - hitSlopPx &&
     event.clientY <= rect.bottom + hitSlopPx
   );
-}
-
-function isViewed(button: HTMLButtonElement): boolean {
-  return viewedControlState(button) === true;
-}
-
-function waitForViewedState(
-  resolveButton: () => HTMLButtonElement | null,
-  button: HTMLButtonElement,
-  viewed: boolean,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (confirmed: boolean) => {
-      if (settled) return;
-      settled = true;
-      observer.disconnect();
-      clearTimeout(timeout);
-      signal?.removeEventListener('abort', abort);
-      resolve(confirmed);
-    };
-    const check = () => {
-      const current = resolveButton();
-      if (current && isViewed(current) === viewed) finish(true);
-    };
-    const root =
-      button.closest('[role="region"]') ??
-      button.closest('[data-diff-header-wrapper="true"]') ??
-      button;
-    const observer = new MutationObserver(check);
-    observer.observe(root, {
-      attributes: true,
-      childList: true,
-      subtree: true,
-      attributeFilter: ['aria-label', 'aria-pressed'],
-    });
-    // Failure guard only: success is the attribute change above; nothing
-    // signals a click GitHub ignored.
-    const timeout = setTimeout(() => finish(false), timeoutMs);
-    const abort = () => finish(false);
-    signal?.addEventListener('abort', abort, { once: true });
-    queueMicrotask(check);
-  });
 }

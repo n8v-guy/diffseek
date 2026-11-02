@@ -1,48 +1,25 @@
-import { isRecord } from '@diffseek/browser/record';
+import { isRecord, recordField } from '@diffseek/browser/record';
 
-export type RawFileRequest = {
-  repo: string;
-  ref: string;
+const notFoundStatus = 404;
+const rawFileTimeoutMs = 20_000;
+const repositorySegmentCount = 2;
+
+export interface RawFileRequest {
   path: string;
-};
+  ref: string;
+  repo: string;
+}
 
 export type RawFileResult =
   | {
+      contentType: null | string;
       status: 'found';
       text: string;
-      contentType: string | null;
       url: string;
     }
   | { status: 'missing' };
 
-export function isRawFileRequest(value: unknown): value is RawFileRequest {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.repo === 'string' &&
-    typeof value.ref === 'string' &&
-    typeof value.path === 'string'
-  );
-}
-
-export function rawFileUrl(request: RawFileRequest): string {
-  const repository = validSegments(request.repo, 2);
-  const ref = validSegments(request.ref);
-  const path = validSegments(request.path);
-  if (!repository || !ref || !path) {
-    throw new Error('Invalid raw file request');
-  }
-  return [
-    'https://github.com',
-    repository.map(encodeURIComponent).join('/'),
-    'raw',
-    encodeURIComponent(request.ref),
-    path.map(encodeURIComponent).join('/'),
-  ].join('/');
-}
-
 /** Failure guard only: a hung request never settles and nothing signals it. */
-const rawFileTimeoutMs = 20_000;
-
 export async function fetchRawFile(
   input: RawFileRequest,
   request: typeof fetch = fetch,
@@ -52,21 +29,54 @@ export async function fetchRawFile(
     redirect: 'follow',
     signal: AbortSignal.timeout(rawFileTimeoutMs),
   });
-  if (response.status === 404) return { status: 'missing' };
+  if (response.status === notFoundStatus) return { status: 'missing' };
   if (!response.ok) {
     throw new Error(`Raw file request failed with ${response.status}`);
   }
   return {
+    contentType: response.headers.get('content-type'),
     status: 'found',
     text: await response.text(),
-    contentType: response.headers.get('content-type'),
     url: response.url,
   };
 }
 
-function validSegments(value: string, exact?: number): string[] | null {
+export function isRawFileRequest(value: unknown): value is RawFileRequest {
+  if (!isRecord(value)) return false;
+  return (
+    typeof recordField(value, 'repo') === 'string' &&
+    typeof recordField(value, 'ref') === 'string' &&
+    typeof recordField(value, 'path') === 'string'
+  );
+}
+
+export function rawFileUrl(request: RawFileRequest): string {
+  const repository = validSegments(request.repo, repositorySegmentCount);
+  const ref = validSegments(request.ref);
+  const path = validSegments(request.path);
+  if (repository === null || ref === null || path === null) {
+    throw new Error('Invalid raw file request');
+  }
+  return [
+    'https://github.com',
+    repository.map((segment) => encodeURIComponent(segment)).join('/'),
+    'raw',
+    encodeURIComponent(request.ref),
+    path.map((segment) => encodeURIComponent(segment)).join('/'),
+  ].join('/');
+}
+
+function isPathSegment(segment: string): boolean {
+  return segment.length > 0 && segment !== '.' && segment !== '..';
+}
+
+function isWrongSegmentCount(segments: string[], exact?: number): boolean {
+  return typeof exact === 'number' && segments.length !== exact;
+}
+
+function validSegments(value: string, exact?: number): null | string[] {
   if (
-    !value ||
+    value.length === 0 ||
     value.startsWith('/') ||
     value.endsWith('/') ||
     value.includes('\\')
@@ -75,10 +85,8 @@ function validSegments(value: string, exact?: number): string[] | null {
   }
   const segments = value.split('/');
   if (
-    (exact != null && segments.length !== exact) ||
-    segments.some(
-      (segment) => !segment || segment === '.' || segment === '..',
-    )
+    isWrongSegmentCount(segments, exact) ||
+    segments.some((segment) => !isPathSegment(segment))
   ) {
     return null;
   }

@@ -5,12 +5,12 @@ import type {
   RepositoryRef,
 } from '@diffseek/repository-metadata';
 
-import { isRecord } from './record';
+import { isRecord, isUnknownArray, recordField } from './record';
 
-export type { RepositoryMetadata, RepositoryRef };
+const cacheEntryVersion = 2;
 
 type CacheEntry = RepositoryMetadata & {
-  version: 2;
+  version: typeof cacheEntryVersion;
 };
 
 type PullCacheEntry = RepositoryMetadata & {
@@ -25,29 +25,28 @@ const pullCacheLimit = 10;
 
 export async function readCache(
   repository: RepositoryRef,
-): Promise<RepositoryMetadata | null> {
+): Promise<null | RepositoryMetadata> {
   const key = cacheKey(repository);
   const value = (await browser.storage.local.get(key))[key];
   return isCacheEntry(value) ? metadataFrom(value) : null;
+}
+
+export async function readPullCache(
+  review: RepositoryRef & { pull: number },
+): Promise<null | (RepositoryMetadata & { sha: string })> {
+  const entry = (await readPullEntries()).find((item) =>
+    samePull(item, review),
+  );
+  if (entry === undefined) return null;
+  return { ...metadataFrom(entry), sha: entry.sha };
 }
 
 export async function writeCache(
   repository: RepositoryRef,
   metadata: RepositoryMetadata,
 ): Promise<void> {
-  const entry: CacheEntry = { version: 2, ...metadata };
+  const entry: CacheEntry = { version: cacheEntryVersion, ...metadata };
   await browser.storage.local.set({ [cacheKey(repository)]: entry });
-}
-
-export async function readPullCache(
-  review: RepositoryRef & { pull: number },
-): Promise<(RepositoryMetadata & { sha: string }) | null> {
-  const entry = (await readPullEntries()).find((item) =>
-    samePull(item, review),
-  );
-  return entry == null
-    ? null
-    : { ...metadataFrom(entry), sha: entry.sha };
 }
 
 export async function writePullCache(
@@ -57,8 +56,8 @@ export async function writePullCache(
 ): Promise<void> {
   const next: PullCacheEntry = {
     owner: review.owner,
-    repo: review.repo,
     pull: review.pull,
+    repo: review.repo,
     sha,
     ...metadata,
   };
@@ -70,42 +69,46 @@ export async function writePullCache(
   });
 }
 
-async function readPullEntries(): Promise<PullCacheEntry[]> {
-  const value = (await browser.storage.local.get(pullCacheKey))[pullCacheKey];
-  return Array.isArray(value) ? value.filter(isPullCacheEntry) : [];
+function cacheKey(repository: RepositoryRef): string {
+  return `diffseek:metadata:${repository.owner}/${repository.repo}`;
 }
 
 function isCacheEntry(value: unknown): value is CacheEntry {
   return (
     isRecord(value) &&
-    value.version === 2 &&
-    typeof value.codeowners === 'string' &&
-    typeof value.attributes === 'string'
+    recordField(value, 'version') === cacheEntryVersion &&
+    typeof recordField(value, 'codeowners') === 'string' &&
+    typeof recordField(value, 'attributes') === 'string'
   );
 }
 
 function isPullCacheEntry(value: unknown): value is PullCacheEntry {
   return (
     isRecord(value) &&
-    typeof value.owner === 'string' &&
-    typeof value.repo === 'string' &&
-    typeof value.pull === 'number' &&
-    typeof value.sha === 'string' &&
-    typeof value.codeowners === 'string' &&
-    typeof value.attributes === 'string'
+    typeof recordField(value, 'owner') === 'string' &&
+    typeof recordField(value, 'repo') === 'string' &&
+    typeof recordField(value, 'pull') === 'number' &&
+    typeof recordField(value, 'sha') === 'string' &&
+    typeof recordField(value, 'codeowners') === 'string' &&
+    typeof recordField(value, 'attributes') === 'string'
   );
 }
 
-function metadataFrom(
-  value: RepositoryMetadata,
-): RepositoryMetadata {
-  return {
-    codeowners: value.codeowners,
+function metadataFrom(value: RepositoryMetadata): RepositoryMetadata {
+  const metadata: RepositoryMetadata = {
     attributes: value.attributes,
-    ...(value.codeownersPath != null
-      ? { codeownersPath: value.codeownersPath }
-      : {}),
+    codeowners: value.codeowners,
   };
+  if (typeof value.codeownersPath === 'string') {
+    metadata.codeownersPath = value.codeownersPath;
+  }
+  return metadata;
+}
+
+async function readPullEntries(): Promise<PullCacheEntry[]> {
+  const stored = await browser.storage.local.get(pullCacheKey);
+  const value = recordField(stored, pullCacheKey);
+  return isUnknownArray(value) ? value.filter(isPullCacheEntry) : [];
 }
 
 function samePull(
@@ -119,6 +122,4 @@ function samePull(
   );
 }
 
-function cacheKey(repository: RepositoryRef): string {
-  return `diffseek:metadata:${repository.owner}/${repository.repo}`;
-}
+export {type RepositoryMetadata, type RepositoryRef} from '@diffseek/repository-metadata';

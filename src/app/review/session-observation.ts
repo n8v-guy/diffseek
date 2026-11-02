@@ -15,10 +15,22 @@ import {
   type RepositoryMetadata,
 } from '@diffseek/repository-metadata';
 import {
-  labelFiles,
   type FileRecord,
   type FilterState,
+  labelFiles,
 } from '@diffseek/review';
+
+export interface PanelReconcileSchedule {
+  /** Cancels the queued pass; null when nothing is queued. */
+  cancel: (() => void) | null;
+  /** The queued pass runs as the next task rather than at the next frame. */
+  immediate: boolean;
+}
+
+export interface PanelScheduleOptions {
+  coalesce?: boolean;
+  immediate?: boolean;
+}
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
@@ -47,6 +59,20 @@ export function classifySnapshot(
   });
 }
 
+/** A filtered-out file GitHub expanded again. Structure and labels stay put. */
+export function filteredFileExpanded(root: Document): boolean {
+  for (const button of root.querySelectorAll<HTMLButtonElement>(
+    '[data-diffseek-filtered-out="true"] button',
+  )) {
+    if (fileToggleAction(button) === collapseFileLabel) return true;
+  }
+  return false;
+}
+
+export function freshPanelSchedule(): PanelReconcileSchedule {
+  return { cancel: null, immediate: false };
+}
+
 export function pendingDefaultViewed(
   files: readonly FileRecord[],
   defaults: FilterDefaults,
@@ -64,30 +90,21 @@ export function pendingDefaultViewed(
     .map((file) => file.path);
 }
 
-export function syncViewedLabels(files: FileRecord[]): void {
-  for (const file of files) {
-    const rest = file.labels.filter((label) => label.facet !== 'viewed');
-    file.labels = file.viewed
-      ? [{ facet: 'viewed', value: 'true' }, ...rest]
-      : rest;
-  }
-}
-
 export function projectionKeyFor(options: {
-  metadataRevision: number;
-  metadata: RepositoryMetadata;
-  filters: FilterState;
+  files: readonly FileRecord[];
   filterDefaults: FilterDefaults;
+  filters: FilterState;
   generatedDefaultBusy: boolean;
   menuCount: number;
-  files: readonly FileRecord[];
+  metadata: RepositoryMetadata;
+  metadataRevision: number;
 }): string {
-  const filters = [...options.filters.entries()]
-    .map(([facet, values]) => `${facet}:${[...values].sort().join(',')}`)
+  const filters = [...options.filters]
+    .map(([facet, values]) => `${facet}:${sortedText(values)}`)
     .join('|');
   const defaults = [
-    `hidden:${[...options.filterDefaults.hidden].sort().join(',')}`,
-    `viewed:${[...options.filterDefaults.viewed].sort().join(',')}`,
+    `hidden:${sortedText(options.filterDefaults.hidden)}`,
+    `viewed:${sortedText(options.filterDefaults.viewed)}`,
   ].join('/');
   const files = options.files
     .map((file) =>
@@ -115,6 +132,18 @@ export function projectionKeyFor(options: {
   ].join('\n--\n');
 }
 
+export function refreshViewedState(
+  snapshot: SupportedSnapshot,
+  files: readonly FileRecord[],
+): void {
+  for (const file of files) {
+    const control = snapshot.viewedControl(file.path);
+    if (control === null) continue;
+    const viewed = viewedControlState(control);
+    if (viewed !== null) file.viewed = viewed;
+  }
+}
+
 export function retainNativeOwners(
   snapshot: SupportedSnapshot,
   observedOwners: Map<string, string[]>,
@@ -128,92 +157,88 @@ export function retainNativeOwners(
   }
 }
 
-export function refreshViewedState(
-  snapshot: SupportedSnapshot,
-  files: readonly FileRecord[],
-): void {
+export function syncViewedLabels(files: FileRecord[]): void {
   for (const file of files) {
-    const control = snapshot.viewedControl(file.path);
-    const viewed = control ? viewedControlState(control) : null;
-    if (viewed != null) file.viewed = viewed;
+    const rest = file.labels.filter((label) => label.facet !== 'viewed');
+    file.labels = file.viewed
+      ? [{ facet: 'viewed', value: 'true' }, ...rest]
+      : rest;
   }
 }
 
-export function watchObservationRoots(options: {
-  root: Document;
-  observer: MutationObserver;
-  observedRoots: Set<Element>;
-}): void {
+export function watchObservationRoots(options: ObservationRoots): void {
+  dropDisconnected(options);
+  for (const candidate of observationCandidates(options.root)) {
+    observeAttributes(options, candidate, contentAttributeFilter);
+  }
+  const filterButton = options.root.querySelector<HTMLElement>(filterButtonSelector);
+  if (filterButton === null || options.observedRoots.has(filterButton)) return;
+  observeAttributes(options, filterButton, filterButtonAttributeFilter);
+}
+
+function dropDisconnected(options: ObservationRoots): void {
   let stale = false;
   for (const observed of options.observedRoots) {
     if (observed.isConnected) continue;
     options.observedRoots.delete(observed);
     stale = true;
   }
-  if (stale) {
-    options.observer.disconnect();
-    options.observedRoots.clear();
-  }
+  if (!stale) return;
+  options.observer.disconnect();
+  options.observedRoots.clear();
+}
+
+function isDocumentBoundary(parent: Element, root: Document): boolean {
+  const boundaries: Element[] = [root.body, root.documentElement];
+  return boundaries.includes(parent);
+}
+
+function observationCandidates(root: Document): Element[] {
   const candidates: Element[] = [];
-  const tree = options.root.querySelector(
-    '[role="tree"][aria-label="File Tree"]',
-  );
-  if (tree) candidates.push(tree);
-  for (const menu of filterMenus(options.root)) candidates.push(menu);
+  const tree = root.querySelector(fileTreeSelector);
+  if (tree !== null) candidates.push(tree);
+  for (const menu of filterMenus(root)) candidates.push(menu);
+  candidates.push(...regionCandidates(root));
+  return candidates;
+}
+
+function observeAttributes(
+  options: ObservationRoots,
+  target: Element,
+  attributeFilter: string[],
+): void {
+  if (options.observedRoots.has(target)) return;
+  // Child list is watched from the document. Attribute noise here must not
+  // schedule a reconcile unless it can change viewed, collapse, or file status.
+  options.observer.observe(target, {
+    attributeFilter,
+    attributes: true,
+    subtree: true,
+  });
+  options.observedRoots.add(target);
+}
+
+function parentNeedsClimb(
+  parent: Element | null,
+  regions: Element[],
+  root: Document,
+): boolean {
+  if (parent === null || isDocumentBoundary(parent, root)) return false;
+  const current = parent;
+  return regions.some((region) => !current.contains(region));
+}
+
+function regionCandidates(root: Document): Element[] {
   // Prefer one region-container observer over N per-panel observers. Streaming
   // fixtures expose #diffseek-stream-host; otherwise use a non-body parent that
   // contains every diff region. Fall back to per-region only for small pages.
-  const streamHost = options.root.querySelector('#diffseek-stream-host');
-  if (streamHost) {
-    candidates.push(streamHost);
-  } else {
-    const regions = [
-      ...options.root.querySelectorAll('[role="region"][id^="diff-"]'),
-    ];
-    const sharedParent = sharedRegionParent(regions, options.root);
-    if (sharedParent) {
-      candidates.push(sharedParent);
-    } else if (regions.length <= 40) {
-      candidates.push(...regions);
-    }
-  }
-  for (const candidate of candidates) {
-    if (options.observedRoots.has(candidate)) continue;
-    // Child list is watched from the document. Attribute noise here must not
-    // schedule a reconcile unless it can change viewed, collapse, or file status.
-    options.observer.observe(candidate, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: [
-        ariaLabelAttribute,
-        labelledByAttribute,
-        'aria-pressed',
-        'class',
-      ],
-    });
-    options.observedRoots.add(candidate);
-  }
-  const filterButton = options.root.querySelector<HTMLElement>(
-    'button[aria-label="Filter options"]',
-  );
-  if (filterButton && !options.observedRoots.has(filterButton)) {
-    options.observer.observe(filterButton, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: [ariaLabelAttribute, 'aria-expanded', 'class'],
-    });
-    options.observedRoots.add(filterButton);
-  }
-}
-
-/** A filtered-out file GitHub expanded again. Structure and labels stay put. */
-export function filteredFileExpanded(root: Document): boolean {
-  for (const button of root.querySelectorAll<HTMLButtonElement>(
-    '[data-diffseek-filtered-out="true"] button',
-  )) {
-    if (fileToggleAction(button) === 'Collapse file') return true;
-  }
-  return false;
+  const streamHost = root.querySelector('#diffseek-stream-host');
+  if (streamHost !== null) return [streamHost];
+  const regions = [...root.querySelectorAll(diffRegionSelector)];
+  const sharedParent = sharedRegionParent(regions, root);
+  if (sharedParent !== null) return [sharedParent];
+  if (regions.length <= perRegionObserverLimit) return regions;
+  return [];
 }
 
 function sharedRegionParent(
@@ -221,75 +246,80 @@ function sharedRegionParent(
   root: Document,
 ): Element | null {
   const first = regions[0];
-  if (!first?.parentElement) return null;
+  if (first === undefined || first.parentElement === null) return null;
   let parent: Element | null = first.parentElement;
-  while (
-    parent &&
-    parent !== root.body &&
-    parent !== root.documentElement &&
-    !regions.every((region) => parent?.contains(region))
-  ) {
+  while (parent !== null && parentNeedsClimb(parent, regions, root)) {
     parent = parent.parentElement;
   }
-  if (
-    !parent ||
-    parent === root.body ||
-    parent === root.documentElement
-  ) {
-    return null;
-  }
+  if (parent === null || isDocumentBoundary(parent, root)) return null;
   return parent;
 }
 
-export type PanelScheduleOptions = {
-  immediate?: boolean;
-  coalesce?: boolean;
-};
+function sortedText(values: ReadonlySet<string>): string {
+  return [...values]
+    .toSorted((left, right) => left.localeCompare(right))
+    .join(',');
+}
 
-export type PanelReconcileSchedule = {
-  /** Cancels the queued pass; null when nothing is queued. */
-  cancel: (() => void) | null;
-  /** The queued pass runs as the next task rather than at the next frame. */
-  immediate: boolean;
-};
-
+const ariaExpandedAttribute = 'aria-expanded';
 const ariaLabelAttribute = 'aria-label';
+const ariaPressedAttribute = 'aria-pressed';
+const classAttribute = 'class';
+const collapseFileLabel = 'Collapse file';
+const diffHeaderSelector = '[data-diff-header-wrapper="true"]';
+const diffRegionSelector = '[role="region"][id^="diff-"]';
+const expandFileLabel = 'Expand file';
+const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
+const filterButtonSelector = 'button[aria-label="Filter options"]';
+const filterOptionsLabel = 'Filter options';
 const labelledByAttribute = 'aria-labelledby';
+const menuRole = 'menu';
+const menuRoleSelector = '[role="menu"]';
+const menuShellChildLimit = 8;
+const notViewedLabel = 'Not Viewed';
+const perRegionObserverLimit = 40;
+const viewedLabel = 'Viewed';
+
+const contentAttributeFilter = [
+  ariaLabelAttribute,
+  labelledByAttribute,
+  ariaPressedAttribute,
+  classAttribute,
+];
+const filterButtonAttributeFilter = [
+  ariaLabelAttribute,
+  ariaExpandedAttribute,
+  classAttribute,
+];
 
 const controlLabels = new Set([
-  'Viewed',
-  'Not Viewed',
-  'Collapse file',
-  'Expand file',
+  collapseFileLabel,
+  expandFileLabel,
+  notViewedLabel,
+  viewedLabel,
 ]);
 
 const structuralSelector = [
-  '[role="tree"][aria-label="File Tree"]',
+  fileTreeSelector,
   '[role="treeitem"]',
-  '[role="region"][id^="diff-"]',
-  '[data-diff-header-wrapper="true"]',
-  'button[aria-label="Viewed"]',
-  'button[aria-label="Not Viewed"]',
-  'button[aria-label="Collapse file"]',
-  'button[aria-label="Expand file"]',
+  diffRegionSelector,
+  diffHeaderSelector,
+  `button[${ariaLabelAttribute}="${viewedLabel}"]`,
+  `button[${ariaLabelAttribute}="${notViewedLabel}"]`,
+  `button[${ariaLabelAttribute}="${collapseFileLabel}"]`,
+  `button[${ariaLabelAttribute}="${expandFileLabel}"]`,
 ].join(',');
 
-/**
- * Ignore diff-body churn (line nodes, highlight classes). Coalesce tree and
- * panel structure. Flush viewed/collapse aria and the filter menu immediately.
- */
-export function scheduleForMutations(
-  records: MutationRecord[],
-): PanelScheduleOptions | null {
-  const native = records.filter(isNativeMutation);
-  if (native.length === 0) return null;
-  if (native.some((record) => isImmediateRecord(record))) {
-    return { immediate: true };
-  }
-  if (native.some((record) => isCoalescedRecord(record))) {
-    return { coalesce: true };
-  }
-  return null;
+interface ObservationRoots {
+  observedRoots: Set<Element>;
+  observer: MutationObserver;
+  root: Document;
+}
+
+export function cancelPanelReconcile(state: PanelReconcileSchedule): void {
+  state.cancel?.();
+  state.cancel = null;
+  state.immediate = false;
 }
 
 export function pageNodesChanged(
@@ -322,46 +352,46 @@ export function queuePanelReconcile(
   if (state.cancel && (state.immediate || !immediate)) return;
   state.cancel?.();
   state.immediate = immediate;
-  const fire = () => {
+  const fire = (): void => {
     state.cancel = null;
     state.immediate = false;
     run();
   };
   const view = root.defaultView;
-  if (immediate || !view) {
+  if (immediate || view === null) {
     state.cancel = afterCurrentTask(fire);
     return;
   }
   const frame = view.requestAnimationFrame(fire);
-  state.cancel = () => view.cancelAnimationFrame(frame);
+  state.cancel = (): void => {
+    view.cancelAnimationFrame(frame);
+  };
 }
 
-export function cancelPanelReconcile(state: PanelReconcileSchedule): void {
-  state.cancel?.();
-  state.cancel = null;
-  state.immediate = false;
-}
-
-function isImmediateRecord(record: MutationRecord): boolean {
-  if (isFilterMenuRecord(record) || isTreeContainerRecord(record)) return true;
-  if (record.type !== 'attributes') return false;
-  const name = record.attributeName;
-  if (
-    name !== ariaLabelAttribute &&
-    name !== 'aria-pressed' &&
-    name !== labelledByAttribute
-  ) {
-    return false;
+/**
+ * Ignore diff-body churn (line nodes, highlight classes). Coalesce tree and
+ * panel structure. Flush viewed/collapse aria and the filter menu immediately.
+ */
+export function scheduleForMutations(
+  records: MutationRecord[],
+): null | PanelScheduleOptions {
+  const native = records.filter(isNativeMutation);
+  if (native.length === 0) return null;
+  if (native.some((record) => isImmediateRecord(record))) {
+    return { immediate: true };
   }
-  const target = record.target;
-  if (!(target instanceof Element)) return false;
-  const button = target.closest('button');
-  if (!(button instanceof HTMLButtonElement)) return false;
-  const label = button.getAttribute(ariaLabelAttribute) ?? '';
-  return (
-    controlLabels.has(label) ||
-    button.closest('[data-diff-header-wrapper="true"]') != null
-  );
+  if (native.some((record) => isCoalescedRecord(record))) {
+    return { coalesce: true };
+  }
+  return null;
+}
+
+function containsFilterMenu(node: Node): boolean {
+  if (!(node instanceof Element)) return false;
+  if (isFilterMenuElement(node) || node.matches(menuRoleSelector)) return true;
+  // Diff panels are large. Only small overlays can be an unlabelled menu shell.
+  if (node.childElementCount > menuShellChildLimit) return false;
+  return node.querySelector(menuRoleSelector) !== null;
 }
 
 function isCoalescedRecord(record: MutationRecord): boolean {
@@ -377,13 +407,41 @@ function isCoalescedRecord(record: MutationRecord): boolean {
   if (!(target instanceof Element)) return false;
   if (
     target.closest('[role="tree"]') &&
-    (target.matches('svg') || target.closest('svg') != null)
+    (target.matches('svg') || target.closest('svg') !== null)
   ) {
     return true;
   }
+  const button = target.closest('button');
+  if (button === null) return false;
+  return button.closest(diffHeaderSelector) !== null;
+}
+
+function isControlAttribute(name: null | string): boolean {
   return (
-    target.closest('button')?.closest('[data-diff-header-wrapper="true"]') !=
-    null
+    name === ariaLabelAttribute ||
+    name === ariaPressedAttribute ||
+    name === labelledByAttribute
+  );
+}
+
+function isControlAttributeRecord(record: MutationRecord): boolean {
+  if (record.type !== 'attributes' || !isControlAttribute(record.attributeName)) {
+    return false;
+  }
+  const target = record.target;
+  if (!(target instanceof Element)) return false;
+  const button = target.closest('button');
+  if (!(button instanceof HTMLButtonElement)) return false;
+  const label = button.getAttribute(ariaLabelAttribute) ?? '';
+  return controlLabels.has(label) || button.closest(diffHeaderSelector) !== null;
+}
+
+function isFilterMenuElement(node: Node): boolean {
+  return (
+    node instanceof Element &&
+    node.getAttribute('role') === menuRole &&
+    (node.getAttribute(ariaLabelAttribute) === filterOptionsLabel ||
+      node.hasAttribute(labelledByAttribute))
   );
 }
 
@@ -403,21 +461,21 @@ function isFilterOptionsButton(target: Element): boolean {
   const button =
     target instanceof HTMLButtonElement ? target : target.closest('button');
   if (!(button instanceof HTMLButtonElement)) return false;
-  if (button.getAttribute(ariaLabelAttribute) === 'Filter options') return true;
+  if (button.getAttribute(ariaLabelAttribute) === filterOptionsLabel) return true;
   const labelledBy = button.getAttribute(labelledByAttribute);
-  if (!labelledBy) return false;
-  return labelledBy.split(/\s+/).some(
+  if (labelledBy === null || labelledBy === '') return false;
+  return labelledBy.split(/\s+/v).some(
     (id) =>
-      button.ownerDocument.getElementById(id)?.textContent === 'Filter options',
+      button.ownerDocument.getElementById(id)?.textContent === filterOptionsLabel,
   );
 }
 
-function containsFilterMenu(node: Node): boolean {
-  if (!(node instanceof Element)) return false;
-  if (isFilterMenuElement(node) || node.matches('[role="menu"]')) return true;
-  // Diff panels are large. Only small overlays can be an unlabelled menu shell.
-  if (node.childElementCount > 8) return false;
-  return node.querySelector('[role="menu"]') != null;
+function isImmediateRecord(record: MutationRecord): boolean {
+  return (
+    isFilterMenuRecord(record) ||
+    isTreeContainerRecord(record) ||
+    isControlAttributeRecord(record)
+  );
 }
 
 function isTreeContainerRecord(record: MutationRecord): boolean {
@@ -425,16 +483,7 @@ function isTreeContainerRecord(record: MutationRecord): boolean {
   return [...record.addedNodes, ...record.removedNodes].some(
     (node) =>
       node instanceof Element &&
-      node.matches('[role="tree"][aria-label="File Tree"]'),
-  );
-}
-
-function isFilterMenuElement(node: Node): boolean {
-  return (
-    node instanceof Element &&
-    node.getAttribute('role') === 'menu' &&
-    (node.getAttribute(ariaLabelAttribute) === 'Filter options' ||
-      node.hasAttribute(labelledByAttribute))
+      node.matches(fileTreeSelector),
   );
 }
 
@@ -442,6 +491,6 @@ function matchesStructural(node: Node): boolean {
   return (
     node instanceof Element &&
     (node.matches(structuralSelector) ||
-      node.querySelector(structuralSelector) != null)
+      node.querySelector(structuralSelector) !== null)
   );
 }

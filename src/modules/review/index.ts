@@ -3,6 +3,6 @@ export * from './classification/labels';
 export * from './filtering/facet-projection';
 export * from './filtering/facets';
 export * from './filtering/viewed-scope';
-export * from './model/file';
+export type * from './model/file';
 export * from './model/review-index';
 export * from './session/file-catalog';

@@ -4,30 +4,26 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 
 import { startReviewApp } from './review-app';
-
-const emptyMetadata = { codeowners: '', attributes: '' };
-
-beforeEach(() => {
-  fakeBrowser.reset();
-  document.documentElement.innerHTML = fixture;
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-});
+import { appendMarkup, inertMetadata, replaceBody } from './review-app.fixture';
 
 describe('review session stream batching', () => {
+  beforeEach((): void => {
+    fakeBrowser.reset();
+    replaceBody(fixture);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+  afterEach((): void => {
+    vi.useRealTimers();
+  });
+
   it('updates a viewed toggle immediately and coalesces panel bursts', async () => {
     const app = await startReviewApp({
+      pathname: (): string => '/octo/repo/pull/1/changes',
+      ...inertMetadata,
       root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
-      readImmediate: async () => emptyMetadata,
-      refreshDefault: async () => ({ metadata: emptyMetadata, changed: false }),
-      readPull: async (_review, fallback) => fallback,
     });
     let reconciles = 0;
-    document.addEventListener('diffseek-reconciled', () => {
+    document.addEventListener('diffseek-reconciled', (): void => {
       reconciles += 1;
     });
 
@@ -47,24 +43,12 @@ describe('review session stream batching', () => {
     ).toBe('Unmark');
 
     // A burst inside one task costs one pass, at the next frame.
-    for (let index = 0; index < 5; index += 1) {
-      const region = document.createElement('div');
-      region.id = `diff-stream-${index}`;
-      region.setAttribute('role', 'region');
-      document.body.append(region);
-      await Promise.resolve();
-    }
+    await appendStreamRegions(0, 5);
     expect(reconciles).toBe(1);
     await nextFrame();
     expect(reconciles).toBe(2);
 
-    for (let index = 5; index < 8; index += 1) {
-      const region = document.createElement('div');
-      region.id = `diff-stream-${index}`;
-      region.setAttribute('role', 'region');
-      document.body.append(region);
-      await Promise.resolve();
-    }
+    await appendStreamRegions(5, 8);
     expect(reconciles).toBe(2);
     await nextFrame();
     expect(reconciles).toBe(3);
@@ -74,25 +58,27 @@ describe('review session stream batching', () => {
 });
 
 describe('redraw budget', () => {
-  beforeEach(() => {
-    document.documentElement.innerHTML = pageHtml(80);
+  beforeEach((): void => {
+    fakeBrowser.reset();
+    replaceBody(pageHtml(80));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+  afterEach((): void => {
+    vi.useRealTimers();
   });
 
   it('keeps streamed diff lines from redrawing the review', async () => {
     const counts = watchCounts();
     const app = await startReviewApp({
+      pathname: (): string => '/octo/repo/pull/1/changes',
+      ...inertMetadata,
       root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
-      readImmediate: async () => emptyMetadata,
-      refreshDefault: async () => ({ metadata: emptyMetadata, changed: false }),
-      readPull: async (_review, fallback) => fallback,
     });
     await flush();
     const loaded = counts.snapshot();
 
     counts.ignore(true);
-    document.body.insertAdjacentHTML(
-      'beforeend',
+    appendMarkup(
       '<ul role="menu" aria-label="Filter options"><li role="menuitem">Native</li></ul>',
     );
     counts.ignore(false);
@@ -139,10 +125,10 @@ describe('redraw budget', () => {
 
     const report = {
       load: loaded,
+      mark: diff(toggled, marked),
       menu: diff(loaded, menu),
       stream: diff(menu, streamed),
       toggle: diff(streamed, toggled),
-      mark: diff(toggled, marked),
       total: marked,
     };
     expect(report.load.reconciles).toBe(1);
@@ -162,83 +148,29 @@ describe('redraw budget', () => {
   }, 30_000);
 });
 
-type Counts = {
-  reconciles: number;
+interface Counts {
   domMutations: number;
-  treeRowsRemoved: number;
-  panelsRemoved: number;
-  treeRebuilds: number;
   panelRebuilds: number;
-};
+  panelsRemoved: number;
+  reconciles: number;
+  treeRebuilds: number;
+  treeRowsRemoved: number;
+}
 
-function watchCounts(): {
-  ignore: (value: boolean) => void;
-  snapshot: () => Counts;
-} {
-  const counts: Counts = {
-    reconciles: 0,
-    domMutations: 0,
-    treeRowsRemoved: 0,
-    panelsRemoved: 0,
-    treeRebuilds: 0,
-    panelRebuilds: 0,
-  };
-  let ignoring = false;
-  document.addEventListener('diffseek-reconciled', () => {
-    if (!ignoring) counts.reconciles += 1;
-  });
-  const pendingTree = new Map<string, number>();
-  const pendingPanels = new Map<string, number>();
-  const observer = new MutationObserver((records) => {
-    if (ignoring) return;
-    const now = Date.now();
-    let removedTree = 0;
-    let removedPanels = 0;
-    let rebuiltTree = 0;
-    let rebuiltPanels = 0;
-    const addedTree = new Set<string>();
-    const addedPanels = new Set<string>();
-    for (const record of records) {
-      if (isDiffseekMutation(record)) {
-        counts.domMutations +=
-          record.type === 'childList'
-            ? record.addedNodes.length + record.removedNodes.length
-            : 1;
-      }
-      if (record.type !== 'childList') continue;
-      for (const node of record.addedNodes) {
-        collectRows(node, 'tree', addedTree);
-        collectRows(node, 'panel', addedPanels);
-      }
-      for (const node of record.removedNodes) {
-        removedTree += collectRows(node, 'tree', pendingTree);
-        removedPanels += collectRows(node, 'panel', pendingPanels);
-      }
-    }
-    rebuiltTree += takeRebuilt(pendingTree, addedTree, now);
-    rebuiltPanels += takeRebuilt(pendingPanels, addedPanels, now);
-    counts.treeRowsRemoved += removedTree;
-    counts.panelsRemoved += removedPanels;
-    if (rebuiltTree >= 8 || removedTree >= 48) counts.treeRebuilds += 1;
-    if (rebuiltPanels >= 8 || removedPanels >= 48) counts.panelRebuilds += 1;
-  });
-  observer.observe(document.documentElement, {
-    attributes: true,
-    childList: true,
-    subtree: true,
-  });
-  return {
-    ignore(value: boolean) {
-      ignoring = value;
-    },
-    snapshot: () => ({ ...counts }),
-  };
+async function appendStreamRegions(start: number, end: number): Promise<void> {
+  for (let index = start; index < end; index += 1) {
+    const region = document.createElement('div');
+    region.id = `diff-stream-${index}`;
+    region.setAttribute('role', 'region');
+    document.body.append(region);
+    await Promise.resolve();
+  }
 }
 
 function collectRows(
   node: Node,
-  kind: 'tree' | 'panel',
-  into: Set<string> | Map<string, number>,
+  kind: 'panel' | 'tree',
+  into: Map<string, number> | Set<string>,
 ): number {
   if (!(node instanceof Element)) return 0;
   const selector =
@@ -256,62 +188,123 @@ function collectRows(
   return rows.length;
 }
 
-function takeRebuilt(
-  pending: Map<string, number>,
-  added: Set<string>,
-  now: number,
-): number {
-  let rebuilt = 0;
-  for (const id of added) {
-    const at = pending.get(id);
-    if (at == null || now - at > 100) continue;
-    pending.delete(id);
-    rebuilt += 1;
-  }
-  for (const [id, at] of pending) {
-    if (now - at > 100) pending.delete(id);
-  }
-  return rebuilt;
-}
-
-function isDiffseekMutation(record: MutationRecord): boolean {
-  if (!(record.target instanceof Element)) return false;
-  if (record.target === document.documentElement) return false;
-  if (record.target.closest('[data-diffseek], .diffseek-viewed-icon-anchor, [data-diffseek-viewed-action]')) {
-    return true;
-  }
-  if (record.type === 'attributes') {
-    const name = record.attributeName ?? '';
-    if (name === 'hidden' && record.target.getAttribute('role') === 'treeitem') {
-      return true;
-    }
-    if (name.startsWith('data-diffseek') || name === 'class' && record.target.classList.contains('diffseek-viewed-icon-anchor')) {
-      return true;
-    }
-    if (
-      record.target.classList.contains('diffseek-viewed-icon-anchor') &&
-      (name === 'aria-label' || name === 'aria-pressed' || name === 'title')
-    ) {
-      return true;
-    }
-  }
-  return [...record.addedNodes, ...record.removedNodes].some(
-    (node) =>
-      node instanceof Element &&
-      (node.matches('[data-diffseek], .diffseek-viewed-icon-anchor') ||
-        node.querySelector('[data-diffseek], .diffseek-viewed-icon-anchor') != null),
-  );
+function countFrames(): { stop: () => number } {
+  let frames = 0;
+  let live = true;
+  const tick = (): void => {
+    if (!live) return;
+    frames += 1;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  return {
+    stop: (): number => {
+      live = false;
+      return frames;
+    },
+  };
 }
 
 function diff(before: Counts, after: Counts): Counts {
   return {
-    reconciles: after.reconciles - before.reconciles,
     domMutations: after.domMutations - before.domMutations,
-    treeRowsRemoved: after.treeRowsRemoved - before.treeRowsRemoved,
-    panelsRemoved: after.panelsRemoved - before.panelsRemoved,
-    treeRebuilds: after.treeRebuilds - before.treeRebuilds,
     panelRebuilds: after.panelRebuilds - before.panelRebuilds,
+    panelsRemoved: after.panelsRemoved - before.panelsRemoved,
+    reconciles: after.reconciles - before.reconciles,
+    treeRebuilds: after.treeRebuilds - before.treeRebuilds,
+    treeRowsRemoved: after.treeRowsRemoved - before.treeRowsRemoved,
   };
+}
+
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+const anchorAttributes = new Set(['aria-label', 'aria-pressed', 'title']);
+const diffseekSelector = '[data-diffseek], .diffseek-viewed-icon-anchor, [data-diffseek-viewed-action]';
+const injectedSelector = '[data-diffseek], .diffseek-viewed-icon-anchor';
+
+function absorbRecords(
+  records: MutationRecord[],
+  counts: Counts,
+  pendingTree: Map<string, number>,
+  pendingPanels: Map<string, number>,
+): void {
+  const now = Date.now();
+  let removedTree = 0;
+  let removedPanels = 0;
+  const addedTree = new Set<string>();
+  const addedPanels = new Set<string>();
+  for (const record of records) {
+    if (isDiffseekMutation(record)) counts.domMutations += mutationSize(record);
+    if (record.type !== 'childList') continue;
+    for (const node of record.addedNodes) {
+      collectRows(node, 'tree', addedTree);
+      collectRows(node, 'panel', addedPanels);
+    }
+    for (const node of record.removedNodes) {
+      removedTree += collectRows(node, 'tree', pendingTree);
+      removedPanels += collectRows(node, 'panel', pendingPanels);
+    }
+  }
+  const rebuiltTree = takeRebuilt(pendingTree, addedTree, now);
+  const rebuiltPanels = takeRebuilt(pendingPanels, addedPanels, now);
+  counts.treeRowsRemoved += removedTree;
+  counts.panelsRemoved += removedPanels;
+  if (rebuiltTree >= 8 || removedTree >= 48) counts.treeRebuilds += 1;
+  if (rebuiltPanels >= 8 || removedPanels >= 48) counts.panelRebuilds += 1;
+}
+
+function diffseekNode(node: Node): boolean {
+  return node instanceof Element && (
+    node.matches(injectedSelector) || node.querySelector(injectedSelector) !== null
+  );
+}
+
+function isDiffseekAttribute(target: Element, name: string): boolean {
+  if (name === 'hidden' && target.getAttribute('role') === 'treeitem') return true;
+  if (name.startsWith('data-diffseek')) return true;
+  if (!target.classList.contains('diffseek-viewed-icon-anchor')) return false;
+  return name === 'class' || anchorAttributes.has(name);
+}
+
+function isDiffseekMutation(record: MutationRecord): boolean {
+  if (!(record.target instanceof Element) || record.target === document.documentElement) {
+    return false;
+  }
+  if (record.target.closest(diffseekSelector) !== null) return true;
+  if (record.type === 'attributes' && isDiffseekAttribute(record.target, record.attributeName ?? '')) {
+    return true;
+  }
+  return [...record.addedNodes, ...record.removedNodes].some((node) => diffseekNode(node));
+}
+
+function mutationSize(record: MutationRecord): number {
+  return record.type === 'childList'
+    ? record.addedNodes.length + record.removedNodes.length
+    : 1;
+}
+
+async function nextFrame(): Promise<void> {
+  await flush();
+  await new Promise<void>((resolve): void => {
+    requestAnimationFrame((): void => { resolve(); });
+  });
+}
+
+/** Lets observer callbacks queue their pass, then runs the next task. */
+async function nextTask(): Promise<void> {
+  await flush();
+  await new Promise<void>((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.addEventListener('message', (): void => {
+      channel.port1.close();
+      resolve();
+    }, { once: true });
+    channel.port1.start();
+    channel.port2.postMessage(null);
+  });
 }
 
 function pageHtml(count: number): string {
@@ -326,46 +319,64 @@ function regionNode(index: number): HTMLElement {
   const region = document.createElement('div');
   region.id = `diff-file-${index}`;
   region.setAttribute('role', 'region');
-  region.innerHTML = `<div data-diff-header-wrapper="true"><button aria-label="Collapse file"></button><h3><code>src/file-${index}.ts</code></h3><button aria-label="Not Viewed" aria-pressed="false">Viewed</button></div>`;
+  const parsed = new DOMParser().parseFromString(
+    `<div data-diff-header-wrapper="true"><button aria-label="Collapse file"></button><h3><code>src/file-${index}.ts</code></h3><button aria-label="Not Viewed" aria-pressed="false">Viewed</button></div>`,
+    'text/html',
+  );
+  const header = parsed.body.firstElementChild;
+  if (header !== null) region.append(document.importNode(header, true));
   return region;
 }
 
-/** Lets observer callbacks queue their pass, then runs the next task. */
-async function nextTask(): Promise<void> {
-  await flush();
-  await new Promise<void>((resolve) => {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      channel.port1.close();
-      resolve();
-    };
-    channel.port2.postMessage(null);
+function takeRebuilt(
+  pending: Map<string, number>,
+  added: Set<string>,
+  now: number,
+): number {
+  let rebuilt = 0;
+  for (const id of added) {
+    const at = pending.get(id);
+    if (at === undefined || now - at > 100) continue;
+    pending.delete(id);
+    rebuilt += 1;
+  }
+  for (const [id, at] of pending) {
+    if (now - at > 100) pending.delete(id);
+  }
+  return rebuilt;
+}
+
+function watchCounts(): {
+  ignore: (value: boolean) => void;
+  snapshot: () => Counts;
+} {
+  const counts: Counts = {
+    domMutations: 0,
+    panelRebuilds: 0,
+    panelsRemoved: 0,
+    reconciles: 0,
+    treeRebuilds: 0,
+    treeRowsRemoved: 0,
+  };
+  let ignoring = false;
+  document.addEventListener('diffseek-reconciled', (): void => {
+    if (!ignoring) counts.reconciles += 1;
   });
-}
-
-async function nextFrame(): Promise<void> {
-  await flush();
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-}
-
-function countFrames(): { stop: () => number } {
-  let frames = 0;
-  let live = true;
-  const tick = () => {
-    if (!live) return;
-    frames += 1;
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
+  const pendingTree = new Map<string, number>();
+  const pendingPanels = new Map<string, number>();
+  const observer = new MutationObserver((records): void => {
+    if (ignoring) return;
+    absorbRecords(records, counts, pendingTree, pendingPanels);
+  });
+  observer.observe(document.documentElement, {
+    attributes: true,
+    childList: true,
+    subtree: true,
+  });
   return {
-    stop: () => {
-      live = false;
-      return frames;
+    ignore(value: boolean): void {
+      ignoring = value;
     },
+    snapshot: (): Counts => ({ ...counts }),
   };
-}
-
-async function flush(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
 }

@@ -1,17 +1,36 @@
-export type FilterShortcutOptions = {
+import { setDataAttribute } from '../dom-data';
+
+const alwaysReadTitle = 'Always mark generated files viewed';
+const ariaLabel = 'aria-label';
+const ariaPressed = 'aria-pressed';
+const buttonType = 'button';
+const stopAlwaysRead = 'Stop marking generated files viewed';
+
+export interface FilterShortcutOptions {
   excluded: Set<string>;
   onChange: () => void;
-};
+}
 
-export function onlyFocusApplied(
-  value: string,
-  values: readonly string[],
-  excluded: ReadonlySet<string>,
-): boolean {
-  return (
-    !excluded.has(value) &&
-    values.every((entry) => entry === value || excluded.has(entry))
-  );
+export function alwaysReadAction(options: {
+  disabled?: boolean;
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+}): HTMLButtonElement {
+  const action = document.createElement('button');
+  action.type = buttonType;
+  action.className = 'diffseek-menu-always-read';
+  setDataAttribute(action, 'diffseekAlwaysRead', 'true');
+  action.textContent = 'auto-view';
+  action.title = alwaysReadTitle;
+  setAlwaysRead(action, options.enabled);
+  if (options.disabled === true) action.disabled = true;
+  action.addEventListener('click', () => {
+    if (action.disabled) return;
+    const enabled = action.getAttribute(ariaPressed) !== 'true';
+    setAlwaysRead(action, enabled);
+    options.onToggle(enabled);
+  });
+  return action;
 }
 
 export function itemOnlyAction(
@@ -22,15 +41,13 @@ export function itemOnlyAction(
   },
 ): HTMLButtonElement {
   const action = document.createElement('button');
-  action.type = 'button';
+  action.type = buttonType;
   action.className = 'diffseek-menu-only';
-  action.dataset.filterOnly = 'true';
-  action.setAttribute('aria-label', `Show only ${options.label}`);
+  setDataAttribute(action, 'filterOnly', 'true');
+  action.setAttribute(ariaLabel, `Show only ${options.label}`);
   action.setAttribute(
-    'aria-pressed',
-    String(
-      onlyFocusApplied(options.value, options.values, options.excluded),
-    ),
+    ariaPressed,
+    String(onlyFocusApplied(options.value, options.values, options.excluded)),
   );
   action.textContent = 'only';
   action.addEventListener('click', () => {
@@ -43,35 +60,14 @@ export function itemOnlyAction(
   return action;
 }
 
-export function alwaysReadAction(options: {
-  enabled: boolean;
-  disabled?: boolean;
-  onToggle: (enabled: boolean) => void;
-}): HTMLButtonElement {
-  const action = document.createElement('button');
-  action.type = 'button';
-  action.className = 'diffseek-menu-always-read';
-  action.dataset.diffseekAlwaysRead = 'true';
-  action.textContent = 'auto-view';
-  action.title = 'Always mark generated files viewed';
-  setAlwaysRead(action, options.enabled);
-  if (options.disabled) action.disabled = true;
-  action.addEventListener('click', () => {
-    if (action.disabled) return;
-    const enabled = action.getAttribute('aria-pressed') !== 'true';
-    setAlwaysRead(action, enabled);
-    options.onToggle(enabled);
-  });
-  return action;
-}
-
-function setAlwaysRead(action: HTMLButtonElement, enabled: boolean): void {
-  action.setAttribute('aria-pressed', String(enabled));
-  action.setAttribute(
-    'aria-label',
-    enabled
-      ? 'Stop marking generated files viewed'
-      : 'Always mark generated files viewed',
+export function onlyFocusApplied(
+  value: string,
+  values: readonly string[],
+  excluded: ReadonlySet<string>,
+): boolean {
+  return (
+    !excluded.has(value) &&
+    values.every((entry) => entry === value || excluded.has(entry))
   );
 }
 
@@ -79,14 +75,19 @@ export function sectionAllAction(
   options: FilterShortcutOptions & { heading: string },
 ): HTMLButtonElement {
   const action = document.createElement('button');
-  action.type = 'button';
+  action.type = buttonType;
   action.className = 'diffseek-menu-all';
-  action.dataset.filterAll = 'true';
-  action.setAttribute('aria-label', `Show all ${options.heading}`);
+  setDataAttribute(action, 'filterAll', 'true');
+  action.setAttribute(ariaLabel, `Show all ${options.heading}`);
   action.textContent = 'all';
   action.addEventListener('click', () => {
     options.excluded.clear();
     options.onChange();
   });
   return action;
+}
+
+function setAlwaysRead(action: HTMLButtonElement, enabled: boolean): void {
+  action.setAttribute(ariaPressed, String(enabled));
+  action.setAttribute(ariaLabel, enabled ? stopAlwaysRead : alwaysReadTitle);
 }

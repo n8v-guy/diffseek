@@ -1,48 +1,29 @@
 import { globSource } from './glob';
 
-type GitAttributeValue = true | false | string | null;
+const generatedAttribute = 'linguist-generated';
+const languageAttribute = 'linguist-language';
+const lineBreak = /\r?\n/v;
+const rootSlash = /^\//v;
+const whitespace = /\s/v;
 
-export type GitAttributeRule = {
-  matcher: RegExp;
-  assignments: Map<string, GitAttributeValue>;
-};
-
-export type DiffSeekAttributes = {
-  group: string | null;
-  language: string | null;
+export interface DiffSeekAttributes {
   generated: boolean;
-};
+  group: null | string;
+  language: null | string;
+}
+
+export interface GitAttributeRule {
+  assignments: Map<string, GitAttributeValue>;
+  matcher: RegExp;
+}
+
+type GitAttributeValue = false | null | string | true;
 
 const supported = new Set([
+  generatedAttribute,
   'group',
-  'linguist-language',
-  'linguist-generated',
+  languageAttribute,
 ]);
-
-export function parseGitAttributes(source: string): GitAttributeRule[] {
-  const rules: GitAttributeRule[] = [];
-
-  for (const rawLine of source.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) continue;
-
-    const [pattern, ...attributes] = tokens(line);
-    if (!pattern || pattern.startsWith('!') || pattern.startsWith('[attr]')) {
-      continue;
-    }
-
-    const assignments = new Map<string, GitAttributeValue>();
-    for (const attribute of attributes) {
-      const [name, value] = assignment(attribute);
-      if (supported.has(name)) assignments.set(name, value);
-    }
-    if (assignments.size > 0) {
-      rules.push({ matcher: compilePattern(pattern), assignments });
-    }
-  }
-
-  return rules;
-}
 
 export function attributesForPath(
   path: string,
@@ -55,16 +36,39 @@ export function attributesForPath(
   }
 
   const group = values.get('group');
-  const language = values.get('linguist-language');
-  const generated = values.get('linguist-generated');
+  const language = values.get(languageAttribute);
+  const generated = values.get(generatedAttribute);
   return {
-    group: typeof group === 'string' && group ? group : null,
-    language: typeof language === 'string' && language ? language : null,
     generated:
       generated === true ||
       (typeof generated === 'string' &&
         generated.toLowerCase() === 'true'),
+    group: typeof group === 'string' && group ? group : null,
+    language: typeof language === 'string' && language ? language : null,
   };
+}
+
+export function parseGitAttributes(source: string): GitAttributeRule[] {
+  const rules: GitAttributeRule[] = [];
+
+  for (const rawLine of source.split(lineBreak)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const [pattern, ...attributes] = tokens(line);
+    if (!isUsablePattern(pattern)) continue;
+
+    const assignments = new Map<string, GitAttributeValue>();
+    for (const attribute of attributes) {
+      const [name, value] = assignment(attribute);
+      if (supported.has(name)) assignments.set(name, value);
+    }
+    if (assignments.size > 0) {
+      rules.push({ assignments, matcher: compilePattern(pattern) });
+    }
+  }
+
+  return rules;
 }
 
 function assignment(token: string): [string, GitAttributeValue] {
@@ -74,6 +78,21 @@ function assignment(token: string): [string, GitAttributeValue] {
   return separator === -1
     ? [token, true]
     : [token.slice(0, separator), token.slice(separator + 1)];
+}
+
+function compilePattern(source: string): RegExp {
+  const pattern = source.replace(rootSlash, '');
+  const prefix = pattern.includes('/') ? '^' : '(?:^|.*/)';
+  return new RegExp(`${prefix}${globSource(pattern)}$`);
+}
+
+function isUsablePattern(pattern: string | undefined): pattern is string {
+  return (
+    pattern !== undefined &&
+    pattern.length > 0 &&
+    !pattern.startsWith('!') &&
+    !pattern.startsWith('[attr]')
+  );
 }
 
 function tokens(line: string): string[] {
@@ -90,7 +109,7 @@ function tokens(line: string): string[] {
       escaped = true;
     } else if (character === '"') {
       quote = !quote;
-    } else if (/\s/.test(character) && !quote) {
+    } else if (whitespace.test(character) && !quote) {
       if (token) result.push(token);
       token = '';
     } else {
@@ -100,10 +119,4 @@ function tokens(line: string): string[] {
   if (escaped) token += '\\';
   if (token) result.push(token);
   return result;
-}
-
-function compilePattern(source: string): RegExp {
-  const pattern = source.replace(/^\//, '');
-  const prefix = pattern.includes('/') ? '^' : '(?:^|.*/)';
-  return new RegExp(`${prefix}${globSource(pattern)}$`);
 }

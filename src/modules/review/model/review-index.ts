@@ -1,15 +1,17 @@
 import {
   addCountedFile,
-  emptyCountBucket,
   type CountBucket,
+  emptyCountBucket,
 } from '../filtering/viewed-scope';
 
 import type { FileRecord } from './file';
 
 export class ReviewIndex {
   private readonly descendants = new Map<string, FileRecord[]>();
+  private readonly files: readonly FileRecord[];
 
-  constructor(private readonly files: readonly FileRecord[]) {
+  constructor(files: readonly FileRecord[]) {
+    this.files = files;
     for (const file of files) {
       for (const item of ancestors(file.path)) {
         const matches = this.descendants.get(item) ?? [];
@@ -45,7 +47,7 @@ export class ReviewIndex {
     return totals;
   }
 
-  visibleItems(paths: Iterable<string>): Set<string> {
+  visibleItems(paths: readonly string[]): Set<string> {
     const visible = new Set<string>();
     for (const path of paths) {
       for (const item of ancestors(path)) visible.add(item);

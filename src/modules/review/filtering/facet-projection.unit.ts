@@ -11,15 +11,15 @@ function file(
   viewed = false,
 ): FileRecord {
   return {
-    path,
     anchor: `diff-${path}`,
+    capabilities: { collapse: true, viewed: true },
     extension: '.ts',
-    owners: [],
     generated: false,
+    labels,
+    owners: [],
+    path,
     status: 'modified',
     viewed,
-    capabilities: { collapse: true, viewed: true },
-    labels,
   };
 }
 
@@ -42,7 +42,7 @@ describe('projectFacet', () => {
     const filters = emptyFacetExclusions();
     filters.get('groups')?.add('Tests');
 
-    expect(projectFacet('owners', files, filters).get('@org/backend')).toEqual({
+    expect(projectFacet('owners', files, filters).get('@org/backend')).toStrictEqual({
       counted: 2,
       paths: ['src/app.ts'],
       total: 2,
@@ -50,7 +50,7 @@ describe('projectFacet', () => {
       viewedState: 'partial',
       visible: 1,
     });
-    expect(projectFacet('groups', files, filters).get('Tests')).toEqual({
+    expect(projectFacet('groups', files, filters).get('Tests')).toStrictEqual({
       counted: 1,
       paths: ['src/app.test.ts'],
       total: 1,
@@ -97,7 +97,9 @@ describe('projectFacet', () => {
       visible: 2,
     });
   });
+});
 
+describe('projectFacet viewed filters', () => {
   it('counts viewed files hidden only by the viewed filter', () => {
     const files = [
       file('src/visible.ts', [
@@ -127,7 +129,7 @@ describe('projectFacet', () => {
     filters.get('viewed')?.add('true');
     filters.get('statuses')?.add('added');
 
-    expect(projectFacet('groups', files, filters).get('Code')).toEqual({
+    expect(projectFacet('groups', files, filters).get('Code')).toStrictEqual({
       counted: 3,
       paths: ['src/visible.ts'],
       total: 3,
@@ -167,7 +169,9 @@ describe('projectFacet', () => {
       visible: 0,
     });
   });
+});
 
+describe('projectFacet generated filters', () => {
   it('keeps a generated-row circle for files the generated filter is hiding', () => {
     const files = [
       file('src/gen-unread.ts', [
@@ -193,7 +197,7 @@ describe('projectFacet', () => {
     filters.get('viewed')?.add('true');
     filters.get('owners')?.add('@other');
 
-    expect(projectFacet('generated', files, filters).get('true')).toEqual({
+    expect(projectFacet('generated', files, filters).get('true')).toStrictEqual({
       counted: 3,
       paths: ['src/gen-unread.ts', 'src/gen-other.ts'],
       total: 3,
