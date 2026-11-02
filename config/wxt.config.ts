@@ -24,6 +24,7 @@ export default defineConfig({
       'https://github.com/*',
       'https://raw.githubusercontent.com/*',
     ],
+    minimum_chrome_version: '122',
     name: 'DiffSeek for GitHub: cut the noise in big PRs',
     permissions: ['storage'],
     version: manifestVersion(packageVersion, branchCommitCount),

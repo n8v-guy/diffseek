@@ -32,6 +32,8 @@ const filterDefaultsKey = 'diffseek:filter-defaults';
 export const checkedAttribute = 'aria-checked';
 export const labelAttribute = 'aria-label';
 export const pressedAttribute = 'aria-pressed';
+const textContentType = 'text/plain';
+const viewedAppButton = '#diff-app button[aria-label="Viewed"]';
 const viewedControlLabel = 'Viewed';
 const gitObjectIdLength = 40;
 const headOid = 'c'.repeat(gitObjectIdLength);
@@ -215,11 +217,11 @@ export async function markAllViewed(page: Page): Promise<void> {
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute(pressedAttribute, 'true');
-  await page.locator('#diff-app button[aria-label="Viewed"]').click();
+  await page.locator(viewedAppButton).click();
   await expect(page.locator(`#src [aria-label="${markRest}"]`)).toBeVisible();
   await page.locator(`#src [aria-label="${markRest}"]`).click();
   await expect(
-    page.locator('#diff-app button[aria-label="Viewed"]'),
+    page.locator(viewedAppButton),
   ).toHaveAttribute(pressedAttribute, 'true');
 }
 
@@ -278,14 +280,14 @@ export async function startExtensionBrowser(): Promise<void> {
       if (url.endsWith('/.gitattributes')) {
         await route.fulfill({
           body: attributesBody,
-          contentType: 'text/plain',
+          contentType: textContentType,
         });
       } else if (url.endsWith('/CODEOWNERS') && !url.includes('/.github/')) {
         await route.fulfill({
           body: url.includes(`/raw/${headOid}/`)
             ? 'src/** @pull-source'
             : 'src/** @source',
-          contentType: 'text/plain',
+          contentType: textContentType,
         });
       } else {
         await route.fulfill({ body: '', status: 404 });

@@ -28,7 +28,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: main
+          ref: ${{ inputs.head_sha }}
       - name: Require this main commit and a successful CI run
         env:
           GH_TOKEN: ${{ github.token }}

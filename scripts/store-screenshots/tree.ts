@@ -8,7 +8,7 @@ const pressedAttribute = 'aria-pressed';
 
 /** Every file row id in the tree, scrolling it so virtualised rows render. */
 export async function collectFileIds(page: Page): Promise<string[]> {
-  return [...(await collectFileStates(page)).keys()];
+  return (await collectFileStates(page)).keys().toArray();
 }
 
 /** Each file row's viewed circle state, keyed by path. */

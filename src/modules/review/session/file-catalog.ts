@@ -4,7 +4,7 @@ export class FileCatalog {
   private readonly records = new Map<string, FileRecord>();
 
   files(): FileRecord[] {
-    return [...this.records.values()];
+    return this.records.values().toArray();
   }
 
   merge(files: readonly FileRecord[]): void {

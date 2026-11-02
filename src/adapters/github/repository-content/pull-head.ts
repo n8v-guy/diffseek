@@ -22,7 +22,7 @@ export async function fetchPullHead(
   if (!response.ok) {
     throw new Error(`Pull head request failed with ${response.status}`);
   }
-  const commits = [...(await response.text()).matchAll(commitOidPattern)];
+  const commits = (await response.text()).matchAll(commitOidPattern).toArray();
   const oid = commits.at(-1)?.[1];
   if (oid === undefined || oid.length === 0) {
     throw new Error('Pull head commit is unavailable');
