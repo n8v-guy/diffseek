@@ -13,9 +13,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - run: git fetch origin main
       - uses: pnpm/action-setup@v5
       - uses: actions/setup-node@v5
         with:
@@ -29,9 +26,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - run: git fetch origin main
       - uses: pnpm/action-setup@v5
       - uses: actions/setup-node@v5
         with:
@@ -42,3 +36,7 @@ jobs:
       - run: pnpm zip:firefox:store
       - run: pnpm check:size
       - run: pnpm check:strict
+      - if: ${{ !cancelled() }}
+        run: pipx run --spec actionlint-py==1.7.12.25 actionlint
+      - if: ${{ !cancelled() }}
+        run: pipx run zizmor==1.31.1 .github/workflows

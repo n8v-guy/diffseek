@@ -45,12 +45,7 @@ export default defineConfig(
       '**/test-results/**',
     ],
   },
-  {
-    linterOptions: {
-      noInlineConfig: true,
-      reportUnusedDisableDirectives: 'error',
-    },
-  },
+  { linterOptions: { noInlineConfig: true } },
   js.configs.recommended,
   sonarConfigs.recommended,
   unicornPlugin.configs.recommended,
@@ -71,6 +66,7 @@ export default defineConfig(
       },
     },
     rules: {
+      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-expect-error': true }],
       '@typescript-eslint/consistent-type-exports': 'error',
       '@typescript-eslint/consistent-type-imports': [
         'error',
@@ -133,6 +129,19 @@ export default defineConfig(
       'no-implicit-coercion': 'error',
       'no-lonely-if': 'error',
       'no-param-reassign': 'error',
+      'no-warning-comments': [
+        'error',
+        {
+          location: 'anywhere',
+          terms: [
+            'c8 ignore',
+            'istanbul ignore',
+            'jscpd:ignore',
+            'type-coverage:ignore',
+            'v8 ignore',
+          ],
+        },
+      ],
       'object-shorthand': 'error',
       'perfectionist/sort-import-attributes': 'off',
       'perfectionist/sort-imports': 'off',
@@ -195,10 +204,6 @@ export default defineConfig(
   {
     files: ['config/eslint.config.ts'],
     rules: { '@typescript-eslint/no-magic-numbers': 'off' },
-  },
-  {
-    files: ['scripts/run-command.ts'],
-    rules: { 'sonarjs/no-os-command-from-path': 'off' },
   },
   {
     files: ['scripts/store-screenshots/**/*.ts'],

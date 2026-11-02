@@ -1,5 +1,6 @@
 {
   "extends": ["stylelint-config-standard"],
+  "ignoreDisables": true,
   "ignoreFiles": [
     "**/.output/**",
     "**/.wxt/**",
