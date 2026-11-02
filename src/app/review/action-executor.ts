@@ -145,8 +145,7 @@ export class ViewedActionExecutor {
     const update = await this.markFiles(
       current.snapshot,
       [path],
-      attempt.command.viewed,
-      { signal: attempt.controller.signal },
+      { signal: attempt.controller.signal, viewed: attempt.command.viewed },
     );
     if (this.stopped(attempt.controller, attempt.epoch) || !this.isCurrent(attempt.command)) {
       return null;

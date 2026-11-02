@@ -38,6 +38,15 @@ function loadFixture(): void {
   replaceDocument(fixture);
 }
 
+function markAppViewed(): void {
+  document
+    .querySelector(`#${diffApp} button[aria-label="Not Viewed"]`)
+    ?.setAttribute('aria-label', 'Viewed');
+  document
+    .querySelector(`#${diffApp} button[aria-pressed="false"]`)
+    ?.setAttribute('aria-pressed', 'true');
+}
+
 function nestAppInFolder(): void {
   const tree = document.querySelector('[role="tree"]');
   const file = document.getElementById(appPath);
@@ -318,12 +327,7 @@ describe('scanPage edge cases and refresh', () => {
     expect(treeKey).toStrictEqual(treeStructureKey(document));
     expect(pageKey).toStrictEqual(pageStructureKey(document));
 
-    document
-      .querySelector(`#${diffApp} button[aria-label="Not Viewed"]`)
-      ?.setAttribute('aria-label', 'Viewed');
-    document
-      .querySelector(`#${diffApp} button[aria-pressed="false"]`)
-      ?.setAttribute('aria-pressed', 'true');
+    markAppViewed();
     expect(treeStructureKey(document)).toBe(treeKey);
     expect(pageStructureKey(document)).toBe(pageKey);
 
@@ -339,12 +343,7 @@ describe('scanPage edge cases and refresh', () => {
     const file = requireApp(snapshot);
     expect(file.viewed).toBe(false);
 
-    document
-      .querySelector(`#${diffApp} button[aria-label="Not Viewed"]`)
-      ?.setAttribute('aria-label', 'Viewed');
-    document
-      .querySelector(`#${diffApp} button[aria-pressed="false"]`)
-      ?.setAttribute('aria-pressed', 'true');
+    markAppViewed();
     refreshObservedFiles(document, snapshot.files);
 
     expect(file.viewed).toBe(true);

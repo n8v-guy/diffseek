@@ -6,8 +6,14 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { ReviewApp } from './review-app';
 
 import {
-  type ImmediateReader,
+  alwaysRead,
+  checked,
+  clickFacet,
+  facetButton,
+  facetCount,
   installReviewPage,
+  isHidden,
+  markCall,
   marked,
   metadataSource,
   nextReconcile,
@@ -15,8 +21,12 @@ import {
   type PullReader,
   pullReview,
   reviewApp,
+  saveFilterDefaults,
+  setViewed,
   signalled,
+  storedFilterDefaults,
   until,
+  viewedAction,
 } from './review-app.fixture';
 
 describe('fresh filter defaults', () => {
@@ -29,25 +39,7 @@ describe('fresh filter defaults', () => {
   it('respects a saved preference that hides only viewed files', respectsASavedPreferenceThatHidesOnlyViewedFiles);
 });
 
-function checked(kind: string): null | string {
-  return facetButton(kind)?.getAttribute('aria-checked') ?? null;
-}
-
-function clickFacet(kind: string): void {
-  facetButton(kind)?.click();
-}
-
-function facetButton(kind: string): HTMLButtonElement | null {
-  return document.querySelector<HTMLButtonElement>(
-    `[data-filter-kind="${CSS.escape(kind)}"][data-filter-value="true"]`,
-  );
-}
-
-function facetCount(facet: string): null | string {
-  return document.querySelector(
-    `.diffseek-menu-row:has([data-filter-kind="${CSS.escape(facet)}"][data-filter-value="true"]) .diffseek-menu-count`,
-  )?.textContent ?? null;
-}
+const generatedAttributes = 'src/generated.ts linguist-generated';
 
 async function hidesGeneratedAndViewedFilesAndTurnsAutoViewOnForAFreshInstall(): Promise<void> {
   await fakeBrowser.storage.local.clear();
@@ -55,47 +47,28 @@ async function hidesGeneratedAndViewedFilesAndTurnsAutoViewOnForAFreshInstall():
   const markFiles = marked(['src/generated.ts']);
   const app = await reviewApp({
     markFiles: signalled(markFiles),
-    ...metadataSource('src/generated.ts linguist-generated'),
+    ...metadataSource(generatedAttributes),
   });
 
-  await until(() => { expect(
-      document
-        .querySelector('[data-diffseek-always-read]')
-        ?.getAttribute('aria-pressed'),
-    ).toBe('true'); },
-  );
-  await until(() => { expect(markFiles).toHaveBeenCalledWith(
-      expect.anything(),
-      ['src/generated.ts'],
-      true,
-      expect.anything(),
-    ); },
-  );
-  expect(
-    document
-      .querySelector('[data-filter-kind="viewed"][data-filter-value="true"]')
-      ?.getAttribute('aria-checked'),
-  ).toBe('mixed');
-  expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
-  expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
-  expect(
-    (await fakeBrowser.storage.local.get('diffseek:filter-defaults'))[
-      'diffseek:filter-defaults'
-    ],
-  ).toBeUndefined();
+  await until(() => { expect(alwaysRead()?.getAttribute('aria-pressed')).toBe('true'); });
+  await until(() => {
+    expect(markFiles).toHaveBeenCalledWith(...markCall(['src/generated.ts']));
+  });
+  expect(checked('viewed')).toBe('mixed');
+  expect(isHidden('src/generated.ts')).toBe(true);
+  expect(isHidden('src/app.ts')).toBe(false);
+  expect(await storedFilterDefaults()).toBeUndefined();
   app.stop();
 }
 
 async function hidesGeneratedAndViewedFilesUntilTheyAreShownAgain(): Promise<void> {
   // The fresh hiding defaults with auto-view switched off.
-  await fakeBrowser.storage.local.set({
-    'diffseek:filter-defaults': { hidden: ['viewed', 'generated'], viewed: [] },
-  });
+  await saveFilterDefaults({ hidden: ['viewed', 'generated'], viewed: [] });
   openMenu();
   const markFiles = marked(['src/generated.ts']);
   const app = await reviewApp({
     markFiles: signalled(markFiles),
-    ...metadataSource('src/generated.ts linguist-generated'),
+    ...metadataSource(generatedAttributes),
   });
 
   await until(() => { expect(checked('generated')).toBe('mixed'); });
@@ -116,7 +89,7 @@ async function hidesGeneratedAndViewedFilesUntilTheyAreShownAgain(): Promise<voi
     expect(checked('generated')).toBe('true');
     expect(isHidden('src/generated.ts')).toBe(false);
   });
-  expect(pressed('[data-diffseek-always-read]')).toBe('false');
+  expect(alwaysRead()?.getAttribute('aria-pressed')).toBe('false');
   expect(markFiles).not.toHaveBeenCalled();
 
   clickFacet('generated');
@@ -125,56 +98,26 @@ async function hidesGeneratedAndViewedFilesUntilTheyAreShownAgain(): Promise<voi
   await until(() => { expect(checked('generated')).toBe('true'); });
   expect(markFiles).not.toHaveBeenCalled();
   await until(async () => {
-    expect(await fakeBrowser.storage.local.get('diffseek:filter-defaults')).toStrictEqual({
-      'diffseek:filter-defaults': { hidden: [], viewed: [] },
-    });
+    expect(await storedFilterDefaults()).toStrictEqual({ hidden: [], viewed: [] });
   });
   app.stop();
 }
 
-function isHidden(id: string): 'until-found' | boolean | undefined {
-  return document.getElementById(id)?.hidden;
-}
-
-function pressed(selector: string): null | string {
-  return document.querySelector(selector)?.getAttribute('aria-pressed') ?? null;
-}
-
 async function respectsASavedPreferenceThatHidesOnlyViewedFiles(): Promise<void> {
-  await fakeBrowser.storage.local.set({
-    'diffseek:filter-defaults': { hidden: ['viewed'], viewed: [] },
-  });
+  await saveFilterDefaults({ hidden: ['viewed'], viewed: [] });
   openMenu();
-  const app = await reviewApp({
-    ...metadataSource('src/generated.ts linguist-generated'),
-  });
+  const app = await reviewApp(metadataSource(generatedAttributes));
 
-  await until(() => { expect(
-      document.querySelector(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      )?.getAttribute('aria-checked'),
-    ).toBe('true'); },
-  );
-  expect(
-    document.querySelector(
-      '[data-filter-kind="viewed"][data-filter-value="true"]',
-    )?.getAttribute('aria-checked'),
-  ).toBe('mixed');
-  expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
-  expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
-  expect(
-    document.querySelector(
-      '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
-    )?.textContent,
-  ).toBe('1/1');
+  await until(() => { expect(checked('generated')).toBe('true'); });
+  expect(checked('viewed')).toBe('mixed');
+  expect(isHidden('docs/readme.md')).toBe(true);
+  expect(isHidden('src/generated.ts')).toBe(false);
+  expect(facetCount('generated')).toBe('1/1');
   app.stop();
 }
 
 const immediate = { attributes: 'docs/** group=Docs', codeowners: '' };
-const loaded = {
-  attributes: 'src/generated.ts linguist-generated',
-  codeowners: '',
-};
+const loaded = { attributes: generatedAttributes, codeowners: '' };
 
 describe('metadata refresh', () => {
   beforeEach(async (): Promise<void> => {
@@ -199,8 +142,7 @@ async function doesNotStartAnotherMetadataReadWhileOneIsInFlight(): Promise<void
   expect(readPull).toHaveBeenCalledExactlyOnceWith(pullReview, immediate);
 
   pull.resolve(loaded);
-  await until(() => { expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(); },
-  );
+  await until(() => { expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(); });
   expect(readPull).toHaveBeenCalledExactlyOnceWith(pullReview, immediate);
   app.stop();
 }
@@ -225,28 +167,15 @@ function immediateReaders(readPull: PullReader): Promise<ReviewApp> {
 async function keepsCachedMetadataWhenThePullHeadReadFails(): Promise<void> {
   openMenu();
   const readPull = vi.fn<PullReader>(() => Promise.reject(new Error('offline')));
+  const fromCache = { attributes: 'src/** group=FromCache', codeowners: '' };
   const app = await reviewApp({
-    readImmediate: (): ReturnType<ImmediateReader> => Promise.resolve({
-      attributes: 'src/** group=FromCache',
-      codeowners: '',
-    }),
+    ...metadataSource(fromCache.attributes),
     readPull: signalled(readPull),
-    refreshDefault: () => Promise.resolve({
-      changed: false,
-      metadata: { attributes: 'src/** group=FromCache', codeowners: '' },
-    }),
   });
-  await until(() => { expect(document.querySelector('[data-filter-value="FromCache"]')).not.toBeNull(); },
-  );
-  expect(readPull).toHaveBeenCalledExactlyOnceWith(pullReview, {
-    attributes: 'src/** group=FromCache',
-    codeowners: '',
-  });
+  await until(() => { expect(document.querySelector('[data-filter-value="FromCache"]')).not.toBeNull(); });
+  expect(readPull).toHaveBeenCalledExactlyOnceWith(pullReview, fromCache);
   app.reconcile();
-  expect(readPull).toHaveBeenCalledExactlyOnceWith(pullReview, {
-    attributes: 'src/** group=FromCache',
-    codeowners: '',
-  });
+  expect(readPull).toHaveBeenCalledExactlyOnceWith(pullReview, fromCache);
   app.stop();
 }
 
@@ -264,8 +193,7 @@ async function retriesAFailedReadWhenTheFileTreeChanges(): Promise<void> {
   openMenu();
   app.reconcile();
   expect(readPull).toHaveBeenCalledTimes(2);
-  await until(() => { expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(); },
-  );
+  await until(() => { expect(document.querySelector('[data-filter-kind="generated"]')).not.toBeNull(); });
   app.stop();
 }
 
@@ -277,11 +205,8 @@ async function retriesAFailedReadWhenTheFilterMenuOpensAndThenAppliesIt(): Promi
   openMenu();
   app.reconcile();
   await until(() => { expect(readPull).toHaveBeenCalledTimes(2); });
-  await until(() => { expect(
-      document.querySelector('[data-filter-kind="generated"][data-filter-value="true"]')?.getAttribute('aria-checked'),
-    ).toBe('mixed'); },
-  );
-  expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+  await until(() => { expect(checked('generated')).toBe('mixed'); });
+  expect(isHidden('src/generated.ts')).toBe(true);
   app.stop();
 }
 
@@ -321,12 +246,7 @@ async function keepsClassificationsAfterAStructureKeyRescan(): Promise<void> {
     }),
   });
 
-  await until(() => { expect(
-      document.querySelector(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      ),
-    ).not.toBeNull(); },
-  );
+  await until(() => { expect(facetButton('generated')).not.toBeNull(); });
 
   await nextReconcile(() => {
     const tree = document.querySelector('[role="tree"]');
@@ -337,56 +257,28 @@ async function keepsClassificationsAfterAStructureKeyRescan(): Promise<void> {
     tree?.prepend(folder);
   });
 
-  expect(
-    document.querySelector(
-      '[data-filter-kind="generated"][data-filter-value="true"]',
-    ),
-  ).not.toBeNull();
-  expect(
-    document.querySelector(
-      '[data-filter-kind="groups"][data-filter-value="Code"]',
-    ),
-  ).not.toBeNull();
+  expect(facetButton('generated')).not.toBeNull();
+  expect(facetButton('groups', 'Code')).not.toBeNull();
   app.stop();
 }
 
 async function recoversMutationSchedulingAfterDefaultMarkViewedRejects(): Promise<void> {
-  await fakeBrowser.storage.local.set({
-    'diffseek:filter-defaults': {
-      hidden: ['generated'],
-      viewed: ['generated'],
-    },
-  });
+  await saveFilterDefaults({ hidden: ['generated'], viewed: ['generated'] });
   openMenu();
   const app = await reviewApp({
     markFiles: vi.fn<typeof markViewed>(() => Promise.reject(new Error('native mark failed'))),
-    ...metadataSource('src/generated.ts linguist-generated'),
+    ...metadataSource(generatedAttributes),
   });
 
-  await until(() => { expect(
-      document.querySelector<HTMLButtonElement>(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      )?.disabled,
-    ).toBe(false); },
-  );
+  await until(() => { expect(facetButton('generated')?.disabled).toBe(false); });
 
   await nextReconcile(() => {
-    document
-      .querySelector('#diff-app button[aria-label="Not Viewed"]')
-      ?.setAttribute('aria-pressed', 'true');
-    document
-      .querySelector('#diff-app button[aria-label="Not Viewed"]')
-      ?.setAttribute('aria-label', 'Viewed');
+    setViewed(document.querySelector('#diff-app button[aria-label="Not Viewed"]'), true);
   });
 
-  await until(() => { expect(
-      document
-        .querySelector<HTMLButtonElement>(
-          '#src\\/app\\.ts [data-diffseek-viewed-action]',
-        )
-        ?.getAttribute('aria-pressed'),
-    ).toBe('true'); },
-  );
+  await until(() => {
+    expect(viewedAction('src/app.ts')?.getAttribute('aria-pressed')).toBe('true');
+  });
   app.stop();
 }
 
@@ -394,8 +286,7 @@ async function repairsAnOwnedMenuAfterGitHubReplacesItsChildren(): Promise<void>
   openMenu();
   const app = await reviewApp({});
 
-  await until(() => { expect(document.querySelector('[data-diffseek="filters"]')).not.toBeNull(); },
-  );
+  await until(() => { expect(document.querySelector('[data-diffseek="filters"]')).not.toBeNull(); });
   const menu = document.querySelector<HTMLElement>(
     '[role="menu"][aria-label="Filter options"]',
   );

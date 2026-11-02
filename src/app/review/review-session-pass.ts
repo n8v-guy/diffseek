@@ -1,15 +1,29 @@
-import type { PageSnapshot } from '@diffseek/github/review-page/page-adapter';
+import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
 import type { ReviewPresenter } from '@diffseek/github/review-view/presenter';
 
+import {
+  type PageSnapshot,
+  viewedControlState,
+} from '@diffseek/github/review-page/page-adapter';
 import {
   mountViewedActions,
   type ViewedTarget,
 } from '@diffseek/github/review-page/viewed-actions';
-import { type FilterState, ReviewIndex } from '@diffseek/review';
+import {
+  parseCodeowners,
+  parseGitAttributes,
+  type RepositoryMetadata,
+} from '@diffseek/repository-metadata';
+import {
+  type FileRecord,
+  type FilterState,
+  labelFiles,
+  ReviewIndex,
+} from '@diffseek/review';
 
 import type { ViewedActionExecutor } from './action-executor';
 
-interface ProjectionPass {
+export interface ProjectionPass {
   changed: boolean;
   defaultViewedPaths: string[];
   fingerprint: string;
@@ -20,6 +34,31 @@ interface ProjectionPass {
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
+export function classifyKeyFor(
+  metadata: RepositoryMetadata,
+  files: readonly FileRecord[],
+): string {
+  return [
+    metadata.codeowners,
+    metadata.attributes,
+    files
+      .map((file) => `${file.path}\0${file.status}\0${file.owners.join(',')}`)
+      .join('\n'),
+  ].join('\n--\n');
+}
+
+export function classifySnapshot(
+  snapshot: SupportedSnapshot,
+  metadata: RepositoryMetadata,
+): void {
+  labelFiles(snapshot.files, {
+    attributes: parseGitAttributes(metadata.attributes),
+    codeowners: metadata.codeowners
+      ? parseCodeowners(metadata.codeowners)
+      : [],
+  });
+}
+
 export async function enqueueDefaultViewed(
   enqueue: ViewedActionExecutor['enqueue'],
   command: Parameters<ViewedActionExecutor['enqueue']>[0],
@@ -28,6 +67,99 @@ export async function enqueueDefaultViewed(
     return await enqueue(command);
   } catch {
     return null;
+  }
+}
+
+export function pendingDefaultViewed(
+  files: readonly FileRecord[],
+  defaults: FilterDefaults,
+  attempts: ReadonlySet<string>,
+): string[] {
+  if (!defaults.viewed.has('generated')) return [];
+  return files
+    .filter(
+      (file) =>
+        file.generated &&
+        !file.viewed &&
+        file.capabilities.viewed &&
+        !attempts.has(file.path),
+    )
+    .map((file) => file.path);
+}
+
+export function projectionKeyFor(options: {
+  files: readonly FileRecord[];
+  filterDefaults: FilterDefaults;
+  filters: FilterState;
+  generatedDefaultBusy: boolean;
+  menuCount: number;
+  metadata: RepositoryMetadata;
+  metadataRevision: number;
+}): string {
+  const filters = [...options.filters]
+    .map(([facet, values]) => `${facet}:${sortedText(values)}`)
+    .join('|');
+  const defaults = [
+    `hidden:${sortedText(options.filterDefaults.hidden)}`,
+    `viewed:${sortedText(options.filterDefaults.viewed)}`,
+  ].join('/');
+  const files = options.files
+    .map((file) =>
+      [
+        file.path,
+        file.viewed ? '1' : '0',
+        file.capabilities.viewed ? '1' : '0',
+        file.capabilities.collapse ? '1' : '0',
+        file.status,
+        file.owners.join(','),
+        file.generated ? '1' : '0',
+        file.labels.map((label) => `${label.facet}=${label.value}`).join(','),
+      ].join('\0'),
+    )
+    .join('\n');
+  return [
+    options.metadataRevision,
+    options.metadata.codeowners,
+    options.metadata.attributes,
+    filters,
+    defaults,
+    options.generatedDefaultBusy ? '1' : '0',
+    String(options.menuCount),
+    files,
+  ].join('\n--\n');
+}
+
+export function refreshViewedState(
+  snapshot: SupportedSnapshot,
+  files: readonly FileRecord[],
+): void {
+  for (const file of files) {
+    const control = snapshot.viewedControl(file.path);
+    if (control === null) continue;
+    const viewed = viewedControlState(control);
+    if (viewed !== null) file.viewed = viewed;
+  }
+}
+
+export function retainNativeOwners(
+  snapshot: SupportedSnapshot,
+  observedOwners: Map<string, string[]>,
+): void {
+  for (const file of snapshot.files) {
+    if (file.owners.length > 0) {
+      observedOwners.set(file.path, file.owners);
+    } else {
+      file.owners = observedOwners.get(file.path) ?? [];
+    }
+  }
+}
+
+export function syncViewedLabels(files: FileRecord[]): void {
+  for (const file of files) {
+    const rest = file.labels.filter((label) => label.facet !== 'viewed');
+    file.labels = file.viewed
+      ? [{ facet: 'viewed', value: 'true' }, ...rest]
+      : rest;
   }
 }
 
@@ -70,8 +202,7 @@ export function writeSessionProjection(input: {
       (target, viewed, paths): void => {
         input.batch(target, viewed, paths);
       },
-      index,
-      input.filters,
+      { filters: input.filters, index },
     );
   }
   if (projection.changed) {
@@ -84,4 +215,10 @@ export function writeSessionProjection(input: {
   for (const menu of menus) {
     input.mount(menu, input.catalogSnapshot, projection.generatedDefaultBusy);
   }
+}
+
+function sortedText(values: ReadonlySet<string>): string {
+  return [...values]
+    .toSorted((left, right) => left.localeCompare(right))
+    .join(',');
 }

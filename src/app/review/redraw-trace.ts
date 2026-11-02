@@ -16,8 +16,11 @@ const massRemoval = 48;
 const readdWindowMs = 100;
 /** Hot loads ignore the mass-removal rule and require each removed row back inside this window. */
 const hotSettleMs = 500;
-const treeSelector = '[role="treeitem"]';
-const panelSelector = '[role="region"][id^="diff-"]';
+
+interface RowChanges {
+  added: Set<string>;
+  removed: Set<string>;
+}
 
 interface SettleLedger {
   netLoss: number;
@@ -47,6 +50,27 @@ const redrawCountKeys = [
   'treeRowsRemoved',
 ] as const satisfies readonly (keyof RedrawCounts)[];
 
+const rowKinds = [
+  {
+    netLoss: 'treeNetLoss',
+    pending: 'pendingTree',
+    readded: 'treeRowsReadded',
+    rebuilds: 'treeRebuilds',
+    removed: 'treeRowsRemoved',
+    selector: '[role="treeitem"]',
+    settle: 'treeSettle',
+  },
+  {
+    netLoss: 'panelNetLoss',
+    pending: 'pendingPanels',
+    readded: 'panelsReadded',
+    rebuilds: 'panelRebuilds',
+    removed: 'panelsRemoved',
+    selector: '[role="region"][id^="diff-"]',
+    settle: 'panelSettle',
+  },
+] as const;
+
 function countsFrom(trace?: RedrawCounts): RedrawCounts {
   const counts = zeroRedrawCounts();
   if (trace === undefined) return counts;
@@ -75,12 +99,6 @@ function zeroRedrawCounts(): RedrawCounts {
 
 const traces = new WeakMap<Document, Trace>();
 
-interface RowNotes {
-  kind: 'panel' | 'tree';
-  pending: Map<string, number>;
-  selector: string;
-}
-
 export function installRedrawTrace(root: Document): void {
   if (traces.has(root)) return;
   const trace: Trace = {
@@ -95,7 +113,10 @@ export function installRedrawTrace(root: Document): void {
   trace.observer = new MutationObserver((records) => {
     if (absorb(trace, records)) publish(root, trace);
   });
-  observeStructure(trace, root);
+  trace.observer.observe(root.documentElement, {
+    childList: true,
+    subtree: true,
+  });
   root.addEventListener('diffseek-redraw-reset', () => {
     resetRedrawTrace(root);
   });
@@ -162,16 +183,7 @@ export function trackDiffseekWrites<T>(root: Document, run: () => T): T {
 function absorb(trace: Trace, records: MutationRecord[]): boolean {
   const before = mutationStamp(trace);
   if (trace.depth > 0) trace.domMutations += countMutations(records);
-  noteRows(trace, records, {
-    kind: 'tree',
-    pending: trace.pendingTree,
-    selector: treeSelector,
-  });
-  noteRows(trace, records, {
-    kind: 'panel',
-    pending: trace.pendingPanels,
-    selector: panelSelector,
-  });
+  for (const kind of rowKinds) noteRows(trace, records, kind);
   return mutationStamp(trace) !== before;
 }
 
@@ -186,14 +198,15 @@ function closeLedger(ledger: SettleLedger, now: number): void {
 function collectChangedIds(
   records: MutationRecord[],
   selector: string,
-  removed: Set<string>,
-  added: Set<string>,
-): void {
+): RowChanges {
+  const removed = new Set<string>();
+  const added = new Set<string>();
   for (const record of records) {
     if (record.type !== 'childList') continue;
     for (const node of record.addedNodes) collectIds(node, selector, added);
     for (const node of record.removedNodes) collectIds(node, selector, removed);
   }
+  return { added, removed };
 }
 
 function collectIds(node: Node, selector: string, into: Set<string>): void {
@@ -222,8 +235,7 @@ function countMutations(records: MutationRecord[]): number {
 }
 
 function countRebuilt(
-  removed: Set<string>,
-  added: Set<string>,
+  { added, removed }: RowChanges,
   pending: Map<string, number>,
   now: number,
 ): number {
@@ -246,24 +258,14 @@ function countRebuilt(
 
 function mutationStamp(trace: Trace): string {
   return [
-    trace.domMutations,
-    trace.treeRebuilds,
-    trace.panelRebuilds,
-    trace.treeRowsRemoved,
-    trace.panelsRemoved,
-    trace.treeRowsReadded,
-    trace.panelsReadded,
-    trace.treeNetLoss,
-    trace.panelNetLoss,
-    trace.treeSettle.open.size,
-    trace.panelSettle.open.size,
+    ...redrawCountKeys.map((key) => trace[key]),
+    ...rowKinds.map((kind) => trace[kind.settle].open.size),
   ].join(':');
 }
 
 function noteReturns(
   ledger: SettleLedger,
-  removed: Set<string>,
-  added: Set<string>,
+  { added, removed }: RowChanges,
   now: number,
 ): void {
   for (const id of removed) {
@@ -285,78 +287,40 @@ function noteReturns(
   }
 }
 
-function noteRows(trace: Trace, records: MutationRecord[], notes: RowNotes): void {
+function noteRows(
+  trace: Trace,
+  records: MutationRecord[],
+  kind: (typeof rowKinds)[number],
+): void {
   const now = Date.now();
-  const removed = new Set<string>();
-  const added = new Set<string>();
-  collectChangedIds(records, notes.selector, removed, added);
-  const rebuilt = countRebuilt(removed, added, notes.pending, now);
-  const ledger = notes.kind === 'tree' ? trace.treeSettle : trace.panelSettle;
-  noteReturns(ledger, removed, added, now);
-  recordRowCounts(trace, {
-    kind: notes.kind,
-    ledger,
-    rebuilt,
-    removed: removed.size,
-  });
-}
-
-function observeStructure(trace: Trace, root: Document): void {
-  trace.observer.observe(root.documentElement, {
-    childList: true,
-    subtree: true,
-  });
+  const changes = collectChangedIds(records, kind.selector);
+  const rebuilt = countRebuilt(changes, trace[kind.pending], now);
+  const ledger = trace[kind.settle];
+  noteReturns(ledger, changes, now);
+  trace[kind.removed] += changes.removed.size;
+  trace[kind.readded] = ledger.readded;
+  trace[kind.netLoss] = ledger.netLoss;
+  if (rebuilt >= rebuildRows || changes.removed.size >= massRemoval) {
+    trace[kind.rebuilds] += 1;
+  }
 }
 
 function publish(root: Document, trace: Trace): void {
   const data = root.documentElement.dataset;
-  writeCount(data, 'diffseekReconciles', trace.reconciles);
-  writeCount(data, 'diffseekDomMutations', trace.domMutations);
-  writeCount(data, 'diffseekTreeRebuilds', trace.treeRebuilds);
-  writeCount(data, 'diffseekPanelRebuilds', trace.panelRebuilds);
-  writeCount(data, 'diffseekTreeRowsRemoved', trace.treeRowsRemoved);
-  writeCount(data, 'diffseekPanelsRemoved', trace.panelsRemoved);
-  writeCount(data, 'diffseekTreeRowsReadded', trace.treeRowsReadded);
-  writeCount(data, 'diffseekPanelsReadded', trace.panelsReadded);
-  writeCount(data, 'diffseekTreeNetLoss', trace.treeNetLoss);
-  writeCount(data, 'diffseekPanelNetLoss', trace.panelNetLoss);
+  for (const key of redrawCountKeys) writeCount(data, key, trace[key]);
   // Rows removed and not yet back: lets the hot check wait for an event
   // (every row returned) instead of a fixed settle delay.
-  writeCount(data, 'diffseekTreeOpen', trace.treeSettle.open.size);
-  writeCount(data, 'diffseekPanelOpen', trace.panelSettle.open.size);
-}
-
-function recordRowCounts(
-  trace: Trace,
-  counts: {
-    kind: 'panel' | 'tree';
-    ledger: SettleLedger;
-    rebuilt: number;
-    removed: number;
-  },
-): void {
-  const rebuiltNow =
-    counts.rebuilt >= rebuildRows || counts.removed >= massRemoval;
-  if (counts.kind === 'tree') {
-    trace.treeRowsRemoved += counts.removed;
-    trace.treeRowsReadded = counts.ledger.readded;
-    trace.treeNetLoss = counts.ledger.netLoss;
-    if (rebuiltNow) trace.treeRebuilds += 1;
-    return;
-  }
-  trace.panelsRemoved += counts.removed;
-  trace.panelsReadded = counts.ledger.readded;
-  trace.panelNetLoss = counts.ledger.netLoss;
-  if (rebuiltNow) trace.panelRebuilds += 1;
+  writeCount(data, 'treeOpen', trace.treeSettle.open.size);
+  writeCount(data, 'panelOpen', trace.panelSettle.open.size);
 }
 
 function settleTrace(trace: Trace, now: number): void {
-  closeLedger(trace.treeSettle, now);
-  closeLedger(trace.panelSettle, now);
-  trace.treeRowsReadded = trace.treeSettle.readded;
-  trace.panelsReadded = trace.panelSettle.readded;
-  trace.treeNetLoss = trace.treeSettle.netLoss;
-  trace.panelNetLoss = trace.panelSettle.netLoss;
+  for (const kind of rowKinds) {
+    const ledger = trace[kind.settle];
+    closeLedger(ledger, now);
+    trace[kind.readded] = ledger.readded;
+    trace[kind.netLoss] = ledger.netLoss;
+  }
 }
 
 function targetsDocumentElement(target: Node): boolean {
@@ -364,7 +328,8 @@ function targetsDocumentElement(target: Node): boolean {
   return target === root;
 }
 
-function writeCount(data: DOMStringMap, key: string, value: number): void {
+function writeCount(data: DOMStringMap, name: string, value: number): void {
+  const key = `diffseek${name.charAt(0).toUpperCase()}${name.slice(1)}`;
   const next = String(value);
   if (data[key] !== next) data[key] = next;
 }

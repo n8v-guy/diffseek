@@ -3,9 +3,10 @@ import type { FileLabel, FilterState } from '@diffseek/review';
 import { emptyFacetExclusions } from '@diffseek/review';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import type { PageSnapshot } from '../review-page/page-adapter';
+
 import fixture from '../review-page/fixtures/github-pr.html?raw';
-import { type PageSnapshot, scanPage } from '../review-page/page-adapter';
-import { parseFragment, replaceDocument } from '../review-page/test-dom';
+import { parseFragment, replaceDocument, requireSupported } from '../review-page/test-dom';
 import { ReviewPresenter } from './presenter';
 
 const ariaLabel = 'aria-label';
@@ -24,6 +25,13 @@ function buttonLabel(): null | string | undefined {
     .getElementById(diffConfig)
     ?.querySelector('button')
     ?.getAttribute(ariaLabel);
+}
+
+function configButton(label: string): HTMLButtonElement {
+  const selector = `#${diffConfig} button[aria-label="${label}"]`;
+  const button = document.querySelector<HTMLButtonElement>(selector);
+  if (!button) throw new Error(`Missing ${selector}`);
+  return button;
 }
 
 function deferToggle(button: HTMLButtonElement): void {
@@ -95,22 +103,10 @@ function replaceWithClone(button: HTMLButtonElement): HTMLButtonElement {
   return clone;
 }
 
-function requireButton(selector: string): HTMLButtonElement {
-  const button = document.querySelector<HTMLButtonElement>(selector);
-  if (!button) throw new Error(`Missing ${selector}`);
-  return button;
-}
-
 function requireCollapse(): HTMLButtonElement {
   const collapse = requireSupported().collapseControl(configPath);
   if (!collapse) throw new Error('Missing fixture binding');
   return collapse;
-}
-
-function requireSupported(): SupportedSnapshot {
-  const snapshot = scanPage(document);
-  if (snapshot.supported) return snapshot;
-  throw new Error(snapshot.reason);
 }
 
 function restoreOnClick(button: HTMLButtonElement): void {
@@ -273,9 +269,7 @@ describe('ReviewPresenter collapse', () => {
   });
 
   it('does not re-click when a filtered file is already collapsed', async () => {
-    const button = requireButton(
-      `#${diffConfig} button[aria-label="${collapseFile}"]`,
-    );
+    const button = configButton(collapseFile);
     let clicks = 0;
     button.addEventListener('click', () => {
       clicks += 1;
@@ -299,9 +293,7 @@ describe('ReviewPresenter async collapse', () => {
   beforeEach(loadPresenter);
 
   it('owns and restores a collapse that GitHub commits asynchronously', async () => {
-    const original = requireButton(
-      `#${diffConfig} button[aria-label="${collapseFile}"]`,
-    );
+    const original = configButton(collapseFile);
     const delayed = replaceWithClone(original);
     deferToggle(delayed);
     const { presenter, snapshot, state } = excludingConfig();
@@ -317,9 +309,7 @@ describe('ReviewPresenter async collapse', () => {
   });
 
   it('confirms and restores through a GitHub-replaced collapse control', async () => {
-    const original = requireButton(
-      `#${diffConfig} button[aria-label="${collapseFile}"]`,
-    );
+    const original = configButton(collapseFile);
     const detached = replaceWithClone(original);
     replaceCollapsedControl(detached);
     const { presenter, snapshot, state } = excludingConfig();
@@ -345,9 +335,7 @@ describe('ReviewPresenter async collapse', () => {
 
     presenter.apply(snapshot, state);
     await Promise.resolve();
-    const button = requireButton(
-      `#${diffConfig} button[aria-label="${expandFile}"]`,
-    );
+    const button = configButton(expandFile);
     button.click();
     expect(button.getAttribute(ariaLabel)).toBe(collapseFile);
 

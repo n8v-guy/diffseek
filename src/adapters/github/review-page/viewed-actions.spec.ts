@@ -1,49 +1,31 @@
-import { emptyFacetExclusions, type FileRecord, ReviewIndex } from '@diffseek/review';
+import { emptyFacetExclusions } from '@diffseek/review';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PageSnapshot } from './page-adapter';
 
 import fixture from './fixtures/github-pr.html?raw';
-import { scanPage } from './page-adapter';
-import { parseFragment, replaceDocument } from './test-dom';
+import { parseFragment, replaceDocument, requireSupported } from './test-dom';
 import {
   type ActionResult,
   markViewed,
   mountViewedActions,
-  type ViewedTarget,
 } from './viewed-actions';
 
 const appPath = 'src/app.ts';
 const createdPath = 'src/new.ts';
 const generatedPath = 'src/generated.ts';
 const readmePath = 'docs/readme.md';
+const srcFiles = [appPath, createdPath, generatedPath];
 const srcFolder = 'src';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
-type ViewedHandler = (
-  target: ViewedTarget,
-  viewed: boolean,
-  paths: string[],
-) => void;
+type ViewedHandler = Parameters<typeof mountViewedActions>[1];
 
-function confirmCreated(snapshot: SupportedSnapshot): void {
-  const supported = snapshot.viewedControl(createdPath);
-  if (supported) confirmViewed(supported);
-}
-
-function confirmViewed(button: HTMLButtonElement): void {
-  button.addEventListener('click', () => {
+function confirmViewed(button: HTMLButtonElement | null): void {
+  button?.addEventListener('click', () => {
     button.setAttribute('aria-pressed', 'true');
     button.setAttribute('aria-label', 'Viewed');
   });
-}
-
-function iframeAnchor(frameDocument: Document): HTMLElement {
-  const anchor = frameDocument.querySelector<HTMLElement>(
-    '[data-diffseek-viewed-action="true"]',
-  );
-  if (!anchor) throw new Error('Missing iframe anchor');
-  return anchor;
 }
 
 function iframeDocument(): Document {
@@ -54,57 +36,18 @@ function iframeDocument(): Document {
   return frameDocument;
 }
 
-function iframeFile(path: string): FileRecord {
-  return {
-    anchor: 'diff-src-app',
-    capabilities: { collapse: false, viewed: true },
-    extension: 'ts',
-    generated: false,
-    labels: [],
-    owners: [],
-    path,
-    status: 'modified',
-    viewed: false,
-  };
-}
-
-function iframeSnapshot(
-  frameDocument: Document,
-  tree: HTMLElement,
-  path: string,
-): SupportedSnapshot {
-  return {
-    collapseControl: (): null => null,
-    files: [iframeFile(path)],
-    region: (): null => null,
-    supported: true,
-    tree: (): HTMLElement => tree,
-    treeItem: (): HTMLElement | null => frameDocument.getElementById(path),
-    treeItems: (): HTMLElement[] =>
-      [...tree.querySelectorAll<HTMLElement>('[role="treeitem"]')],
-    unavailable: new Map(),
-    viewedControl: (): null => null,
-  };
-}
-
-function iframeTree(frameDocument: Document, path: string): HTMLElement {
-  const tree = frameDocument.createElement('div');
-  tree.setAttribute('role', 'tree');
-  const item = frameDocument.createElement('div');
-  item.id = path;
-  item.setAttribute('role', 'treeitem');
-  const iconWrap = frameDocument.createElement('div');
-  const icon = frameDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  icon.setAttribute('class', 'octicon octicon-file');
-  iconWrap.append(icon);
-  item.append(iconWrap);
-  tree.append(item);
-  frameDocument.body.append(tree);
-  return tree;
-}
-
 function loadFixture(): void {
   replaceDocument(fixture);
+}
+
+function pointerClick(at: number): MouseEvent {
+  return new MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    clientX: at,
+    clientY: at,
+    detail: 1,
+  });
 }
 
 function prependFolder(): void {
@@ -117,18 +60,12 @@ function prependFolder(): void {
   );
 }
 
-function requireAnchor(): HTMLElement {
-  const anchor = document.querySelector<HTMLElement>(
-    '#src\\/app\\.ts [data-diffseek-viewed-action="true"]',
+function requireAnchor(path = appPath, root: ParentNode = document): HTMLElement {
+  const anchor = root.querySelector<HTMLElement>(
+    `#${CSS.escape(path)} [data-diffseek-viewed-action="true"]`,
   );
-  if (!anchor) throw new Error('Missing anchor');
+  if (!anchor) throw new Error(`Missing ${path} anchor`);
   return anchor;
-}
-
-function requireButton(selector: string): HTMLButtonElement {
-  const button = document.querySelector<HTMLButtonElement>(selector);
-  if (!button) throw new Error(`Missing ${selector}`);
-  return button;
 }
 
 function requireFile(
@@ -140,29 +77,16 @@ function requireFile(
   return file;
 }
 
-function requireSupported(): SupportedSnapshot {
-  const snapshot = scanPage(document);
-  if (snapshot.supported) return snapshot;
-  throw new Error(snapshot.reason);
-}
-
-function viewedHandler(): ReturnType<typeof vi.fn<ViewedHandler>> {
-  return vi.fn<ViewedHandler>();
-}
-
 describe('markViewed', () => {
   beforeEach(loadFixture);
 
   it('uses existing controls sequentially and verifies their state', async () => {
     const snapshot = requireSupported();
     for (const path of [appPath, createdPath]) {
-      const button = snapshot.viewedControl(path);
-      if (button) confirmViewed(button);
+      confirmViewed(snapshot.viewedControl(path));
     }
 
-    const result = await markViewed(snapshot, [appPath, createdPath], true, {
-      timeoutMs: 20,
-    });
+    const result = await mark(snapshot, [appPath, createdPath]);
 
     expect(result).toStrictEqual({
       completed: [appPath, createdPath],
@@ -177,9 +101,7 @@ describe('markViewed', () => {
     const clicks = vi.fn<(event: MouseEvent) => void>();
     button?.addEventListener('click', clicks);
 
-    const result = await markViewed(snapshot, [appPath], true, {
-      timeoutMs: 5,
-    });
+    const result = await mark(snapshot, [appPath], 5);
 
     expect(clicks).toHaveBeenCalledExactlyOnceWith(expect.any(MouseEvent));
     expect(result.completed).toStrictEqual([]);
@@ -191,11 +113,9 @@ describe('markViewed', () => {
       .querySelector('#diff-app button[aria-label="Not Viewed"]')
       ?.remove();
     const snapshot = requireSupported();
-    confirmCreated(snapshot);
+    confirmViewed(snapshot.viewedControl(createdPath));
 
-    const result = await markViewed(snapshot, [appPath, createdPath], true, {
-      timeoutMs: 20,
-    });
+    const result = await mark(snapshot, [appPath, createdPath]);
 
     expect(result).toStrictEqual({
       completed: [createdPath],
@@ -207,7 +127,7 @@ describe('markViewed', () => {
   it('confirms state on the viewed control GitHub replaces after the click', async () => {
     const snapshot = requireSupported();
     swapViewedControl(snapshot.viewedControl(appPath));
-    const replaced = await markApp(snapshot);
+    const replaced = await mark(snapshot);
     expect(replaced.completed).toStrictEqual([appPath]);
     expect(replaced.failed).toStrictEqual([]);
   });
@@ -218,14 +138,18 @@ describe('markViewed', () => {
     button?.addEventListener('click', () => {
       replaceHeader(button);
     });
-    const replaced = await markApp(snapshot);
+    const replaced = await mark(snapshot);
     expect(replaced.failed).toStrictEqual([]);
     expect(replaced.completed).toStrictEqual([appPath]);
   });
 });
 
-function markApp(snapshot: SupportedSnapshot): Promise<ActionResult> {
-  return markViewed(snapshot, [appPath], true, { timeoutMs: 20 });
+function mark(
+  snapshot: SupportedSnapshot,
+  paths = [appPath],
+  timeoutMs = 20,
+): Promise<ActionResult> {
+  return markViewed(snapshot, paths, { timeoutMs, viewed: true });
 }
 
 function replaceHeader(button: HTMLButtonElement | null): void {
@@ -260,18 +184,16 @@ describe('viewed action overlays', () => {
   it('overlays every file and folder icon with deterministic viewed actions', () => {
     const snapshot = requireSupported();
     prependFolder();
-    const onAction = viewedHandler();
+    const onAction = vi.fn<ViewedHandler>();
 
     mountViewedActions(snapshot, onAction);
     mountViewedActions(snapshot, onAction);
-    requireButton(`#${srcFolder} [data-diffseek-viewed-action="true"]`).click();
+    requireAnchor(srcFolder).click();
 
     expect(
       document.querySelectorAll('[data-diffseek-viewed-action="true"]'),
     ).toHaveLength(6);
-    const fileAction = requireButton(
-      '#src\\/app\\.ts [data-diffseek-viewed-action="true"]',
-    );
+    const fileAction = requireAnchor();
     expect(fileAction.title).toBe('Mark viewed');
     expect(fileAction.getAttribute('aria-label')).toBe('Mark viewed');
     expect(fileAction.getAttribute('aria-pressed')).toBe('false');
@@ -280,20 +202,12 @@ describe('viewed action overlays', () => {
     expect(fileAction.firstElementChild).toMatchObject({ tagName: 'svg' });
     expect(fileAction.childElementCount).toBe(1);
     expect(fileAction.classList).toContain('diffseek-viewed-icon-anchor');
-    const folder = requireButton(
-      `#${srcFolder} [data-diffseek-viewed-action="true"]`,
-    );
+    const folder = requireAnchor(srcFolder);
     expect(folder.title).toBe('Mark all viewed');
     expect(folder.getAttribute('aria-pressed')).toBe('false');
-    expect(onAction).toHaveBeenCalledWith('folder', true, [
-      appPath,
-      createdPath,
-      generatedPath,
-    ]);
+    expect(onAction).toHaveBeenCalledWith('folder', true, srcFiles);
 
-    const viewedFile = requireButton(
-      '#docs\\/readme\\.md [data-diffseek-viewed-action="true"]',
-    );
+    const viewedFile = requireAnchor(readmePath);
     expect(viewedFile.title).toBe('Unmark');
     expect(viewedFile.getAttribute('aria-pressed')).toBe('true');
     viewedFile.click();
@@ -316,17 +230,10 @@ describe('viewed action overlays', () => {
     const filters = emptyFacetExclusions();
     filters.get('viewed')?.add('true');
     filters.get('generated')?.add('true');
-    const onAction = viewedHandler();
+    const onAction = vi.fn<ViewedHandler>();
 
-    mountViewedActions(
-      snapshot,
-      onAction,
-      new ReviewIndex(snapshot.files),
-      filters,
-    );
-    const folder = requireButton(
-      `#${srcFolder} [data-diffseek-viewed-action="true"]`,
-    );
+    mountViewedActions(snapshot, onAction, { filters });
+    const folder = requireAnchor(srcFolder);
     folder.click();
 
     expect(folder.getAttribute('aria-pressed')).toBe('mixed');
@@ -336,33 +243,23 @@ describe('viewed action overlays', () => {
     expect(
       document.querySelector('#src\\/generated\\.ts [data-diffseek-viewed-action]'),
     ).toBeNull();
-    expect(
-      document
-        .querySelector('#src\\/app\\.ts [data-diffseek-viewed-action]')
-        ?.getAttribute('aria-label'),
-    ).toBe('Unmark');
+    expect(requireAnchor().getAttribute('aria-label')).toBe('Unmark');
   });
 
   it('clears viewed state for a filled folder', () => {
     const snapshot = requireSupported();
     prependFolder();
-    for (const path of [appPath, createdPath, generatedPath]) {
+    for (const path of srcFiles) {
       requireFile(snapshot, path).viewed = true;
     }
-    const onAction = viewedHandler();
+    const onAction = vi.fn<ViewedHandler>();
 
     mountViewedActions(snapshot, onAction);
-    const folder = requireButton(
-      `#${srcFolder} [data-diffseek-viewed-action="true"]`,
-    );
+    const folder = requireAnchor(srcFolder);
     expect(folder.classList.contains('diffseek-viewed-partial')).toBe(false);
     folder.click();
 
-    expect(onAction).toHaveBeenCalledWith('folder', false, [
-      appPath,
-      createdPath,
-      generatedPath,
-    ]);
+    expect(onAction).toHaveBeenCalledWith('folder', false, srcFiles);
   });
 });
 
@@ -371,18 +268,14 @@ describe('viewed action reconciliation', () => {
 
   it('updates existing overlays in place during reconciliation', () => {
     const snapshot = requireSupported();
-    const firstAction = viewedHandler();
+    const firstAction = vi.fn<ViewedHandler>();
     mountViewedActions(snapshot, firstAction);
-    const overlay = requireButton(
-      '#src\\/app\\.ts [data-diffseek-viewed-action="true"]',
-    );
+    const overlay = requireAnchor();
     requireFile(snapshot, appPath).viewed = true;
 
-    const nextAction = viewedHandler();
+    const nextAction = vi.fn<ViewedHandler>();
     mountViewedActions(snapshot, nextAction);
-    const reconciled = requireButton(
-      '#src\\/app\\.ts [data-diffseek-viewed-action="true"]',
-    );
+    const reconciled = requireAnchor();
     reconciled.click();
 
     expect(reconciled).toBe(overlay);
@@ -394,28 +287,16 @@ describe('viewed action reconciliation', () => {
 
   it('ignores clicks outside the toggle hit area and lets GitHub handle them', () => {
     const snapshot = requireSupported();
-    const onAction = viewedHandler();
+    const onAction = vi.fn<ViewedHandler>();
     mountViewedActions(snapshot, onAction);
     const anchor = requireAnchor();
     anchor.getBoundingClientRect = (): DOMRect => new DOMRect(10, 10, 16, 16);
     const native = vi.fn<(event: MouseEvent) => void>();
     document.addEventListener('click', native);
 
-    const outside = new MouseEvent('click', {
-      bubbles: true,
-      cancelable: true,
-      clientX: 60,
-      clientY: 60,
-      detail: 1,
-    });
+    const outside = pointerClick(60);
     anchor.dispatchEvent(outside);
-    const inside = new MouseEvent('click', {
-      bubbles: true,
-      cancelable: true,
-      clientX: 28,
-      clientY: 28,
-      detail: 1,
-    });
+    const inside = pointerClick(28);
     anchor.dispatchEvent(inside);
     document.removeEventListener('click', native);
 
@@ -427,10 +308,10 @@ describe('viewed action reconciliation', () => {
 
   it('clears toggle attributes when a row no longer has viewable files', () => {
     const snapshot = requireSupported();
-    mountViewedActions(snapshot, viewedHandler());
+    mountViewedActions(snapshot, vi.fn<ViewedHandler>());
     for (const file of snapshot.files) file.capabilities.viewed = false;
 
-    mountViewedActions(snapshot, viewedHandler());
+    mountViewedActions(snapshot, vi.fn<ViewedHandler>());
 
     expect(document.querySelector('[data-diffseek-viewed-action]')).toBeNull();
     expect(document.querySelector('.diffseek-viewed-icon-anchor')).toBeNull();
@@ -439,19 +320,18 @@ describe('viewed action reconciliation', () => {
 
   it('handles a viewed click whose target lives in an iframe document', () => {
     const frameDocument = iframeDocument();
-    const path = 'src/app.ts';
-    const tree = iframeTree(frameDocument, path);
-    const onAction = viewedHandler();
-    mountViewedActions(iframeSnapshot(frameDocument, tree, path), onAction);
-    const anchor = iframeAnchor(frameDocument);
+    replaceDocument(fixture, frameDocument);
+    const onAction = vi.fn<ViewedHandler>();
+    mountViewedActions(requireSupported(frameDocument), onAction);
+    const anchor = requireAnchor(appPath, frameDocument);
     expect(anchor).not.toBeInstanceOf(Element);
     anchor.click();
-    expect(onAction).toHaveBeenCalledWith('file', true, [path]);
+    expect(onAction).toHaveBeenCalledWith('file', true, [appPath]);
   });
 
   it('does not mutate retained overlay state when it is unchanged', async () => {
     const snapshot = requireSupported();
-    mountViewedActions(snapshot, viewedHandler());
+    mountViewedActions(snapshot, vi.fn<ViewedHandler>());
     const mutations: MutationRecord[] = [];
     const observer = new MutationObserver((records): void => {
       mutations.push(...records);
@@ -462,7 +342,7 @@ describe('viewed action reconciliation', () => {
       subtree: true,
     });
 
-    mountViewedActions(snapshot, viewedHandler());
+    mountViewedActions(snapshot, vi.fn<ViewedHandler>());
     await Promise.resolve();
     observer.disconnect();
 

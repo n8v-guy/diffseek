@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  freshPanelSchedule,
   pageNodesChanged,
-  type PanelReconcileSchedule,
   queuePanelReconcile,
   scheduleForMutations,
 } from './session-observation';
@@ -74,19 +74,18 @@ describe('panel reconcile scheduling', () => {
     menu.setAttribute('role', 'menu');
     menu.setAttribute('aria-label', 'Filter options');
     document.body.append(menu);
-    const state: PanelReconcileSchedule = { cancel: null, immediate: false };
     let runs = 0;
-    const run = (): void => {
+    const state = freshPanelSchedule(document, (): void => {
       runs += 1;
-    };
-    queuePanelReconcile(state, document, { coalesce: true }, run);
-    queuePanelReconcile(state, document, { coalesce: true }, run);
+    });
+    queuePanelReconcile(state, { coalesce: true });
+    queuePanelReconcile(state, { coalesce: true });
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(runs).toBe(1);
 
-    queuePanelReconcile(state, document, { coalesce: true }, run);
-    queuePanelReconcile(state, document, { immediate: true }, run);
-    queuePanelReconcile(state, document, { coalesce: true }, run);
+    queuePanelReconcile(state, { coalesce: true });
+    queuePanelReconcile(state, { immediate: true });
+    queuePanelReconcile(state, { coalesce: true });
     await new Promise((resolve) => {
       const channel = new MessageChannel();
       channel.port1.addEventListener('message', (): void => {
@@ -104,11 +103,12 @@ describe('panel reconcile scheduling', () => {
   it('detects a replaced file tree or diff region node', () => {
     const tree = document.createElement('ul');
     const region = document.createElement('div');
-    expect(pageNodesChanged(null, tree, [], [region])).toBe(true);
-    expect(pageNodesChanged(tree, tree, [region], [region])).toBe(false);
-    expect(pageNodesChanged(tree, tree, [region], [document.createElement('div')])).toBe(
-      true,
-    );
+    const nodes = { regions: [region], tree };
+    expect(pageNodesChanged({ regions: [], tree: null }, nodes)).toBe(true);
+    expect(pageNodesChanged(nodes, { regions: [region], tree })).toBe(false);
+    expect(
+      pageNodesChanged(nodes, { regions: [document.createElement('div')], tree }),
+    ).toBe(true);
   });
 });
 

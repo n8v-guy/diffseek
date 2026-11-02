@@ -29,8 +29,8 @@ export interface ReviewApp {
 }
 
 interface AppDependencies {
+  filterDefaults: FilterDefaults;
   markFiles: typeof markViewed;
-  readFilterDefaults: () => Promise<FilterDefaults>;
   readImmediate: (repository: RepositoryRef) => Promise<RepositoryMetadata>;
   readPull: (
     review: ReviewRef,
@@ -72,7 +72,6 @@ const idleReview: ReviewApp = {
 
 class ActiveReview implements ReviewApp {
   private readonly dependencies: AppDependencies;
-  private readonly filterDefaults: FilterDefaults;
   private generation = 0;
   private readonly lifecycle = new AbortController();
   private readonly metadataCommits: MetadataCommitGuard;
@@ -87,12 +86,10 @@ class ActiveReview implements ReviewApp {
     root: Document,
     pathname: () => string,
     dependencies: AppDependencies,
-    filterDefaults: FilterDefaults,
   ) {
     this.root = root;
     this.pathname = pathname;
     this.dependencies = dependencies;
-    this.filterDefaults = filterDefaults;
     this.metadataCommits = new MetadataCommitGuard(writeCache);
     this.observer = new MutationObserver((): void => {
       this.onMutation();
@@ -148,7 +145,7 @@ class ActiveReview implements ReviewApp {
     const metadata = await this.dependencies.readImmediate(next);
     if (this.replaced(expectedGeneration, next)) return;
     this.session = new ReviewSession({
-      filterDefaults: this.filterDefaults,
+      filterDefaults: this.dependencies.filterDefaults,
       markFiles: this.dependencies.markFiles,
       metadata,
       metadataCommits: this.metadataCommits,
@@ -185,21 +182,15 @@ export async function startReviewApp(
     redirectClassic(options, changesPath);
     return idleReview;
   }
-  const dependencies = dependenciesFrom(options);
-  const app = new ActiveReview(
-    root,
-    pathname,
-    dependencies,
-    await dependencies.readFilterDefaults(),
-  );
+  const app = new ActiveReview(root, pathname, await dependenciesFrom(options));
   await app.open();
   return app;
 }
 
-function dependenciesFrom(options: ReviewAppOptions): AppDependencies {
+async function dependenciesFrom(options: ReviewAppOptions): Promise<AppDependencies> {
   return {
+    filterDefaults: await (options.readFilterDefaults ?? readFilterDefaults)(),
     markFiles: options.markFiles ?? markViewed,
-    readFilterDefaults: options.readFilterDefaults ?? readFilterDefaults,
     readImmediate: options.readImmediate ?? readImmediateMetadata,
     readPull: options.readPull ?? readPullMetadata,
     refreshDefault: options.refreshDefault ?? refreshDefaultMetadata,

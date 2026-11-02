@@ -6,7 +6,7 @@ import type {
 } from '@diffseek/repository-metadata';
 
 import fixtureHtml from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import { type ReviewApp, startReviewApp } from './review-app';
@@ -37,6 +37,7 @@ const collapseFileLabel = 'Collapse file';
 const expandFileLabel = 'Expand file';
 const labelAttribute = 'aria-label';
 const reconciledEvent = 'diffseek-reconciled';
+const filterDefaultsKey = 'diffseek:filter-defaults';
 const filterMenuMarkup =
   '<ul role="menu" aria-label="Filter options"><li role="menuitem">Native</li></ul>';
 const calls = new EventTarget();
@@ -54,6 +55,12 @@ export const inertMetadata = {
   }> => Promise.resolve({ changed: false, metadata: emptyMetadata }),
 };
 
+/** A `markFiles` stand-in that flips the native viewed controls as GitHub would. */
+export const markNatively: typeof markViewed = (snapshot, paths, { viewed }) => {
+  for (const path of paths) setViewed(snapshot.viewedControl(path), viewed);
+  return Promise.resolve({ completed: paths, failed: [], requested: paths.length });
+};
+
 interface UntilAttempt {
   failure: () => unknown;
   passes: () => Promise<boolean>;
@@ -65,13 +72,33 @@ interface UntilFlags {
   running: boolean;
 }
 
-type UntilGate = ReturnType<typeof Promise.withResolvers<undefined>>;
+export function alwaysRead(): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>('[data-diffseek-always-read]');
+}
 
 export function appendMarkup(markup: string): void {
   const parsed = new DOMParser().parseFromString(markup, 'text/html');
   for (const node of parsed.body.childNodes) {
     document.body.append(document.importNode(node, true));
   }
+}
+
+export function checked(kind: string, value = 'true'): null | string {
+  return facetButton(kind, value)?.getAttribute('aria-checked') ?? null;
+}
+
+export function clickFacet(kind: string, value = 'true'): void {
+  facetButton(kind, value)?.click();
+}
+
+export function facetButton(kind: string, value = 'true'): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>(facetSelector(kind, value));
+}
+
+export function facetCount(kind: string, value = 'true'): null | string {
+  return document.querySelector(
+    `.diffseek-menu-row:has(${facetSelector(kind, value)}) .diffseek-menu-count`,
+  )?.textContent ?? null;
 }
 
 export function installNativeBehavior(): void {
@@ -90,11 +117,22 @@ export function installNativeBehavior(): void {
 
 export async function installReviewPage(markup: string = fixture): Promise<void> {
   fakeBrowser.reset();
-  await fakeBrowser.storage.local.set({
-    'diffseek:filter-defaults': { hidden: [], viewed: [] },
-  });
+  await saveFilterDefaults({ hidden: [], viewed: [] });
   replaceBody(markup);
   installNativeBehavior();
+}
+
+export function isHidden(id: string): 'until-found' | boolean | undefined {
+  return document.getElementById(id)?.hidden;
+}
+
+export function lastSnackbar(): string | undefined {
+  return [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)?.textContent;
+}
+
+/** The arguments of a `markFiles` call that marks `paths` viewed. */
+export function markCall(paths: string[]): unknown[] {
+  return [expect.anything(), paths, expect.objectContaining({ viewed: true })];
 }
 
 export function marked(completed: string[]): ReturnType<typeof vi.fn<typeof markViewed>> {
@@ -149,6 +187,17 @@ export function reviewApp(
   });
 }
 
+export function saveFilterDefaults(
+  defaults: { hidden: string[]; viewed?: string[] },
+): Promise<void> {
+  return fakeBrowser.storage.local.set({ [filterDefaultsKey]: defaults });
+}
+
+export function setViewed(control: Element | null | undefined, viewed: boolean): void {
+  control?.setAttribute(labelAttribute, viewed ? 'Viewed' : 'Not Viewed');
+  control?.setAttribute('aria-pressed', String(viewed));
+}
+
 /** Wraps an injected dependency so each call is an event `until` re-checks on. */
 export function signalled<Args extends unknown[], Result>(
   fn: (...args: Args) => Result,
@@ -158,6 +207,10 @@ export function signalled<Args extends unknown[], Result>(
     calls.dispatchEvent(new Event('call'));
     return result;
   };
+}
+
+export async function storedFilterDefaults(): Promise<unknown> {
+  return (await fakeBrowser.storage.local.get(filterDefaultsKey))[filterDefaultsKey];
 }
 
 /**
@@ -171,14 +224,21 @@ export async function until(
 ): Promise<void> {
   const attempt = rememberAttempt(check);
   if (await attempt.passes()) return;
-  const gate = Promise.withResolvers<undefined>();
-  const flags = { done: false, rerun: false, running: false };
-  scheduleUntil(flags, gate, attempt, guardMs)();
-  await gate.promise;
+  await scheduleUntil(attempt, guardMs);
+}
+
+export function viewedAction(path: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
+    `#${CSS.escape(path)} [data-diffseek-viewed-action]`,
+  );
 }
 
 function continueUntil(flags: UntilFlags): boolean {
   return flags.rerun && !flags.done;
+}
+
+function facetSelector(kind: string, value: string): string {
+  return `[data-filter-kind="${CSS.escape(kind)}"][data-filter-value="${CSS.escape(value)}"]`;
 }
 
 function listenUntil(recheck: () => void): MutationObserver {
@@ -211,12 +271,9 @@ function rememberAttempt(check: () => unknown): UntilAttempt {
   };
 }
 
-function scheduleUntil(
-  flags: UntilFlags,
-  gate: UntilGate,
-  attempt: UntilAttempt,
-  guardMs: number,
-): () => void {
+function scheduleUntil(attempt: UntilAttempt, guardMs: number): Promise<undefined> {
+  const gate = Promise.withResolvers<undefined>();
+  const flags = { done: false, rerun: false, running: false };
   const observer = listenUntil(recheck);
   const timer = setTimeout((): void => {
     finish();
@@ -224,7 +281,12 @@ function scheduleUntil(
   }, guardMs);
 
   function finish(): void {
-    stopUntil(flags, observer, recheck, timer);
+    flags.done = true;
+    observer.disconnect();
+    document.removeEventListener(reconciledEvent, recheck);
+    fakeBrowser.storage.onChanged.removeListener(recheck);
+    calls.removeEventListener('call', recheck);
+    clearTimeout(timer);
   }
 
   function recheck(): void {
@@ -248,21 +310,8 @@ function scheduleUntil(
     flags.running = false;
   }
 
-  return recheck;
-}
-
-function stopUntil(
-  flags: UntilFlags,
-  observer: MutationObserver,
-  recheck: () => void,
-  timer: ReturnType<typeof setTimeout>,
-): void {
-  flags.done = true;
-  observer.disconnect();
-  document.removeEventListener(reconciledEvent, recheck);
-  fakeBrowser.storage.onChanged.removeListener(recheck);
-  calls.removeEventListener('call', recheck);
-  clearTimeout(timer);
+  recheck();
+  return gate.promise;
 }
 
 function untilFailure(lastError: unknown): Error {

@@ -3,11 +3,15 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import { type ReviewApp, startReviewApp } from './review-app';
 import {
+  checked,
   type DefaultRefresher,
+  facetButton,
+  facetCount,
   fixture,
   type ImmediateReader,
   installNativeBehavior,
   installReviewPage,
+  isHidden,
   metadataSource,
   nextReconcile,
   openMenu,
@@ -15,6 +19,7 @@ import {
   pullReview,
   replaceBody,
   reviewApp,
+  setViewed,
   signalled,
   until,
 } from './review-app.fixture';
@@ -39,19 +44,18 @@ describe('review app lifecycle', () => {
   it('activates after partial navigation into a review', activatesAfterPartialNavigationIntoAReview);
 });
 
+const cached = { attributes: 'src/** group=cached', codeowners: '' };
+const pulled = { attributes: 'src/** group=pull', codeowners: '' };
+const defaults = { attributes: 'src/** group=default', codeowners: '' };
+
 async function activatesAfterPartialNavigationIntoAReview(): Promise<void> {
   let path = '/octo/repo/issues/1';
   replaceBody('<main>Issue</main>');
-  const app = await reviewApp({
-    pathname: () => path,
-  });
+  const app = await reviewApp({ pathname: () => path });
 
   await nextReconcile(() => {
     path = '/octo/repo/pull/1/changes';
-    const parsed = new DOMParser().parseFromString(fixture, 'text/html');
-    document.body.replaceChildren(
-      ...[...parsed.body.childNodes].map((node) => document.importNode(node, true)),
-    );
+    replaceBody(fixture);
     installNativeBehavior();
     openMenu();
   });
@@ -64,50 +68,25 @@ async function adoptsDefaultBranchAttributesWhenThePullHeadReadKeepsFailing(): P
   await fakeBrowser.storage.local.clear();
   openMenu();
   const app = await reviewApp({
-    readImmediate: () => Promise.resolve({
-      attributes: 'docs/** group=Docs',
-      codeowners: '',
-    }),
+    readImmediate: () => Promise.resolve({ attributes: 'docs/** group=Docs', codeowners: '' }),
     readPull: () => Promise.reject(new Error('offline')),
     refreshDefault: () => Promise.resolve({
       changed: true,
-      metadata: {
-        attributes: 'src/generated.ts linguist-generated',
-        codeowners: '',
-      },
+      metadata: { attributes: 'src/generated.ts linguist-generated', codeowners: '' },
     }),
   });
 
-  await until(() => { expect(
-      document
-        .querySelector(
-          '[data-filter-kind="generated"][data-filter-value="true"]',
-        )
-        ?.getAttribute('aria-checked'),
-    ).toBe('mixed'); },
-  );
-  expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+  await until(() => { expect(checked('generated')).toBe('mixed'); });
+  expect(isHidden('src/generated.ts')).toBe(true);
   app.stop();
-}
-
-function cachedMetadata(): { attributes: string; codeowners: string } {
-  return { attributes: 'src/** group=cached', codeowners: '' };
 }
 
 async function classifiesImmediatelyFromCachedMetadataAndMountsEphemeralUIOnce(): Promise<void> {
   openMenu();
-  const refreshDefault = vi.fn<DefaultRefresher>().mockResolvedValue({
-    changed: false,
-    metadata: {
-      attributes: 'src/** group=Code',
-      codeowners: '*.ts @cached',
-    },
-  });
+  const metadata = { attributes: 'src/** group=Code', codeowners: '*.ts @cached' };
+  const refreshDefault = vi.fn<DefaultRefresher>().mockResolvedValue({ changed: false, metadata });
   const app = await reviewApp({
-    readImmediate: () => Promise.resolve({
-      attributes: 'src/** group=Code',
-      codeowners: '*.ts @cached',
-    }),
+    readImmediate: () => Promise.resolve(metadata),
     refreshDefault: signalled(refreshDefault),
   });
 
@@ -127,9 +106,7 @@ async function classifiesImmediatelyFromCachedMetadataAndMountsEphemeralUIOnce()
 async function cleansUpOnPartialNavigationAndExtensionInvalidation(): Promise<void> {
   let path = '/octo/repo/pull/1/changes';
   openMenu();
-  const app = await reviewApp({
-    pathname: () => path,
-  });
+  const app = await reviewApp({ pathname: () => path });
 
   await nextReconcile(() => {
     path = '/octo/repo/issues/1';
@@ -144,18 +121,24 @@ async function cleansUpOnPartialNavigationAndExtensionInvalidation(): Promise<vo
   expect(document.querySelector('[data-diffseek="filters"]')).toBeNull();
 }
 
+function codeViewedAction(): Element | null {
+  return document.querySelector(
+    '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
+  );
+}
+
 async function continuesToPRHeadMetadataWhenTheDefaultRefreshFails(): Promise<void> {
   const { app, readPull } = await openCachedPull(
     () => Promise.reject(new Error('default unavailable')),
   );
 
-  await until(() => { expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(); },
-  );
-  expect(readPull).toHaveBeenCalledWith(
-    expect.objectContaining({ pull: 1 }),
-    cachedMetadata(),
-  );
+  await until(() => { expect(filterValue('pull')).not.toBeNull(); });
+  expect(readPull).toHaveBeenCalledWith(expect.objectContaining({ pull: 1 }), cached);
   app.stop();
+}
+
+function filterValue(value: string): Element | null {
+  return document.querySelector(`[data-filter-value="${CSS.escape(value)}"]`);
 }
 
 async function keepsACollapsedFolderAndItsKnownFilesInTheReviewSession(): Promise<void> {
@@ -173,17 +156,11 @@ async function keepsACollapsedFolderAndItsKnownFilesInTheReviewSession(): Promis
   folder.append(group);
   tree?.prepend(folder);
   openMenu();
-  const app = await reviewApp({
-    ...metadataSource('src/** group=Code'),
-  });
+  const app = await reviewApp(metadataSource('src/** group=Code'));
 
   await nextReconcile(() => {
     for (const path of ['diff-app', 'diff-new', 'diff-generated']) {
-      const button = document.querySelector<HTMLButtonElement>(
-        `#${path} button[aria-label="Not Viewed"]`,
-      );
-      button?.setAttribute('aria-label', 'Viewed');
-      button?.setAttribute('aria-pressed', 'true');
+      setViewed(document.querySelector(`#${path} button[aria-label="Not Viewed"]`), true);
     }
   });
   await nextReconcile(() => {
@@ -193,42 +170,16 @@ async function keepsACollapsedFolderAndItsKnownFilesInTheReviewSession(): Promis
 
   await until(() => {
     expect(folder.hidden).toBe(false);
-    expect(
-      document.querySelector(
-        '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Code"]) .diffseek-menu-count',
-      )?.textContent,
-    ).toContain('3');
-    expect(
-      document
-        .querySelector(
-          '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
-        )
-        ?.getAttribute('aria-label'),
-    ).toBe('Unmark all');
+    expect(facetCount('groups', 'Code')).toContain('3');
+    expect(codeViewedAction()?.getAttribute('aria-label')).toBe('Unmark all');
   });
 
   await nextReconcile(() => {
-    const button = document.querySelector<HTMLButtonElement>(
-      '#diff-app button[aria-label="Viewed"]',
-    );
-    button?.setAttribute('aria-label', 'Not Viewed');
-    button?.setAttribute('aria-pressed', 'false');
+    setViewed(document.querySelector('#diff-app button[aria-label="Viewed"]'), false);
   });
   await until(() => {
-    expect(
-      document
-        .querySelector(
-          '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
-        )
-        ?.getAttribute('aria-label'),
-    ).toBe('Mark the rest viewed');
-    expect(
-      document
-        .querySelector(
-          '[data-diffseek-menu-viewed-action][data-viewed-facet="groups"][data-viewed-value="Code"]',
-        )
-        ?.getAttribute('aria-pressed'),
-    ).toBe('mixed');
+    expect(codeViewedAction()?.getAttribute('aria-label')).toBe('Mark the rest viewed');
+    expect(codeViewedAction()?.getAttribute('aria-pressed')).toBe('mixed');
   });
   app.stop();
 }
@@ -237,30 +188,18 @@ async function keepsPRHeadMetadataWhenTheDefaultBranchCacheWriteFails(): Promise
   const setSpy = vi
     .spyOn(fakeBrowser.storage.local, 'set')
     .mockRejectedValueOnce(new Error('storage unavailable'));
-  const { app, readPull } = await openCachedPull(() => Promise.resolve({
-    changed: true,
-    metadata: {
-      attributes: 'src/** group=default',
-      codeowners: '',
-    },
-  }));
-
-  await until(() => { expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(); },
+  const { app, readPull } = await openCachedPull(
+    () => Promise.resolve({ changed: true, metadata: defaults }),
   );
+
+  await until(() => { expect(filterValue('pull')).not.toBeNull(); });
   await until(() => {
     expect(setSpy).toHaveBeenCalledWith({
-      'diffseek:metadata:octo/repo': {
-        attributes: 'src/** group=default',
-        codeowners: '',
-        version: 2,
-      },
+      'diffseek:metadata:octo/repo': { ...defaults, version: 2 },
     });
   });
-  expect(readPull).toHaveBeenCalledWith(
-    expect.objectContaining({ pull: 1 }),
-    { attributes: 'src/** group=cached', codeowners: '' },
-  );
-  expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
+  expect(readPull).toHaveBeenCalledWith(expect.objectContaining({ pull: 1 }), cached);
+  expect(filterValue('default')).toBeNull();
   setSpy.mockRestore();
   app.stop();
 }
@@ -281,17 +220,16 @@ async function leavesSignedOutVisitorsOnTheClassicRoute(): Promise<void> {
   app.stop();
 }
 
-async function openCachedPull(refreshDefault: DefaultRefresher): Promise<{
+async function openCachedPull(
+  refreshDefault: DefaultRefresher,
+  readPull = vi.fn<PullReader>().mockResolvedValue(pulled),
+): Promise<{
   app: ReviewApp;
   readPull: ReturnType<typeof vi.fn<PullReader>>;
 }> {
   openMenu();
-  const readPull = vi.fn<PullReader>().mockResolvedValue({
-    attributes: 'src/** group=pull',
-    codeowners: '',
-  });
   const app = await reviewApp({
-    readImmediate: () => Promise.resolve(cachedMetadata()),
+    readImmediate: () => Promise.resolve(cached),
     readPull: signalled(readPull),
     refreshDefault,
   });
@@ -299,44 +237,32 @@ async function openCachedPull(refreshDefault: DefaultRefresher): Promise<{
 }
 
 async function reCollapsesAFilteredFileAfterGitHubExpandsIt(): Promise<void> {
-  const app = await reviewApp({
-    ...metadataSource('src/** group=Code'),
-  });
+  const app = await reviewApp(metadataSource('src/** group=Code'));
   openMenu();
-  const codeFilter = '[data-filter-kind="groups"][data-filter-value="Code"]';
-  await until(() => { expect(document.querySelector(codeFilter)).not.toBeNull(); });
-  document.querySelector<HTMLElement>(codeFilter)?.click();
-  await until(() => { expect(
-      document.querySelector('#diff-app button[aria-label="Expand file"]'),
-    ).not.toBeNull(); },
-  );
+  await until(() => { expect(facetButton('groups', 'Code')).not.toBeNull(); });
+  facetButton('groups', 'Code')?.click();
+  await until(() => {
+    expect(document.querySelector('#diff-app button[aria-label="Expand file"]')).not.toBeNull();
+  });
   document
     .querySelector<HTMLButtonElement>('#diff-app button[aria-label="Expand file"]')
     ?.setAttribute('aria-label', 'Collapse file');
-  await until(() => { expect(document.querySelector('#diff-app button')?.getAttribute('aria-label')).toBe(
-      'Expand file',
-    ); },
-  );
+  await until(() => {
+    expect(document.querySelector('#diff-app button')?.getAttribute('aria-label')).toBe('Expand file');
+  });
   app.stop();
 }
 
 async function reconcilesMenuRecreationFilteringAndAReplacedTree(): Promise<void> {
-  const app = await reviewApp({
-    ...metadataSource('src/** group=Code'),
-  });
+  const app = await reviewApp(metadataSource('src/** group=Code'));
 
   await nextReconcile(openMenu);
-  const codeFilter = document.querySelector<HTMLElement>(
-    '[data-filter-kind="groups"][data-filter-value="Code"]',
-  );
+  const codeFilter = facetButton('groups', 'Code');
   codeFilter?.focus();
   codeFilter?.click();
-  expect(document.getElementById('src/app.ts')?.hidden).toBe(true);
+  expect(isHidden('src/app.ts')).toBe(true);
   expect(document.activeElement).toMatchObject({
-    dataset: {
-      filterKind: 'groups',
-      filterValue: 'Code',
-    },
+    dataset: { filterKind: 'groups', filterValue: 'Code' },
   });
 
   const menu = document.querySelector('[role="menu"]');
@@ -345,64 +271,39 @@ async function reconcilesMenuRecreationFilteringAndAReplacedTree(): Promise<void
     openMenu();
   });
   expect(document.querySelectorAll('[data-diffseek="filters"]')).toHaveLength(1);
-  expect(
-    document.querySelector('[data-filter-value="Code"]')?.getAttribute('aria-checked'),
-  ).toBe('false');
+  expect(filterValue('Code')?.getAttribute('aria-checked')).toBe('false');
 
   await nextReconcile(() => {
     const source = document.querySelector('[role="tree"]');
     source?.replaceWith(source.cloneNode(true));
   });
-  expect(document.getElementById('src/app.ts')?.hidden).toBe(true);
+  expect(isHidden('src/app.ts')).toBe(true);
   app.stop();
 }
 
 async function replacesCachedMetadataWithPRHeadContentWhileDefaultRefreshStaysIsolated(): Promise<void> {
-  openMenu();
-  const defaultRefresh = Promise.withResolvers<{
-    changed: boolean;
-    metadata: { attributes: string; codeowners: string };
-  }>();
-  const pullRead = Promise.withResolvers<{ attributes: string; codeowners: string }>();
+  const defaultRefresh = Promise.withResolvers<Awaited<ReturnType<DefaultRefresher>>>();
+  const pullRead = Promise.withResolvers<typeof pulled>();
   const refreshDefault = vi.fn<DefaultRefresher>(() => defaultRefresh.promise);
   const readPull = vi.fn<PullReader>(() => pullRead.promise);
-  const app = await reviewApp({
-    readImmediate: () => Promise.resolve({
-      attributes: 'src/** group=cached',
-      codeowners: '',
-    }),
-    readPull: signalled(readPull),
-    refreshDefault: signalled(refreshDefault),
-  });
+  const { app } = await openCachedPull(signalled(refreshDefault), readPull);
 
-  expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull();
-  expect(readPull).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ pull: 1 }), { attributes: 'src/** group=cached', codeowners: '' });
+  expect(filterValue('cached')).not.toBeNull();
+  expect(readPull).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ pull: 1 }), cached);
   expect(refreshDefault).toHaveBeenCalledExactlyOnceWith(pullReview);
-  pullRead.resolve({
-    attributes: 'src/** group=pull',
-    codeowners: '',
-  });
-  await until(() => { expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(); },
-  );
+  pullRead.resolve(pulled);
+  await until(() => { expect(filterValue('pull')).not.toBeNull(); });
   await until(() => { expect(refreshDefault).toHaveBeenCalledExactlyOnceWith(pullReview); });
-  defaultRefresh.resolve({
-    changed: true,
-    metadata: {
-      attributes: 'src/** group=default',
-      codeowners: '',
-    },
-  });
+  defaultRefresh.resolve({ changed: true, metadata: defaults });
   await until(async () => {
-    const stored = await fakeBrowser.storage.local.get(
-      'diffseek:metadata:octo/repo',
-    );
+    const stored = await fakeBrowser.storage.local.get('diffseek:metadata:octo/repo');
     expect(stored['diffseek:metadata:octo/repo']).toMatchObject({
-      attributes: 'src/** group=default',
+      attributes: defaults.attributes,
     });
   });
-  expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull();
-  expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
-  expect(document.querySelector('[data-filter-value="cached"]')).toBeNull();
+  expect(filterValue('pull')).not.toBeNull();
+  expect(filterValue('default')).toBeNull();
+  expect(filterValue('cached')).toBeNull();
   app.stop();
 }
 

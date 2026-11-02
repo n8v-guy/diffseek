@@ -14,8 +14,8 @@ const ariaLabelledBy = 'aria-labelledby';
 const couldNotMark = "Couldn't mark files viewed. Try again.";
 const couldNotUnmark = "Couldn't unmark files. Try again.";
 const filterOptions = 'Filter options';
-const injectedSelector =
-  '[data-diffseek], [data-diffseek-viewed-action], .diffseek-viewed-icon-anchor';
+const viewedActionSelector = '[data-diffseek-viewed-action], .diffseek-viewed-icon-anchor';
+const injectedSelector = `[data-diffseek], ${viewedActionSelector}`;
 const snackbarSelector = '[data-diffseek="snackbar"]';
 const unavailableSelector = '[data-diffseek="unavailable"]';
 
@@ -84,9 +84,7 @@ export function removeInjected(root: Document): void {
   )) {
     element.remove();
   }
-  for (const anchor of root.querySelectorAll(
-    '[data-diffseek-viewed-action], .diffseek-viewed-icon-anchor',
-  )) {
+  for (const anchor of root.querySelectorAll(viewedActionSelector)) {
     clearViewedAction(anchor);
   }
   for (const element of root.querySelectorAll<HTMLElement>(

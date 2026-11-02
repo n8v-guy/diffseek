@@ -75,7 +75,7 @@ export function changeHandler(): ReturnType<typeof vi.fn<() => void>> {
 
 export function fileAt(index: number): FileRecord {
   const file = files[index];
-  if (!file) throw new Error(`Missing fixture ${index}`);
+  if (!file) throw new Error(`Missing fixture ${String(index)}`);
   return file;
 }
 

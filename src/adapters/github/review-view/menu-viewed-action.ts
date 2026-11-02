@@ -50,7 +50,7 @@ export function menuViewedCounter(
   counter.type = 'button';
   counter.className = 'diffseek-menu-count';
   counter.dataset['diffseekMenuCountAction'] = 'true';
-  counter.textContent = `${options.visible}/${options.total}`;
+  counter.textContent = `${String(options.visible)}/${String(options.total)}`;
   configureViewedAction(counter, options);
   return counter;
 }

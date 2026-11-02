@@ -19,7 +19,7 @@ export async function fetchPullHead(
     signal: AbortSignal.timeout(pullHeadTimeoutMs),
   });
   if (!response.ok) {
-    throw new Error(`Pull head request failed with ${response.status}`);
+    throw new Error(`Pull head request failed with ${String(response.status)}`);
   }
   const commits = (await response.text()).matchAll(commitOidPattern).toArray();
   const oid = commits.at(-1)?.[1];
@@ -49,7 +49,7 @@ export function pullCommitsUrl(request: PullHeadRequest): string {
   }
   return `https://github.com/${repository
     .map((segment) => encodeURIComponent(segment))
-    .join('/')}/pull/${request.pull}/commits`;
+    .join('/')}/pull/${String(request.pull)}/commits`;
 }
 
 function isRepositorySegment(segment: string): boolean {

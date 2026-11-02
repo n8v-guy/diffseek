@@ -20,8 +20,6 @@ const alwaysHide = 'Always hide';
 const hideNow = 'Hide now';
 const showNow = 'Show now';
 const cycleSteps = [showNow, hideNow, alwaysHide] as const;
-const alwaysHideIndex = cycleSteps.indexOf(alwaysHide);
-const hideNowIndex = cycleSteps.indexOf(hideNow);
 
 export function applyCheckedState(
   item: HTMLButtonElement,
@@ -35,17 +33,17 @@ export function applyCheckedState(
     : String(!options.excluded.has(options.value));
   setChanged(item, 'aria-checked', checked);
   if (!isRememberedFilterFacet(options.facet)) return;
-  const current = cycleIndex(checked);
+  const current = cycleStep(checked);
   setChanged(
     item,
     'title',
     cycleSteps
-      .map((step, index) => `${index === current ? '●' : '○'} ${step}`)
+      .map((step) => `${step === current ? '●' : '○'} ${step}`)
       .join('\n'),
   );
   const name = options.facet === 'generated' ? 'Generated' : 'Viewed';
-  const next = cycleSteps[(current + 1) % cycleSteps.length];
-  setChanged(item, 'aria-label', `${name}: ${cycleSteps[current]}, click for ${next}`);
+  const next = cycleSteps[(cycleSteps.indexOf(current) + 1) % cycleSteps.length];
+  setChanged(item, 'aria-label', `${name}: ${current}, click for ${String(next)}`);
 }
 
 export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
@@ -66,10 +64,10 @@ export function cycleFilterDefault(options: FilterDefaultOptions): boolean {
   return true;
 }
 
-function cycleIndex(checked: string): number {
-  if (checked === 'false') return hideNowIndex;
-  if (checked === 'mixed') return alwaysHideIndex;
-  return 0;
+function cycleStep(checked: string): (typeof cycleSteps)[number] {
+  if (checked === 'false') return hideNow;
+  if (checked === 'mixed') return alwaysHide;
+  return showNow;
 }
 
 function isRememberedFilterFacet(

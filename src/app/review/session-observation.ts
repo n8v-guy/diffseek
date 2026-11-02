@@ -1,31 +1,21 @@
-import type { FilterDefaults } from '@diffseek/browser/filter-defaults';
-
-import {
-  fileToggleAction,
-  type PageSnapshot,
-  viewedControlState,
-} from '@diffseek/github/review-page/page-adapter';
 import {
   afterCurrentTask,
   filterMenus,
   isNativeMutation,
 } from '@diffseek/github/review-view/review-ui';
-import {
-  parseCodeowners,
-  parseGitAttributes,
-  type RepositoryMetadata,
-} from '@diffseek/repository-metadata';
-import {
-  type FileRecord,
-  type FilterState,
-  labelFiles,
-} from '@diffseek/review';
+
+export interface PageNodes {
+  regions: readonly Element[];
+  tree: Element | null;
+}
 
 export interface PanelReconcileSchedule {
   /** Cancels the queued pass; null when nothing is queued. */
   cancel: (() => void) | null;
   /** The queued pass runs as the next task rather than at the next frame. */
   immediate: boolean;
+  readonly root: Document;
+  readonly run: () => void;
 }
 
 export interface PanelScheduleOptions {
@@ -33,138 +23,11 @@ export interface PanelScheduleOptions {
   immediate?: boolean;
 }
 
-type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
-
-export function classifyKeyFor(
-  metadata: RepositoryMetadata,
-  files: readonly FileRecord[],
-): string {
-  return [
-    metadata.codeowners,
-    metadata.attributes,
-    files
-      .map((file) => `${file.path}\0${file.status}\0${file.owners.join(',')}`)
-      .join('\n'),
-  ].join('\n--\n');
-}
-
-export function classifySnapshot(
-  snapshot: SupportedSnapshot,
-  metadata: RepositoryMetadata,
-): void {
-  labelFiles(snapshot.files, {
-    attributes: parseGitAttributes(metadata.attributes),
-    codeowners: metadata.codeowners
-      ? parseCodeowners(metadata.codeowners)
-      : [],
-  });
-}
-
-/** A filtered-out file GitHub expanded again. Structure and labels stay put. */
-export function filteredFileExpanded(root: Document): boolean {
-  for (const button of root.querySelectorAll<HTMLButtonElement>(
-    '[data-diffseek-filtered-out="true"] button',
-  )) {
-    if (fileToggleAction(button) === collapseFileLabel) return true;
-  }
-  return false;
-}
-
-export function freshPanelSchedule(): PanelReconcileSchedule {
-  return { cancel: null, immediate: false };
-}
-
-export function pendingDefaultViewed(
-  files: readonly FileRecord[],
-  defaults: FilterDefaults,
-  attempts: ReadonlySet<string>,
-): string[] {
-  if (!defaults.viewed.has('generated')) return [];
-  return files
-    .filter(
-      (file) =>
-        file.generated &&
-        !file.viewed &&
-        file.capabilities.viewed &&
-        !attempts.has(file.path),
-    )
-    .map((file) => file.path);
-}
-
-export function projectionKeyFor(options: {
-  files: readonly FileRecord[];
-  filterDefaults: FilterDefaults;
-  filters: FilterState;
-  generatedDefaultBusy: boolean;
-  menuCount: number;
-  metadata: RepositoryMetadata;
-  metadataRevision: number;
-}): string {
-  const filters = [...options.filters]
-    .map(([facet, values]) => `${facet}:${sortedText(values)}`)
-    .join('|');
-  const defaults = [
-    `hidden:${sortedText(options.filterDefaults.hidden)}`,
-    `viewed:${sortedText(options.filterDefaults.viewed)}`,
-  ].join('/');
-  const files = options.files
-    .map((file) =>
-      [
-        file.path,
-        file.viewed ? '1' : '0',
-        file.capabilities.viewed ? '1' : '0',
-        file.capabilities.collapse ? '1' : '0',
-        file.status,
-        file.owners.join(','),
-        file.generated ? '1' : '0',
-        file.labels.map((label) => `${label.facet}=${label.value}`).join(','),
-      ].join('\0'),
-    )
-    .join('\n');
-  return [
-    options.metadataRevision,
-    options.metadata.codeowners,
-    options.metadata.attributes,
-    filters,
-    defaults,
-    options.generatedDefaultBusy ? '1' : '0',
-    String(options.menuCount),
-    files,
-  ].join('\n--\n');
-}
-
-export function refreshViewedState(
-  snapshot: SupportedSnapshot,
-  files: readonly FileRecord[],
-): void {
-  for (const file of files) {
-    const control = snapshot.viewedControl(file.path);
-    if (control === null) continue;
-    const viewed = viewedControlState(control);
-    if (viewed !== null) file.viewed = viewed;
-  }
-}
-
-export function retainNativeOwners(
-  snapshot: SupportedSnapshot,
-  observedOwners: Map<string, string[]>,
-): void {
-  for (const file of snapshot.files) {
-    if (file.owners.length > 0) {
-      observedOwners.set(file.path, file.owners);
-    } else {
-      file.owners = observedOwners.get(file.path) ?? [];
-    }
-  }
-}
-
-export function syncViewedLabels(files: FileRecord[]): void {
-  for (const file of files) {
-    const rest = file.labels.filter((label) => label.facet !== 'viewed');
-    file.labels = file.viewed
-      ? [{ facet: 'viewed', value: 'true' }, ...rest]
-      : rest;
-  }
+export function freshPanelSchedule(
+  root: Document,
+  run: () => void,
+): PanelReconcileSchedule {
+  return { cancel: null, immediate: false, root, run };
 }
 
 export function watchObservationRoots(options: ObservationRoots): void {
@@ -256,17 +119,11 @@ function sharedRegionParent(
   return parent;
 }
 
-function sortedText(values: ReadonlySet<string>): string {
-  return [...values]
-    .toSorted((left, right) => left.localeCompare(right))
-    .join(',');
-}
-
 const ariaExpandedAttribute = 'aria-expanded';
 const ariaLabelAttribute = 'aria-label';
 const ariaPressedAttribute = 'aria-pressed';
 const classAttribute = 'class';
-const collapseFileLabel = 'Collapse file';
+export const collapseFileLabel = 'Collapse file';
 const diffHeaderSelector = '[data-diff-header-wrapper="true"]';
 const diffRegionSelector = '[role="region"][id^="diff-"]';
 const expandFileLabel = 'Expand file';
@@ -323,16 +180,11 @@ export function cancelPanelReconcile(state: PanelReconcileSchedule): void {
   state.immediate = false;
 }
 
-export function pageNodesChanged(
-  previousTree: Element | null,
-  tree: Element | null,
-  previousRegions: readonly Element[],
-  regions: readonly Element[],
-): boolean {
+export function pageNodesChanged(previous: PageNodes, next: PageNodes): boolean {
   return (
-    previousTree !== tree ||
-    previousRegions.length !== regions.length ||
-    regions.some((region, index) => region !== previousRegions[index])
+    previous.tree !== next.tree ||
+    previous.regions.length !== next.regions.length ||
+    next.regions.some((region, index) => region !== previous.regions[index])
   );
 }
 
@@ -344,9 +196,7 @@ export function pageNodesChanged(
  */
 export function queuePanelReconcile(
   state: PanelReconcileSchedule,
-  root: Document,
   options: PanelScheduleOptions,
-  run: () => void,
 ): void {
   const immediate = options.immediate === true || options.coalesce !== true;
   // A queued pass that runs at least as soon already covers this request.
@@ -356,9 +206,9 @@ export function queuePanelReconcile(
   const fire = (): void => {
     state.cancel = null;
     state.immediate = false;
-    run();
+    state.run();
   };
-  const view = root.defaultView;
+  const view = state.root.defaultView;
   if (immediate || view === null) {
     state.cancel = afterCurrentTask(fire);
     return;

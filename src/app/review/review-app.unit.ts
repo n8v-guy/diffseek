@@ -1,16 +1,27 @@
 import type { markViewed } from '@diffseek/github/review-page/viewed-actions';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import {
+  alwaysRead,
+  checked,
+  clickFacet,
+  facetButton,
   installReviewPage,
+  isHidden,
+  lastSnackbar,
+  markCall,
+  markNatively,
   metadataSource,
   nextReconcile,
   openMenu,
   reviewApp,
+  saveFilterDefaults,
+  setViewed,
   signalled,
+  storedFilterDefaults,
   until,
+  viewedAction,
 } from './review-app.fixture';
 
 describe('review app interactions', () => {
@@ -30,64 +41,30 @@ describe('review app interactions', () => {
   it('retains observed native owners across diff hydration', retainsObservedNativeOwnersAcrossDiffHydration);
 });
 
-function alwaysRead(): HTMLButtonElement | null {
-  return document.querySelector<HTMLButtonElement>('[data-diffseek-always-read]');
-}
+const generatedAttributes = 'src/generated.ts linguist-generated';
 
 async function appliesAndUpdatesExtensionWideRememberedFilterDefaults(): Promise<void> {
-  await fakeBrowser.storage.local.set({
-    'diffseek:filter-defaults': { hidden: ['viewed'] },
-  });
+  await saveFilterDefaults({ hidden: ['viewed'] });
   openMenu();
   const app = await reviewApp({});
 
-  const viewed = document.querySelector<HTMLButtonElement>(
-    '[data-filter-kind="viewed"][data-filter-value="true"]',
-  );
-  expect(viewed?.getAttribute('aria-checked')).toBe('mixed');
-  expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
+  expect(checked('viewed')).toBe('mixed');
+  expect(isHidden('docs/readme.md')).toBe(true);
 
-  viewed?.click();
-  await until(async () => { expect(
-      await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
-    ).toStrictEqual({
-      'diffseek:filter-defaults': { hidden: [], viewed: [] },
-    }); },
-  );
-  expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);
-  expect(
-    [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
-      ?.textContent,
-  ).toBe('Shown');
+  clickFacet('viewed');
+  await until(async () => {
+    expect(await storedFilterDefaults()).toStrictEqual({ hidden: [], viewed: [] });
+  });
+  expect(isHidden('docs/readme.md')).toBe(false);
+  expect(lastSnackbar()).toBe('Shown');
 
-  document
-    .querySelector<HTMLButtonElement>(
-      '[data-filter-kind="viewed"][data-filter-value="true"]',
-    )
-    ?.click();
-  document
-    .querySelector<HTMLButtonElement>(
-      '[data-filter-kind="viewed"][data-filter-value="true"]',
-    )
-    ?.click();
-  await until(async () => { expect(
-      await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
-    ).toStrictEqual({
-      'diffseek:filter-defaults': {
-        hidden: ['viewed'],
-        viewed: [],
-      },
-    }); },
-  );
-  expect(
-    document.querySelector<HTMLButtonElement>(
-      '[data-filter-kind="viewed"][data-filter-value="true"]',
-    )?.getAttribute('aria-checked'),
-  ).toBe('mixed');
-  expect(
-    [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
-      ?.textContent,
-  ).toBe('Always hidden');
+  clickFacet('viewed');
+  clickFacet('viewed');
+  await until(async () => {
+    expect(await storedFilterDefaults()).toStrictEqual({ hidden: ['viewed'], viewed: [] });
+  });
+  expect(checked('viewed')).toBe('mixed');
+  expect(lastSnackbar()).toBe('Always hidden');
   app.stop();
 }
 
@@ -106,109 +83,54 @@ async function asksToTryAgainAfterAFailedViewedActionWithoutRetrying(): Promise<
     failed: ['src/app.ts'],
     requested: 1,
   });
-  const app = await reviewApp({
-    markFiles: signalled(markFiles),
-  });
+  const app = await reviewApp({ markFiles: signalled(markFiles) });
 
-  document
-    .querySelector<HTMLElement>(
-      '#src\\/app\\.ts [data-diffseek-viewed-action]',
-    )
-    ?.click();
+  viewedAction('src/app.ts')?.click();
 
   await until(() => {
-    expect(
-      [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
-        ?.textContent,
-    ).toBe("Couldn't mark file viewed. Try again.");
+    expect(lastSnackbar()).toBe("Couldn't mark file viewed. Try again.");
   });
-  expect(markFiles).toHaveBeenCalledExactlyOnceWith(
-    expect.anything(),
-    ['src/app.ts'],
-    true,
-    expect.anything(),
-  );
+  expect(markFiles).toHaveBeenCalledExactlyOnceWith(...markCall(['src/app.ts']));
   app.stop();
 }
 
 async function hidesAndMarksGeneratedFilesViewedFromThePersistedDefault(): Promise<void> {
-  await fakeBrowser.storage.local.set({
-    'diffseek:filter-defaults': {
-      hidden: ['generated'],
-      viewed: ['generated'],
-    },
-  });
+  await saveFilterDefaults({ hidden: ['generated'], viewed: ['generated'] });
   const markGate = Promise.withResolvers<undefined>();
-  const markFiles = vi.fn<typeof markViewed>(async (snapshot, paths, viewed) => {
+  const markFiles = vi.fn<typeof markViewed>(async (...args) => {
     await markGate.promise;
-    for (const path of paths) {
-      const control = snapshot.viewedControl(path);
-      control?.setAttribute('aria-label', viewed ? 'Viewed' : 'Not Viewed');
-      control?.setAttribute('aria-pressed', String(viewed));
-    }
-    return { completed: paths, failed: [], requested: paths.length };
+    return markNatively(...args);
   });
   openMenu();
   const app = await reviewApp({
     markFiles: signalled(markFiles),
-    ...metadataSource('src/generated.ts linguist-generated'),
+    ...metadataSource(generatedAttributes),
   });
 
-  await until(() => { expect(
-      document.querySelector<HTMLButtonElement>(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      )?.disabled,
-    ).toBe(true); },
-  );
-  expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
-  expect(
-    document
-      .querySelector('[data-diffseek-always-read]')
-      ?.getAttribute('aria-pressed'),
-  ).toBe('true');
-  await until(() => { expect(markFiles).toHaveBeenCalledWith(
-      expect.anything(),
-      ['src/generated.ts'],
-      true,
-      expect.anything(),
-    ); },
-  );
+  await until(() => { expect(facetButton('generated')?.disabled).toBe(true); });
+  expect(isHidden('src/generated.ts')).toBe(true);
+  expect(alwaysRead()?.getAttribute('aria-pressed')).toBe('true');
+  await until(() => {
+    expect(markFiles).toHaveBeenCalledWith(...markCall(['src/generated.ts']));
+  });
 
-  const generated = document.querySelector<HTMLButtonElement>(
-    '[data-filter-kind="generated"][data-filter-value="true"]',
-  );
-  generated?.click();
-  expect(
-    document
-      .querySelector('[data-diffseek-always-read]')
-      ?.getAttribute('aria-pressed'),
-  ).toBe('true');
+  clickFacet('generated');
+  expect(alwaysRead()?.getAttribute('aria-pressed')).toBe('true');
 
   markGate.resolve(undefined);
-  await until(() => { expect(
-      document.querySelector(
-        '#diff-generated button[aria-label="Viewed"]',
-      ),
-    ).not.toBeNull(); },
-  );
-  await until(() => { expect(
-      document.querySelector<HTMLButtonElement>(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      )?.disabled,
-    ).toBe(false); },
-  );
+  await until(() => {
+    expect(document.querySelector('#diff-generated button[aria-label="Viewed"]')).not.toBeNull();
+  });
+  await until(() => { expect(facetButton('generated')?.disabled).toBe(false); });
 
-  document
-    .querySelector<HTMLButtonElement>(
-      '[data-filter-kind="generated"][data-filter-value="true"]',
-    )
-    ?.click();
-  await until(() => { expect(
+  clickFacet('generated');
+  await until(() => {
+    expect(
       document.querySelector(
         '[data-diffseek-menu-viewed-action][data-viewed-facet="generated"][data-viewed-value="true"]',
       )?.getAttribute('aria-pressed'),
-    ).toBe('true'); },
-  );
+    ).toBe('true');
+  });
   app.stop();
 }
 
@@ -221,51 +143,40 @@ function isLoadDiffNotice(element: Element): boolean {
 
 async function keepsAttributeGeneratedLabelsAfterGitHubLoadsTheDiff(): Promise<void> {
   openMenu();
-  const app = await reviewApp({
-    ...metadataSource('src/generated.ts linguist-generated'),
-  });
-  document
-    .querySelector<HTMLButtonElement>(
-      '[data-filter-kind="generated"][data-filter-value="true"]',
-    )
-    ?.click();
-  expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+  const app = await reviewApp(metadataSource(generatedAttributes));
+  clickFacet('generated');
+  expect(isHidden('src/generated.ts')).toBe(true);
 
   await nextReconcile(removeLoadDiffNotice);
 
-  expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+  expect(isHidden('src/generated.ts')).toBe(true);
   app.stop();
 }
 
 async function marksGeneratedFilesWhenAutoViewTurnsOnAndStopsWhenItTurnsOff(): Promise<void> {
-  const markFiles = vi.fn<typeof markViewed>((snapshot, paths, viewed) => {
-    for (const path of paths) {
-      snapshot.viewedControl(path)?.setAttribute('aria-label', viewed ? 'Viewed' : 'Not Viewed');
-      snapshot.viewedControl(path)?.setAttribute('aria-pressed', String(viewed));
-    }
-    return Promise.resolve({ completed: paths, failed: [], requested: paths.length });
-  });
+  const markFiles = vi.fn<typeof markViewed>(markNatively);
   openMenu();
   const app = await reviewApp({
     markFiles: signalled(markFiles),
-    ...metadataSource('src/generated.ts linguist-generated'),
+    ...metadataSource(generatedAttributes),
   });
   await until(() => { expect(alwaysRead()).not.toBeNull(); });
   alwaysRead()?.click();
-  await until(() => { expect(markFiles).toHaveBeenCalledWith(expect.anything(), ['src/generated.ts'], true, expect.anything()); });
+  await until(() => {
+    expect(markFiles).toHaveBeenCalledWith(...markCall(['src/generated.ts']));
+  });
   // The auto-view batch must finish before the toggle is clicked again.
   await until(() => {
     expect(document.querySelector('#diff-generated button[aria-label="Viewed"]')).not.toBeNull();
-    expect(document.querySelector('[data-filter-kind="generated"][data-filter-value="true"]')?.hasAttribute('disabled')).toBe(false);
+    expect(facetButton('generated')?.hasAttribute('disabled')).toBe(false);
   });
   expect(alwaysRead()?.getAttribute('aria-pressed')).toBe('true');
   alwaysRead()?.click();
-  await until(async () => { expect(await fakeBrowser.storage.local.get('diffseek:filter-defaults')).toStrictEqual({
-    'diffseek:filter-defaults': { hidden: [], viewed: [] },
-  }); });
+  await until(async () => {
+    expect(await storedFilterDefaults()).toStrictEqual({ hidden: [], viewed: [] });
+  });
   const control = document.querySelector('#diff-generated button');
-  control?.setAttribute('aria-label', 'Not Viewed');
-  control?.setAttribute('aria-pressed', 'false');
+  setViewed(control, false);
   app.reconcile();
   expect(control?.getAttribute('aria-label')).toBe('Not Viewed');
   expect(markFiles).toHaveBeenCalledTimes(1);
@@ -274,18 +185,10 @@ async function marksGeneratedFilesWhenAutoViewTurnsOnAndStopsWhenItTurnsOff(): P
 
 async function reconcilesANativeViewedStateChangedOnlyThroughAttributes(): Promise<void> {
   const app = await reviewApp({});
-  const viewed = document.querySelector<HTMLButtonElement>(
-    '#diff-app button[aria-label="Not Viewed"]',
-  );
-  viewed?.setAttribute('aria-label', 'Viewed');
-  viewed?.setAttribute('aria-pressed', 'true');
+  setViewed(document.querySelector('#diff-app button[aria-label="Not Viewed"]'), true);
 
   await until(() => {
-    expect(
-      document
-        .querySelector('#src\\/app\\.ts [data-diffseek-viewed-action]')
-        ?.getAttribute('aria-label'),
-    ).toBe('Unmark');
+    expect(viewedAction('src/app.ts')?.getAttribute('aria-label')).toBe('Unmark');
   });
   app.stop();
 }
@@ -302,17 +205,9 @@ function removeLoadDiffNotice(): void {
 async function retainsObservedNativeOwnersAcrossDiffHydration(): Promise<void> {
   openMenu();
   const app = await reviewApp({});
-  document
-    .querySelector<HTMLButtonElement>(
-      '[data-filter-kind="owners"][data-filter-value="@owner"]',
-    )
-    ?.click();
-  document
-    .querySelector<HTMLButtonElement>(
-      '[data-filter-kind="owners"][data-filter-value="@org/team"]',
-    )
-    ?.click();
-  expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+  clickFacet('owners', '@owner');
+  clickFacet('owners', '@org/team');
+  expect(isHidden('src/generated.ts')).toBe(true);
 
   await nextReconcile(() => {
     const region = document.getElementById('diff-generated');
@@ -321,15 +216,13 @@ async function retainsObservedNativeOwnersAcrossDiffHydration(): Promise<void> {
     region.replaceWith(region.cloneNode(true));
   });
 
-  expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+  expect(isHidden('src/generated.ts')).toBe(true);
   app.stop();
 }
 
 async function rollsBackPresentationWhenGitHubContractsDisappear(): Promise<void> {
   openMenu();
-  const app = await reviewApp({
-    ...metadataSource('src/** group=Code'),
-  });
+  const app = await reviewApp(metadataSource('src/** group=Code'));
   document
     .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
     ?.click();
@@ -363,14 +256,14 @@ async function startsANewPullRequestWithNoInheritedFilterSelection(): Promise<vo
   document
     .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
     ?.click();
-  expect(document.getElementById('src/app.ts')?.hidden).toBe(true);
+  expect(isHidden('src/app.ts')).toBe(true);
 
   await nextReconcile(() => {
     path = '/octo/repo/pull/2/changes';
     document.body.append(document.createElement('span'));
   });
 
-  expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);
+  expect(isHidden('docs/readme.md')).toBe(false);
   expect(
     document.querySelector('[data-filter-value="Code"]')?.getAttribute(
       'aria-checked',
@@ -392,18 +285,9 @@ async function suppressesABatchResultFromAnEarlierPullRequest(): Promise<void> {
     pathname: () => path,
   });
 
-  document
-    .querySelector<HTMLButtonElement>(
-      '#src\\/app\\.ts [data-diffseek-viewed-action]',
-    )
-    ?.click();
+  viewedAction('src/app.ts')?.click();
   await until(() => {
-    expect(markFiles).toHaveBeenCalledExactlyOnceWith(
-      expect.anything(),
-      ['src/app.ts'],
-      true,
-      expect.anything(),
-    );
+    expect(markFiles).toHaveBeenCalledExactlyOnceWith(...markCall(['src/app.ts']));
   });
 
   await nextReconcile(() => {

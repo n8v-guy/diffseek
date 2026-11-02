@@ -37,7 +37,7 @@ describe('redraw trace', () => {
 
     const rows = Array.from({ length: 8 }, (_item, index) => {
       const row = document.createElement('li');
-      row.id = `src/file-${index}.ts`;
+      row.id = `src/file-${String(index)}.ts`;
       row.setAttribute('role', 'treeitem');
       tree.append(row);
       return row;
@@ -66,7 +66,7 @@ describe('redraw trace', () => {
     tree.append(control);
     const rows = Array.from({ length: 10 }, (_item, index) => {
       const row = document.createElement('li');
-      row.id = `src/kept-${index}.ts`;
+      row.id = `src/kept-${String(index)}.ts`;
       row.setAttribute('role', 'treeitem');
       tree.append(row);
       return row;

@@ -4,6 +4,15 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import { startReviewApp } from './review-app';
 import { appendMarkup, inertMetadata, replaceBody } from './review-app.fixture';
+import {
+  appendStreamRegions,
+  countFrames,
+  flush,
+  nextFrame,
+  nextTask,
+  pageHtml,
+  regionNode,
+} from './review-session.fixture';
 
 describe('review session stream batching', () => {
   beforeEach((): void => {
@@ -95,7 +104,7 @@ describe('redraw budget', () => {
         counts.ignore(true);
         const line = document.createElement('span');
         line.className = 'blob-code';
-        line.textContent = `line ${noise}`;
+        line.textContent = `line ${String(noise)}`;
         host?.lastElementChild?.append(line);
         line.classList.add('highlighted');
         counts.ignore(false);
@@ -156,16 +165,6 @@ interface Counts {
   treeRowsRemoved: number;
 }
 
-async function appendStreamRegions(start: number, end: number): Promise<void> {
-  for (let index = start; index < end; index += 1) {
-    const region = document.createElement('div');
-    region.id = `diff-stream-${index}`;
-    region.setAttribute('role', 'region');
-    document.body.append(region);
-    await Promise.resolve();
-  }
-}
-
 function collectRows(
   node: Node,
   kind: 'panel' | 'tree',
@@ -187,23 +186,6 @@ function collectRows(
   return rows.length;
 }
 
-function countFrames(): { stop: () => number } {
-  let frames = 0;
-  let live = true;
-  const tick = (): void => {
-    if (!live) return;
-    frames += 1;
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
-  return {
-    stop: (): number => {
-      live = false;
-      return frames;
-    },
-  };
-}
-
 function diff(before: Counts, after: Counts): Counts {
   return {
     domMutations: after.domMutations - before.domMutations,
@@ -215,11 +197,6 @@ function diff(before: Counts, after: Counts): Counts {
   };
 }
 
-async function flush(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
 const anchorAttributes = new Set(['aria-label', 'aria-pressed', 'title']);
 const diffseekSelector = '[data-diffseek], .diffseek-viewed-icon-anchor, [data-diffseek-viewed-action]';
 const injectedSelector = '[data-diffseek], .diffseek-viewed-icon-anchor';
@@ -227,8 +204,7 @@ const injectedSelector = '[data-diffseek], .diffseek-viewed-icon-anchor';
 function absorbRecords(
   records: MutationRecord[],
   counts: Counts,
-  pendingTree: Map<string, number>,
-  pendingPanels: Map<string, number>,
+  pending: Record<'panel' | 'tree', Map<string, number>>,
 ): void {
   const now = Date.now();
   let removedTree = 0;
@@ -243,12 +219,12 @@ function absorbRecords(
       collectRows(node, 'panel', addedPanels);
     }
     for (const node of record.removedNodes) {
-      removedTree += collectRows(node, 'tree', pendingTree);
-      removedPanels += collectRows(node, 'panel', pendingPanels);
+      removedTree += collectRows(node, 'tree', pending.tree);
+      removedPanels += collectRows(node, 'panel', pending.panel);
     }
   }
-  const rebuiltTree = takeRebuilt(pendingTree, addedTree, now);
-  const rebuiltPanels = takeRebuilt(pendingPanels, addedPanels, now);
+  const rebuiltTree = takeRebuilt(pending.tree, addedTree, now);
+  const rebuiltPanels = takeRebuilt(pending.panel, addedPanels, now);
   counts.treeRowsRemoved += removedTree;
   counts.panelsRemoved += removedPanels;
   if (rebuiltTree >= 8 || removedTree >= 48) counts.treeRebuilds += 1;
@@ -285,48 +261,6 @@ function mutationSize(record: MutationRecord): number {
     : 1;
 }
 
-async function nextFrame(): Promise<void> {
-  await flush();
-  await new Promise<void>((resolve): void => {
-    requestAnimationFrame((): void => { resolve(); });
-  });
-}
-
-/** Lets observer callbacks queue their pass, then runs the next task. */
-async function nextTask(): Promise<void> {
-  await flush();
-  await new Promise<void>((resolve) => {
-    const channel = new MessageChannel();
-    channel.port1.addEventListener('message', (): void => {
-      channel.port1.close();
-      resolve();
-    }, { once: true });
-    channel.port1.start();
-    channel.port2.postMessage(null);
-  });
-}
-
-function pageHtml(count: number): string {
-  const rows = Array.from({ length: count }, (_item, index) => {
-    const path = `src/file-${index}.ts`;
-    return `<li id="${path}" role="treeitem" aria-label="file-${index}.ts"><div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-diff"></svg></div><a href="#diff-file-${index}">${path}</a></li>`;
-  }).join('');
-  return `<body><button aria-label="Filter options"></button><ul role="tree" aria-label="File Tree">${rows}</ul><div id="diff-host"></div></body>`;
-}
-
-function regionNode(index: number): HTMLElement {
-  const region = document.createElement('div');
-  region.id = `diff-file-${index}`;
-  region.setAttribute('role', 'region');
-  const parsed = new DOMParser().parseFromString(
-    `<div data-diff-header-wrapper="true"><button aria-label="Collapse file"></button><h3><code>src/file-${index}.ts</code></h3><button aria-label="Not Viewed" aria-pressed="false">Viewed</button></div>`,
-    'text/html',
-  );
-  const header = parsed.body.firstElementChild;
-  if (header !== null) region.append(document.importNode(header, true));
-  return region;
-}
-
 function takeRebuilt(
   pending: Map<string, number>,
   added: Set<string>,
@@ -361,11 +295,10 @@ function watchCounts(): {
   document.addEventListener('diffseek-reconciled', (): void => {
     if (!ignoring) counts.reconciles += 1;
   });
-  const pendingTree = new Map<string, number>();
-  const pendingPanels = new Map<string, number>();
+  const pending = { panel: new Map<string, number>(), tree: new Map<string, number>() };
   const observer = new MutationObserver((records): void => {
     if (ignoring) return;
-    absorbRecords(records, counts, pendingTree, pendingPanels);
+    absorbRecords(records, counts, pending);
   });
   observer.observe(document.documentElement, {
     attributes: true,

@@ -1,3 +1,5 @@
+import { type PageSnapshot, scanPage } from './page-adapter';
+
 export function parseFragment(html: string): DocumentFragment {
   const parsed = new DOMParser().parseFromString(html, 'text/html');
   const fragment = document.createDocumentFragment();
@@ -11,9 +13,17 @@ export function replaceBody(html: string): void {
   document.body.replaceChildren(parseFragment(html));
 }
 
-export function replaceDocument(html: string): void {
+export function replaceDocument(html: string, root = document): void {
   const parsed = new DOMParser().parseFromString(html, 'text/html');
-  document.documentElement.replaceWith(
-    document.importNode(parsed.documentElement, true),
+  root.documentElement.replaceWith(
+    root.importNode(parsed.documentElement, true),
   );
+}
+
+export function requireSupported(
+  root = document,
+): Extract<PageSnapshot, { supported: true }> {
+  const snapshot = scanPage(root);
+  if (snapshot.supported) return snapshot;
+  throw new Error(snapshot.reason);
 }

@@ -74,7 +74,7 @@ async function rememberPulls(from: number): Promise<void> {
     await writePullCache(
       { ...repository, pull },
       sha,
-      { ...metadata, codeowners: `*.ts @p${pull}` },
+      { ...metadata, codeowners: `*.ts @p${String(pull)}` },
     );
   }
 }

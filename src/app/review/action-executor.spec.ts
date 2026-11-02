@@ -38,9 +38,9 @@ async function cancelsQueuedCommands(): Promise<void> {
       reviewKey,
       snapshot,
     }),
-    markFiles: (_snapshot, paths, _viewed, options): Promise<ActionResult> =>
+    markFiles: (_snapshot, paths, options): Promise<ActionResult> =>
       new Promise((resolve) => {
-        options?.signal?.addEventListener('abort', (): void => {
+        options.signal?.addEventListener('abort', (): void => {
           resolve(marked(paths, []));
         }, { once: true });
       }),
@@ -84,8 +84,8 @@ async function preservesCommandOrder(): Promise<void> {
         ? { generation: 0, reviewKey, snapshot }
         : null;
     },
-    markFiles: (snapshot, paths, viewed): Promise<ActionResult> =>
-      markViewed(snapshot, paths, viewed, { timeoutMs: 50 }),
+    markFiles: (snapshot, paths, { viewed }): Promise<ActionResult> =>
+      markViewed(snapshot, paths, { timeoutMs: 50, viewed }),
   });
   const mark = executor.enqueue(command([appPath], true));
   const unmark = executor.enqueue(command([appPath], false));
@@ -119,11 +119,11 @@ async function skipsSupersededPath(): Promise<void> {
   const firstPending = Promise.withResolvers<undefined>();
   const firstCall = Promise.withResolvers<undefined>();
   const seen: { signal?: AbortSignal } = {};
-  const markFiles = vi.fn<MarkFiles>(async (_snapshot, paths, _viewed, options): Promise<ActionResult> => {
-    if (options?.signal !== undefined) seen.signal = options.signal;
+  const markFiles = vi.fn<MarkFiles>(async (_snapshot, paths, options): Promise<ActionResult> => {
+    if (options.signal !== undefined) seen.signal = options.signal;
     return holdFirstPath(firstPending.promise, (): void => {
       firstCall.resolve(undefined);
-    })(_snapshot, paths, true, options);
+    })(_snapshot, paths, options);
   });
   const executor = new ViewedActionExecutor({
     current: (): { generation: number; reviewKey: string; snapshot: SupportedSnapshot } => ({
@@ -135,8 +135,9 @@ async function skipsSupersededPath(): Promise<void> {
   });
   const result = executor.enqueue(command([appPath, newPath], true));
   await firstCall.promise;
-  expect(markFiles).toHaveBeenCalledExactlyOnceWith(snapshot, [appPath], true, {
+  expect(markFiles).toHaveBeenCalledExactlyOnceWith(snapshot, [appPath], {
     signal: seen.signal,
+    viewed: true,
   });
   executor.invalidate(newPath);
   firstPending.resolve(undefined);
@@ -145,8 +146,9 @@ async function skipsSupersededPath(): Promise<void> {
     failed: [],
     requested: 2,
   });
-  expect(markFiles).toHaveBeenCalledExactlyOnceWith(snapshot, [appPath], true, {
+  expect(markFiles).toHaveBeenCalledExactlyOnceWith(snapshot, [appPath], {
     signal: seen.signal,
+    viewed: true,
   });
 }
 
@@ -170,8 +172,8 @@ async function waitsForPaint(): Promise<void> {
     await painted.promise;
   });
   const seen: { signal?: AbortSignal } = {};
-  const markFiles = vi.fn<MarkFiles>((_snapshot, _paths, _viewed, options): Promise<ActionResult> => {
-    if (options?.signal !== undefined) seen.signal = options.signal;
+  const markFiles = vi.fn<MarkFiles>((_snapshot, _paths, options): Promise<ActionResult> => {
+    if (options.signal !== undefined) seen.signal = options.signal;
     return Promise.resolve(marked([appPath]));
   });
   const executor = new ViewedActionExecutor({
@@ -190,7 +192,8 @@ async function waitsForPaint(): Promise<void> {
   expect(markFiles).not.toHaveBeenCalled();
   painted.resolve(undefined);
   await result;
-  expect(markFiles).toHaveBeenCalledExactlyOnceWith(snapshot, [appPath], true, {
+  expect(markFiles).toHaveBeenCalledExactlyOnceWith(snapshot, [appPath], {
     signal: seen.signal,
+    viewed: true,
   });
 }

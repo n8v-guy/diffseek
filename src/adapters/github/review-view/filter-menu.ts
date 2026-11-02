@@ -83,7 +83,7 @@ function appendCount(row: HTMLElement, options: MenuRowModel): void {
   }
   const counter = document.createElement('span');
   counter.className = menuCountClass;
-  counter.textContent = `${options.visible}/${options.total}`;
+  counter.textContent = `${String(options.visible)}/${String(options.total)}`;
   row.append(counter);
 }
 

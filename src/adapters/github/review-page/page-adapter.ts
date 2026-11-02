@@ -38,12 +38,12 @@ export type PageSnapshot =
       supported: false;
     };
 
+type PageFiles = Pick<SupportedSnapshot, 'files' | 'unavailable'>;
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 export function bindSnapshot(
   root: Document,
-  files: FileRecord[],
-  unavailable: Map<string, string>,
+  { files, unavailable }: PageFiles,
   regions = indexRegions(root),
 ): SupportedSnapshot {
   const region = (path: string): HTMLElement | null =>
@@ -105,13 +105,12 @@ export function regionStructureKey(root: Document): string {
 export function scanPage(root: Document): PageSnapshot {
   const tree = root.querySelector<HTMLElement>(fileTreeSelector);
   if (!tree) return { reason: 'No file tree on this page', supported: false };
-  const files: FileRecord[] = [];
-  const unavailable = new Map<string, string>();
+  const page: PageFiles = { files: [], unavailable: new Map() };
   const regions = indexRegions(root);
   for (const treeItem of tree.querySelectorAll<HTMLElement>(treeItemSelector)) {
-    readTreeItem(treeItem, regions.byId, files, unavailable);
+    readTreeItem(treeItem, regions.byId, page);
   }
-  return bindSnapshot(root, files, unavailable, regions);
+  return bindSnapshot(root, page, regions);
 }
 
 /** Tree membership + per-row href/status. Region hydration must not invalidate this. */
@@ -158,50 +157,6 @@ function displayedPathOf(region: HTMLElement): string | undefined {
   const text = region.querySelector('h3 code')?.textContent;
   if (text === undefined) return undefined;
   return text.replaceAll(bidirectionalMarks, '');
-}
-
-function fileRecord(
-  treeItem: HTMLElement,
-  anchor: `diff-${string}`,
-  status: ChangeStatus,
-  region: HTMLElement | undefined,
-): FileRecord {
-  if (!isReviewRegion(region)) {
-    return {
-      anchor,
-      capabilities: { collapse: false, viewed: false },
-      extension: extensionOf(treeItem.id),
-      generated: false,
-      labels: [],
-      owners: [],
-      path: treeItem.id,
-      status,
-      viewed: false,
-    };
-  }
-  const viewedButton = headerButton(
-    region,
-    (button) => viewedControlState(button) !== null,
-  );
-  const collapseButton = headerButton(
-    region,
-    (button) => fileToggleAction(button) !== null,
-  );
-  return {
-    anchor,
-    capabilities: {
-      collapse: collapseButton !== undefined,
-      viewed: viewedButton !== undefined,
-    },
-    extension: extensionOf(treeItem.id),
-    generated: false,
-    labels: [],
-    owners: ownersOf(region),
-    path: treeItem.id,
-    status,
-    viewed:
-      viewedButton !== undefined && viewedControlState(viewedButton) === true,
-  };
 }
 
 function headerButton(
@@ -261,8 +216,7 @@ function ownersOf(region: HTMLElement): string[] {
 function readTreeItem(
   treeItem: HTMLElement,
   regionsById: Map<string, HTMLElement[]>,
-  files: FileRecord[],
-  unavailable: Map<string, string>,
+  { files, unavailable }: PageFiles,
 ): void {
   const link = [...treeItem.querySelectorAll<HTMLAnchorElement>(diffAnchorSelector)].find(
     (candidate) =>
@@ -279,9 +233,19 @@ function readTreeItem(
     unavailable.set(treeItem.id, incompleteDiff);
     return;
   }
-  const matches = regionsById.get(anchor) ?? [];
-  const region = matches.length === 1 ? matches[0] : undefined;
-  files.push(fileRecord(treeItem, anchor, status, region));
+  const file: FileRecord = {
+    anchor,
+    capabilities: { collapse: false, viewed: false },
+    extension: extensionOf(treeItem.id),
+    generated: false,
+    labels: [],
+    owners: [],
+    path: treeItem.id,
+    status,
+    viewed: false,
+  };
+  refreshFile(regionsById, file);
+  files.push(file);
 }
 
 function refreshFile(

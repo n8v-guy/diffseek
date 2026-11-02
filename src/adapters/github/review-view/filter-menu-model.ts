@@ -89,12 +89,7 @@ function choiceRow(
     ...(details.projections.get(details.value) ?? emptyProjection()),
     excluded: details.excluded,
     facet: definition.facet,
-    label: displayLabel(
-      definition.label(details.value),
-      details.value,
-      definition.facet,
-      details.ownerPrefix,
-    ),
+    label: displayLabel(definition, details.value, details.ownerPrefix),
     onChange: options.onChange,
     ...(options.onViewed !== undefined && { onViewed: options.onViewed }),
     ...((details.values.length > 1) && { onlyValues: details.values }),
@@ -103,13 +98,13 @@ function choiceRow(
 }
 
 function displayLabel(
-  label: string,
+  definition: FacetDefinition,
   value: string,
-  facet: LabelFacet,
   ownerPrefix: null | string,
 ): string {
+  const label = definition.label(value);
   if (
-    facet === 'owners' &&
+    definition.facet === 'owners' &&
     value !== unmappedOwner &&
     ownerPrefix !== null &&
     ownerPrefix !== '' &&

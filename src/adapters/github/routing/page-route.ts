@@ -40,7 +40,7 @@ export function reviewFromPath(pathname: string): null | ReviewRef {
   if (!parts) return null;
   const pull = Number(parts.pull);
   return {
-    key: `${parts.owner}/${parts.repo}#${pull}`,
+    key: `${parts.owner}/${parts.repo}#${String(pull)}`,
     owner: parts.owner,
     pull,
     repo: parts.repo,

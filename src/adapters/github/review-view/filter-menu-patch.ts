@@ -105,32 +105,23 @@ function patchViewed(rowElement: HTMLElement, row: MenuRowModel): boolean {
   );
   const onViewed = row.onViewed;
   if (row.paths.length > 0 && onViewed) {
-    return patchViewedActions(row, onViewed, countAction, viewedAction);
+    if (!countAction || !viewedAction) return false;
+    const actionOptions = {
+      counted: row.counted,
+      disabled: row.disabled === true,
+      facet: row.facet,
+      onViewed,
+      paths: row.paths,
+      value: row.value,
+      viewedCount: row.viewedCount,
+    };
+    setCount(countAction, row);
+    configureViewedAction(countAction, actionOptions);
+    configureViewedAction(viewedAction, actionOptions);
+    return true;
   }
   if (countAction || viewedAction || !counter) return false;
   setCount(counter, row);
-  return true;
-}
-
-function patchViewedActions(
-  row: MenuRowModel,
-  onViewed: (viewed: boolean, paths: string[]) => void,
-  countAction: HTMLButtonElement | null,
-  viewedAction: HTMLButtonElement | null,
-): boolean {
-  if (!countAction || !viewedAction) return false;
-  const actionOptions = {
-    counted: row.counted,
-    disabled: row.disabled === true,
-    facet: row.facet,
-    onViewed,
-    paths: row.paths,
-    value: row.value,
-    viewedCount: row.viewedCount,
-  };
-  setCount(countAction, row);
-  configureViewedAction(countAction, actionOptions);
-  configureViewedAction(viewedAction, actionOptions);
   return true;
 }
 
@@ -163,6 +154,6 @@ function sectionShortcutMatches(
 }
 
 function setCount(element: HTMLElement, row: MenuRowModel): void {
-  const count = `${row.visible}/${row.total}`;
+  const count = `${String(row.visible)}/${String(row.total)}`;
   if (element.textContent !== count) element.textContent = count;
 }

@@ -30,7 +30,7 @@ export async function fetchRawFile(
   });
   if (response.status === notFoundStatus) return { status: 'missing' };
   if (!response.ok) {
-    throw new Error(`Raw file request failed with ${response.status}`);
+    throw new Error(`Raw file request failed with ${String(response.status)}`);
   }
   return {
     contentType: response.headers.get('content-type'),

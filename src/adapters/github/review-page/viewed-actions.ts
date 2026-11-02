@@ -4,7 +4,6 @@ import {
   emptyFacetExclusions,
   type FileRecord,
   fileViewedLabel,
-  type FilterState,
   includeCountedFiles,
   ReviewIndex,
   scopeAriaPressed,
@@ -36,18 +35,11 @@ export interface ActionResult {
 /** What a viewed batch covers; picks the toast wording. */
 export type ViewedTarget = 'auto-view' | 'category' | 'file' | 'folder';
 
-interface DocumentOwner {
-  ownerDocument: unknown;
-}
-
-interface ElementHost {
-  Element: unknown;
-}
-
 interface MarkOptions {
   onProgress?: (completed: number, requested: number) => void;
   signal?: AbortSignal;
   timeoutMs?: number;
+  viewed: boolean;
 }
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
@@ -58,10 +50,6 @@ interface ViewedWait {
   signal?: AbortSignal;
   timeoutMs: number;
   viewed: boolean;
-}
-
-interface ViewOwner {
-  defaultView: unknown;
 }
 
 /**
@@ -86,8 +74,7 @@ export function clearViewedAction(anchor: Element): void {
 export async function markViewed(
   snapshot: SupportedSnapshot,
   paths: string[],
-  viewed: boolean,
-  options: MarkOptions = {},
+  options: MarkOptions,
 ): Promise<ActionResult> {
   const result: ActionResult = {
     completed: [],
@@ -96,7 +83,7 @@ export async function markViewed(
   };
   for (const path of paths) {
     if (options.signal?.aborted === true) break;
-    await markPath(snapshot, path, viewed, { options, result });
+    await markPath(snapshot, path, { options, result });
   }
   return result;
 }
@@ -104,8 +91,7 @@ export async function markViewed(
 export function mountViewedActions(
   snapshot: SupportedSnapshot,
   onAction: (target: ViewedTarget, viewed: boolean, paths: string[]) => void,
-  index = new ReviewIndex(snapshot.files),
-  filters: FilterState = emptyFacetExclusions(),
+  { filters = emptyFacetExclusions(), index = new ReviewIndex(snapshot.files) } = {},
 ): void {
   const tree = snapshot.tree();
   if (!tree) return;
@@ -123,21 +109,27 @@ export function mountViewedActions(
     const anchor = iconAnchor(item);
     if (!anchor) continue;
     stale.delete(anchor);
-    bindViewedAnchor(anchor, bucket, file !== undefined, onAction);
+    const target = file ? 'file' : 'folder';
+    const viewed = bindViewedAnchor(anchor, bucket, target);
+    const paths = bucketActionPaths(bucket);
+    actionHandlers.set(anchor, () => {
+      onAction(target, viewed, paths);
+    });
   }
   for (const anchor of stale) clearViewedAction(anchor);
 }
 
+/** Returns the viewed state a click on the anchor requests. */
 function bindViewedAnchor(
   anchor: HTMLElement,
   bucket: CountBucket,
-  file: boolean,
-  onAction: (target: ViewedTarget, viewed: boolean, paths: string[]) => void,
-): void {
+  target: 'file' | 'folder',
+): boolean {
   if (!anchor.classList.contains(viewedActionClass)) {
     anchor.classList.add(viewedActionClass);
   }
   setAttribute(anchor, viewedActionAttribute, 'true');
+  const file = target === 'file';
   const label = file
     ? fileViewedLabel(bucket.viewed === bucket.counted)
     : scopeViewedLabel(bucket.viewed, bucket.counted);
@@ -146,11 +138,7 @@ function bindViewedAnchor(
   setAttribute(anchor, ariaPressed, pressed);
   setAttribute(anchor, titleAttribute, label);
   anchor.classList.toggle(viewedPartialClass, pressed === 'mixed');
-  const paths = bucketActionPaths(bucket);
-  const marking = pressed !== 'true';
-  actionHandlers.set(anchor, () => {
-    onAction(file ? 'file' : 'folder', marking, paths);
-  });
+  return pressed !== 'true';
 }
 
 function fileBucket(
@@ -178,44 +166,29 @@ function iconAnchor(item: HTMLElement): HTMLElement | null {
   return anchor;
 }
 
-function isDocumentOwner(target: object): target is DocumentOwner {
-  return 'ownerDocument' in target;
-}
-
-function isElementConstructor(value: unknown): value is typeof Element {
-  return typeof value === 'function';
-}
-
-function isElementHost(value: unknown): value is ElementHost {
-  return typeof value === 'object' && value !== null && 'Element' in value;
-}
-
-function isPageElement(target: EventTarget | null): target is Element {
-  const ElementType = pageElementConstructor(target);
-  return ElementType !== undefined && target instanceof ElementType;
-}
-
 function isViewed(button: HTMLButtonElement): boolean {
   return viewedControlState(button) === true;
-}
-
-function isViewOwner(value: unknown): value is ViewOwner {
-  return typeof value === 'object' && value !== null && 'defaultView' in value;
 }
 
 function listenForViewedActions(document: Document): void {
   if (listeningDocuments.has(document)) return;
   listeningDocuments.add(document);
-  document.addEventListener('click', onViewedActionClick, { capture: true });
+  document.addEventListener(
+    'click',
+    (event) => {
+      onViewedActionClick(event, document);
+    },
+    { capture: true },
+  );
 }
 
 async function markPath(
   snapshot: SupportedSnapshot,
   path: string,
-  viewed: boolean,
   attempt: { options: MarkOptions; result: ActionResult },
 ): Promise<void> {
   const { options, result } = attempt;
+  const { viewed } = options;
   const resolveButton = (): HTMLButtonElement | null =>
     snapshot.viewedControl(path);
   const button = resolveButton();
@@ -255,9 +228,10 @@ async function markPath(
   );
 }
 
-function onViewedActionClick(event: MouseEvent): void {
+function onViewedActionClick(event: MouseEvent, document: Document): void {
   const target = event.target;
-  if (!isPageElement(target)) return;
+  const ElementType = document.defaultView?.Element;
+  if (!ElementType || !(target instanceof ElementType)) return;
   const anchor = target.closest(viewedActionSelector);
   if (!anchor) return;
   const handler = actionHandlers.get(anchor);
@@ -266,22 +240,6 @@ function onViewedActionClick(event: MouseEvent): void {
   event.stopPropagation();
   event.stopImmediatePropagation();
   handler();
-}
-
-function pageElementConstructor(
-  target: EventTarget | null,
-): typeof Element | undefined {
-  if (
-    target === null ||
-    typeof target !== 'object' ||
-    !isDocumentOwner(target) ||
-    !isViewOwner(target.ownerDocument)
-  ) {
-    return undefined;
-  }
-  const view = target.ownerDocument.defaultView;
-  if (!isElementHost(view) || !isElementConstructor(view.Element)) return undefined;
-  return view.Element;
 }
 
 function pressedValue(file: boolean, bucket: CountBucket): string {

@@ -57,7 +57,7 @@ describe('review snackbar copy', () => {
     const failed = { completed: [], failed: ['a.ts'], requested: 1 };
     const shown: string[] = [];
     const targets = ['file', 'folder', 'category', 'auto-view'] as const;
-    for (const target of targets) recordTarget(target, done, failed, shown);
+    for (const target of targets) recordTarget({ done, failed, shown, target });
 
     expect(shown).toStrictEqual([
       'File marked viewed',
@@ -97,31 +97,21 @@ interface BatchSample {
   requested: number;
 }
 
-function recordOutcome(sample: {
+function recordTarget(sample: {
   done: BatchSample;
   failed: BatchSample;
   shown: string[];
   target: ViewedTarget;
-  viewed: boolean;
 }): void {
-  if (showBatchStarted(document, sample.target, sample.viewed)) {
-    noteShown(sample.shown);
-  }
-  showBatchResult(document, sample.target, sample.viewed, sample.done);
-  noteShown(sample.shown);
-  showBatchResult(document, sample.target, sample.viewed, sample.failed);
-  noteShown(sample.shown);
-}
-
-function recordTarget(
-  target: ViewedTarget,
-  done: BatchSample,
-  failed: BatchSample,
-  shown: string[],
-): void {
-  const viewedStates = target === 'auto-view' ? [true] : [true, false];
+  const viewedStates = sample.target === 'auto-view' ? [true] : [true, false];
   for (const viewed of viewedStates) {
-    recordOutcome({ done, failed, shown, target, viewed });
+    if (showBatchStarted(document, sample.target, viewed)) {
+      noteShown(sample.shown);
+    }
+    showBatchResult(document, sample.target, viewed, sample.done);
+    noteShown(sample.shown);
+    showBatchResult(document, sample.target, viewed, sample.failed);
+    noteShown(sample.shown);
   }
 }
 
