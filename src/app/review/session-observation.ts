@@ -73,6 +73,10 @@ export function syncViewedLabels(files: FileRecord[]): void {
   }
 }
 
+function compareText(left: string, right: string): number {
+  return left.localeCompare(right);
+}
+
 export function projectionKeyFor(options: {
   metadataRevision: number;
   metadata: RepositoryMetadata;
@@ -83,11 +87,11 @@ export function projectionKeyFor(options: {
   files: readonly FileRecord[];
 }): string {
   const filters = [...options.filters.entries()]
-    .map(([facet, values]) => `${facet}:${[...values].sort().join(',')}`)
+    .map(([facet, values]) => `${facet}:${[...values].sort(compareText).join(',')}`)
     .join('|');
   const defaults = [
-    `hidden:${[...options.filterDefaults.hidden].sort().join(',')}`,
-    `viewed:${[...options.filterDefaults.viewed].sort().join(',')}`,
+    `hidden:${[...options.filterDefaults.hidden].sort(compareText).join(',')}`,
+    `viewed:${[...options.filterDefaults.viewed].sort(compareText).join(',')}`,
   ].join('/');
   const files = options.files
     .map((file) =>
@@ -156,7 +160,7 @@ export function watchObservationRoots(options: {
   }
   const candidates: Element[] = [];
   const tree = options.root.querySelector(
-    '[role="tree"][aria-label="File Tree"]',
+    fileTreeSelector,
   );
   if (tree) candidates.push(tree);
   for (const menu of filterMenus(options.root)) candidates.push(menu);
@@ -173,7 +177,7 @@ export function watchObservationRoots(options: {
     const sharedParent = sharedRegionParent(regions, options.root);
     if (sharedParent) {
       candidates.push(sharedParent);
-    } else if (regions.length <= 40) {
+    } else if (regions.length <= perRegionObserverLimit) {
       candidates.push(...regions);
     }
   }
@@ -194,7 +198,7 @@ export function watchObservationRoots(options: {
     options.observedRoots.add(candidate);
   }
   const filterButton = options.root.querySelector<HTMLElement>(
-    'button[aria-label="Filter options"]',
+    `button[${ariaLabelAttribute}="${filterOptionsLabel}"]`,
   );
   if (filterButton && !options.observedRoots.has(filterButton)) {
     options.observer.observe(filterButton, {
@@ -255,6 +259,13 @@ export type PanelReconcileSchedule = {
 
 const ariaLabelAttribute = 'aria-label';
 const labelledByAttribute = 'aria-labelledby';
+const filterOptionsLabel = 'Filter options';
+const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
+const diffHeaderSelector = '[data-diff-header-wrapper="true"]';
+/** Above this many diff regions, watch one shared parent instead of each panel. */
+const perRegionObserverLimit = 40;
+/** Diff panels are large. Only small overlays can be an unlabelled menu shell. */
+const overlayChildLimit = 8;
 
 const controlLabels = new Set([
   'Viewed',
@@ -264,10 +275,10 @@ const controlLabels = new Set([
 ]);
 
 const structuralSelector = [
-  '[role="tree"][aria-label="File Tree"]',
+  fileTreeSelector,
   '[role="treeitem"]',
   '[role="region"][id^="diff-"]',
-  '[data-diff-header-wrapper="true"]',
+  diffHeaderSelector,
   'button[aria-label="Viewed"]',
   'button[aria-label="Not Viewed"]',
   'button[aria-label="Collapse file"]',
@@ -360,7 +371,7 @@ function isImmediateRecord(record: MutationRecord): boolean {
   const label = button.getAttribute(ariaLabelAttribute) ?? '';
   return (
     controlLabels.has(label) ||
-    button.closest('[data-diff-header-wrapper="true"]') != null
+    button.closest(diffHeaderSelector) != null
   );
 }
 
@@ -382,7 +393,7 @@ function isCoalescedRecord(record: MutationRecord): boolean {
     return true;
   }
   return (
-    target.closest('button')?.closest('[data-diff-header-wrapper="true"]') !=
+    target.closest('button')?.closest(diffHeaderSelector) !=
     null
   );
 }
@@ -403,12 +414,12 @@ function isFilterOptionsButton(target: Element): boolean {
   const button =
     target instanceof HTMLButtonElement ? target : target.closest('button');
   if (!(button instanceof HTMLButtonElement)) return false;
-  if (button.getAttribute(ariaLabelAttribute) === 'Filter options') return true;
+  if (button.getAttribute(ariaLabelAttribute) === filterOptionsLabel) return true;
   const labelledBy = button.getAttribute(labelledByAttribute);
   if (!labelledBy) return false;
   return labelledBy.split(/\s+/).some(
     (id) =>
-      button.ownerDocument.getElementById(id)?.textContent === 'Filter options',
+      button.ownerDocument.getElementById(id)?.textContent === filterOptionsLabel,
   );
 }
 
@@ -416,7 +427,7 @@ function containsFilterMenu(node: Node): boolean {
   if (!(node instanceof Element)) return false;
   if (isFilterMenuElement(node) || node.matches('[role="menu"]')) return true;
   // Diff panels are large. Only small overlays can be an unlabelled menu shell.
-  if (node.childElementCount > 8) return false;
+  if (node.childElementCount > overlayChildLimit) return false;
   return node.querySelector('[role="menu"]') != null;
 }
 
@@ -425,7 +436,7 @@ function isTreeContainerRecord(record: MutationRecord): boolean {
   return [...record.addedNodes, ...record.removedNodes].some(
     (node) =>
       node instanceof Element &&
-      node.matches('[role="tree"][aria-label="File Tree"]'),
+      node.matches(fileTreeSelector),
   );
 }
 
@@ -433,7 +444,7 @@ function isFilterMenuElement(node: Node): boolean {
   return (
     node instanceof Element &&
     node.getAttribute('role') === 'menu' &&
-    (node.getAttribute(ariaLabelAttribute) === 'Filter options' ||
+    (node.getAttribute(ariaLabelAttribute) === filterOptionsLabel ||
       node.hasAttribute(labelledByAttribute))
   );
 }

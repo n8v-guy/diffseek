@@ -13,11 +13,7 @@ import {
   projectFacet,
 } from '@diffseek/review';
 
-export type FilterMenuOptions = {
-  files: FileRecord[];
-  filters: FilterState;
-  filterDefaults?: FilterDefaults;
-  generatedDefaultBusy?: boolean;
+type MenuActions = {
   onChange: () => void;
   onFilterDefaultChange?: (
     facet: RememberedFilterFacet,
@@ -27,7 +23,14 @@ export type FilterMenuOptions = {
   onViewed?: (viewed: boolean, paths: string[]) => void;
 };
 
-export type MenuRowModel = {
+export type FilterMenuOptions = MenuActions & {
+  files: FileRecord[];
+  filters: FilterState;
+  filterDefaults?: FilterDefaults;
+  generatedDefaultBusy?: boolean;
+};
+
+export type MenuRowModel = MenuActions & {
   facet: LabelFacet;
   label: string;
   paths: string[];
@@ -40,13 +43,6 @@ export type MenuRowModel = {
   onlyValues?: string[];
   filterDefaults?: FilterDefaults;
   disabled?: boolean;
-  onChange: () => void;
-  onFilterDefaultChange?: (
-    facet: RememberedFilterFacet,
-    state: FilterDefaultState,
-  ) => void;
-  onAlwaysReadChange?: (enabled: boolean) => void;
-  onViewed?: (viewed: boolean, paths: string[]) => void;
 };
 
 export type MenuSectionModel = {
@@ -67,11 +63,7 @@ export function menuRowModels(options: FilterMenuOptions): MenuSectionModel[] {
           label: 'Viewed files',
           value: 'true',
           excluded: selection(options.filters, 'viewed'),
-          filterDefaults: options.filterDefaults,
-          onChange: options.onChange,
-          onFilterDefaultChange: options.onFilterDefaultChange,
-          onAlwaysReadChange: options.onAlwaysReadChange,
-          onViewed: options.onViewed,
+          ...sharedRowFields(options),
         },
       ],
     },
@@ -90,12 +82,8 @@ export function menuRowModels(options: FilterMenuOptions): MenuSectionModel[] {
           label: 'Generated files',
           value: 'true',
           excluded: selection(options.filters, 'generated'),
-          filterDefaults: options.filterDefaults,
           disabled: options.generatedDefaultBusy === true,
-          onChange: options.onChange,
-          onFilterDefaultChange: options.onFilterDefaultChange,
-          onAlwaysReadChange: options.onAlwaysReadChange,
-          onViewed: options.onViewed,
+          ...sharedRowFields(options),
         },
       ],
     });
@@ -135,14 +123,32 @@ export function menuRowModels(options: FilterMenuOptions): MenuSectionModel[] {
         ),
         value,
         excluded,
-        onlyValues: values.length > 1 ? values : undefined,
+        ...(values.length > 1 ? { onlyValues: values } : {}),
         onChange: options.onChange,
-        onViewed: options.onViewed,
+        ...(options.onViewed !== undefined ? { onViewed: options.onViewed } : {}),
       });
     }
     sections.push({ heading: definition.heading, rows });
   }
   return sections;
+}
+
+function sharedRowFields(options: FilterMenuOptions): MenuActions & {
+  filterDefaults?: FilterDefaults;
+} {
+  return {
+    onChange: options.onChange,
+    ...(options.filterDefaults !== undefined
+      ? { filterDefaults: options.filterDefaults }
+      : {}),
+    ...(options.onFilterDefaultChange !== undefined
+      ? { onFilterDefaultChange: options.onFilterDefaultChange }
+      : {}),
+    ...(options.onAlwaysReadChange !== undefined
+      ? { onAlwaysReadChange: options.onAlwaysReadChange }
+      : {}),
+    ...(options.onViewed !== undefined ? { onViewed: options.onViewed } : {}),
+  };
 }
 
 function selection(filters: FilterState, facet: LabelFacet): Set<string> {

@@ -57,7 +57,7 @@ export function findStructureViolations(paths: string[]): string[] {
     if (namesakeViolation) violations.push(namesakeViolation);
   }
 
-  return violations.sort();
+  return violations.sort((left, right) => left.localeCompare(right));
 }
 
 function findNamesakeViolation(

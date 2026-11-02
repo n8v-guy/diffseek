@@ -17,7 +17,7 @@ import {
   parseStorageCookies,
   rebuildFailures,
   type LivePerfSample,
-} from './live-perf.helpers';
+} from './live-perf.support';
 
 describe('live-perf helpers', () => {
   it('recognizes extension metadata fetches only', () => {
@@ -121,7 +121,7 @@ describe('live-perf helpers', () => {
 
   it('parses storageState cookies and inline JSON secrets', () => {
     expect(isInlineStorageState('{"cookies":[]}')).toBe(true);
-    expect(isInlineStorageState('/tmp/github-storage.json')).toBe(false);
+    expect(isInlineStorageState('github-storage.json')).toBe(false);
     expect(parseInlineStorageState('{"cookies":[]}')).toEqual({ cookies: [] });
     expect(
       parseStorageCookies({

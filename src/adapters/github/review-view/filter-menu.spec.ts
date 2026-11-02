@@ -6,6 +6,12 @@ import type { FileRecord, FilterState } from '@diffseek/review';
 
 import { mountFilterMenu } from './filter-menu';
 
+function fileAt(index: number): FileRecord {
+  const record = files[index];
+  if (record === undefined) throw new Error(`missing file ${index}`);
+  return record;
+}
+
 const files: FileRecord[] = [
   {
     path: 'src/app.test.ts',
@@ -220,7 +226,7 @@ describe('mountFilterMenu', () => {
   it('adds only shortcuts exclusively to multi-item sections', () => {
     const single = menu();
     mountFilterMenu(single, {
-      files: [files[0]!],
+      files: [fileAt(0)],
       filters: filters(),
       onChange: vi.fn(),
     });
@@ -733,10 +739,10 @@ describe('generated default busy row', () => {
     };
     const busyFiles: FileRecord[] = [
       {
-        ...files[1]!,
+        ...fileAt(1),
         viewed: false,
         capabilities: { collapse: true, viewed: true },
-        labels: files[1]!.labels.filter((label) => label.facet !== 'viewed'),
+        labels: fileAt(1).labels.filter((label) => label.facet !== 'viewed'),
       },
     ];
 
@@ -852,7 +858,7 @@ describe('filter menu fallback sections', () => {
   it('hides sections whose only choice is their fallback', () => {
     const element = menu();
     const fallbackOnly: FileRecord = {
-      ...files[2]!,
+      ...fileAt(2),
       labels: fallbackLabels,
     };
 
@@ -874,9 +880,9 @@ describe('filter menu fallback sections', () => {
 
   it('shows a fallback section when another choice exists', () => {
     const element = menu();
-    const typed = files[0]!;
+    const typed = fileAt(0);
     const untyped: FileRecord = {
-      ...files[2]!,
+      ...fileAt(2),
       labels: fallbackLabels,
     };
 

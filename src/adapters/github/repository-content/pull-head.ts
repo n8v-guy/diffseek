@@ -34,6 +34,9 @@ export function pullCommitsUrl(request: PullHeadRequest): string {
     .join('/')}/pull/${request.pull}/commits`;
 }
 
+/** Failure guard only: a hung request never settles and nothing signals it. */
+const pullHeadTimeoutMs = 20_000;
+
 export async function fetchPullHead(
   input: PullHeadRequest,
   request: typeof fetch = fetch,
@@ -41,8 +44,7 @@ export async function fetchPullHead(
   const response = await request(pullCommitsUrl(input), {
     credentials: 'include',
     redirect: 'follow',
-    // Failure guard only: a hung request never settles and nothing signals it.
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(pullHeadTimeoutMs),
   });
   if (!response.ok) {
     throw new Error(`Pull head request failed with ${response.status}`);

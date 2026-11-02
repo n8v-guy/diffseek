@@ -65,12 +65,12 @@ export function loadReviewMetadata(
 }
 
 async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
-  let pullApplied = false;
+  const applied = { pull: false };
   await Promise.all([
     options
       .readPull()
       .then((metadata) => {
-        pullApplied = true;
+        applied.pull = true;
         if (!options.aborted()) options.apply(metadata);
       })
       .catch(() => undefined),
@@ -79,11 +79,11 @@ async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
       .then(async (result) => {
         if (options.aborted() || !result.changed) return;
         await options.commit(result.metadata).catch(() => false);
-        if (!pullApplied && !options.aborted()) options.apply(result.metadata);
+        if (!applied.pull && !options.aborted()) options.apply(result.metadata);
       })
       .catch(() => undefined),
   ]);
-  return pullApplied && !options.aborted();
+  return applied.pull && !options.aborted();
 }
 
 function beginMetadataRefresh(

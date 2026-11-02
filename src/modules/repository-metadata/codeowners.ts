@@ -25,7 +25,8 @@ export function parseCodeowners(source: string): CodeownersRule[] {
       continue;
     }
     const comment = tokens.findIndex((token, index) => index > 0 && token.startsWith('#'));
-    const owners = tokens.slice(1, comment === -1 ? undefined : comment);
+    const owners =
+      comment === -1 ? tokens.slice(1) : tokens.slice(1, comment);
     rules.push({ pattern, owners, matcher: compilePattern(pattern) });
   }
 

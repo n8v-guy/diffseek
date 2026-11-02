@@ -1,5 +1,4 @@
-import type { FileLabel } from '../classification/labels';
-import type { FacetExclusions } from '../filtering/facets';
+import type { FacetExclusions, FileLabel } from '../classification/label';
 
 export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
 

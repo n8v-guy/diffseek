@@ -81,7 +81,7 @@ export class ViewedActionExecutor {
     let processed = 0;
 
     for (const path of command.paths) {
-      if (controller.signal.aborted || epoch !== this.epoch) return null;
+      if (this.superseded(epoch, controller.signal)) return null;
       if (revisions.get(path) !== this.revision(path)) {
         processed += 1;
         command.onProgress?.(processed, result.requested);
@@ -102,7 +102,7 @@ export class ViewedActionExecutor {
         command.viewed,
         { signal: controller.signal },
       );
-      if (controller.signal.aborted || epoch !== this.epoch) return null;
+      if (this.superseded(epoch, controller.signal)) return null;
       if (!this.isCurrent(command)) return null;
       result.completed.push(...update.completed);
       result.failed.push(...update.failed);
@@ -112,6 +112,10 @@ export class ViewedActionExecutor {
 
     if (this.active === controller) this.active = null;
     return result;
+  }
+
+  private superseded(epoch: number, signal: AbortSignal): boolean {
+    return signal.aborted || epoch !== this.epoch;
   }
 
   private isCurrent(command: ViewedCommand): boolean {

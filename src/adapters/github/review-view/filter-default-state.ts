@@ -1,7 +1,7 @@
-import {
-  type FilterDefaults,
-  type FilterDefaultState,
-  type RememberedFilterFacet,
+import type {
+  FilterDefaults,
+  FilterDefaultState,
+  RememberedFilterFacet,
 } from '@diffseek/browser/filter-defaults';
 import type { LabelFacet } from '@diffseek/review';
 
@@ -37,10 +37,13 @@ export function applyCheckedState(
       .join('\n'),
   );
   const name = options.facet === 'generated' ? 'Generated' : 'Viewed';
+  const currentStep = cycleSteps.at(current) ?? cycleSteps[0];
+  const nextStep =
+    cycleSteps.at((current + 1) % cycleSteps.length) ?? cycleSteps[0];
   setChanged(
     item,
     'aria-label',
-    `${name}: ${cycleSteps[current]}, click for ${cycleSteps[(current + 1) % cycleSteps.length]}`,
+    `${name}: ${currentStep}, click for ${nextStep}`,
   );
 }
 

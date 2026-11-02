@@ -143,7 +143,8 @@ async function until(
             resolve();
             break;
           }
-        } while (rerun && !done);
+          // Assigned from the observer; a direct read is typed as a constant.
+        } while (Object.is(rerun, true) && Object.is(done, false));
         running = false;
       })();
     };
@@ -447,10 +448,9 @@ describe('review app lifecycle', () => {
     ).toBe('false');
 
     await nextReconcile(() => {
-      const replacement = document
-        .querySelector('[role="tree"]')
-        ?.cloneNode(true);
-      document.querySelector('[role="tree"]')?.replaceWith(replacement!);
+      const tree = document.querySelector('[role="tree"]');
+      const replacement = tree?.cloneNode(true);
+      if (tree != null && replacement != null) tree.replaceWith(replacement);
     });
     expect(document.getElementById('src/app.ts')?.hidden).toBe(true);
     app.stop();
@@ -661,7 +661,7 @@ describe('metadata refresh', () => {
   });
 
   it('does not start another metadata read while one is in flight', async () => {
-    let resolvePull: (value: typeof loaded) => void = () => undefined;
+    let resolvePull = (_value: typeof loaded): void => undefined;
     const readPull = vi.fn(
       () => new Promise<typeof loaded>((resolve) => { resolvePull = resolve; }),
     );
@@ -818,7 +818,7 @@ describe('review app reuse invariants', () => {
         (child) =>
           child instanceof HTMLElement &&
           child.dataset.diffseek !== 'filters' &&
-          !child.hidden,
+          child.hidden === false,
       ),
     ).toBe(false);
     app.stop();
@@ -1331,8 +1331,8 @@ describe('review app interactions', () => {
       [...(region?.querySelectorAll('button, p') ?? [])]
         .filter(
           (element) =>
-            element.textContent?.trim() === 'Load Diff' ||
-            element.textContent?.includes(
+            element.textContent.trim() === 'Load Diff' ||
+            element.textContent.includes(
               'Some generated files are not rendered by default',
             ),
         )

@@ -1,44 +1,48 @@
 name: Live E2E
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      head_sha:
+        description: Main commit whose CI run succeeded
+        required: true
+        type: string
 
 concurrency:
   group: live-e2e
   cancel-in-progress: false
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
-  # workflow_run fires on failure too; a fully-skipped workflow is "success".
-  gate:
-    if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion != 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "CI conclusion: ${{ github.event.workflow_run.conclusion }}" >&2
-          exit 1
-
   live:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v5
+          persist-credentials: false
+      - name: Require this main commit and a successful CI run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$HEAD_SHA" != "$RUN_SHA" ]; then
+            echo "Live E2E for ${HEAD_SHA} was dispatched from ${RUN_SHA}." >&2
+            exit 1
+          fi
+          run=$(gh run list --workflow ci.yaml --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+          gh run watch "$run" --exit-status
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: pnpm
@@ -59,8 +63,22 @@ jobs:
         run: pnpm test:e2e:live
       - name: Upload live performance numbers
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: live-perf
           path: .cache/live-perf-latest.json
           if-no-files-found: ignore
+
+  start-release:
+    needs: live
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Start the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        run: gh workflow run release.yaml --repo "$GH_REPO" --ref main -f head_sha="$HEAD_SHA"

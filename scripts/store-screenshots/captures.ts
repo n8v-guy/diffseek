@@ -127,7 +127,10 @@ export async function onlySplit(page: Page): Promise<OnlySplitCapture> {
   await waitForToasts(page);
   // The click leaves focus on the payments "only" button, and :focus-within
   // paints that row as hovered. Drop focus, so the row shows its selection only.
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
+  await page.evaluate(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+  });
   await openMenu(page);
   await page.mouse.move(2, 2);
   const afterClip = await frame(page, subjects, clipWidth, clipHeight, 4);
@@ -155,7 +158,7 @@ async function expectOnlyAllHovered(page: Page): Promise<void> {
     const payments = rows.find((row) => row.querySelector('[data-filter-value="@acme/payments"]'));
     const paymentsOnly = payments?.querySelector('.diffseek-menu-only');
     return {
-      busy: rows.filter((row) => row.matches(':hover, :focus-within')).map((row) => (row.textContent ?? '').trim()),
+      busy: rows.filter((row) => row.matches(':hover, :focus-within')).map((row) => row.textContent.trim()),
       allHovered: Boolean(all?.matches(':hover')),
       paymentsBackground: payments && getComputedStyle(payments).backgroundColor,
       paymentsOnly: paymentsOnly && getComputedStyle(paymentsOnly).opacity,
@@ -190,7 +193,8 @@ export async function viewedBadges(page: Page): Promise<ViewedBadgesCapture> {
   const folder = treeRow(page, 'web');
   const action = await ownAction(folder);
   if ((await action.getAttribute(pressed)) !== 'mixed') {
-    throw new Error(`web folder circle is ${await action.getAttribute(pressed)}, expected mixed at the 12/82 baseline`);
+    const pressedState = (await action.getAttribute(pressed)) ?? 'missing';
+    throw new Error(`web folder circle is ${pressedState}, expected mixed at the 12/82 baseline`);
   }
   await openMenu(page);
   await waitForQuiet(page);

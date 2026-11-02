@@ -1,10 +1,7 @@
-import {
-  labelFacets,
-  type FileLabel,
-  type LabelFacet,
-} from '../classification/labels';
+import type { FacetExclusions, FileLabel, LabelFacet } from '../classification/label';
+import { labelFacets } from '../classification/labels';
 
-export type FacetExclusions = Map<LabelFacet, Set<string>>;
+export type { FacetExclusions };
 
 export type FacetDefinition = {
   facet: LabelFacet;
@@ -32,7 +29,7 @@ export const facetDefinitions: FacetDefinition[] = [
     facet: 'statuses',
     heading: 'Change status',
     native: false,
-    label: (value) => `${value[0]?.toUpperCase()}${value.slice(1)}`,
+    label: (value) => `${value.charAt(0).toUpperCase()}${value.slice(1)}`,
   },
   {
     facet: 'generated',

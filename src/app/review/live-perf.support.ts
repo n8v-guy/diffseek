@@ -1,4 +1,4 @@
-import { type RedrawCounts } from './redraw-trace';
+import type { RedrawCounts } from './redraw-trace';
 
 export type { RedrawCounts };
 
@@ -319,20 +319,23 @@ function readCookie(cookie: unknown, index: number): CookieLike {
   if (typeof cookie.domain !== 'string') {
     throw new Error(`storageState cookies[${index}] is missing domain`);
   }
-  const sameSite = cookie.sameSite;
-  return {
+  const parsed: CookieLike = {
     name: cookie.name,
     value: cookie.value,
     domain: cookie.domain,
-    path: typeof cookie.path === 'string' ? cookie.path : undefined,
-    expires: typeof cookie.expires === 'number' ? cookie.expires : undefined,
-    httpOnly: typeof cookie.httpOnly === 'boolean' ? cookie.httpOnly : undefined,
-    secure: typeof cookie.secure === 'boolean' ? cookie.secure : undefined,
-    sameSite:
-      sameSite === 'Strict' || sameSite === 'Lax' || sameSite === 'None'
-        ? sameSite
-        : undefined,
   };
+  if (typeof cookie.path === 'string') parsed.path = cookie.path;
+  if (typeof cookie.expires === 'number') parsed.expires = cookie.expires;
+  if (typeof cookie.httpOnly === 'boolean') parsed.httpOnly = cookie.httpOnly;
+  if (typeof cookie.secure === 'boolean') parsed.secure = cookie.secure;
+  if (
+    cookie.sameSite === 'Strict' ||
+    cookie.sameSite === 'Lax' ||
+    cookie.sameSite === 'None'
+  ) {
+    parsed.sameSite = cookie.sameSite;
+  }
+  return parsed;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

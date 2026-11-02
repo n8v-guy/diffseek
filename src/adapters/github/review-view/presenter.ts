@@ -8,6 +8,7 @@ import { fileToggleAction, type PageSnapshot } from '../review-page/page-adapter
 
 /** How long a native click may go unanswered before it counts as ignored. */
 const ignoredClickGuardMs = 1_500;
+const expandFileLabel = 'Expand file';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 type CollapseAction = NonNullable<ReturnType<typeof fileToggleAction>>;
@@ -115,7 +116,7 @@ export class ReviewPresenter {
     }
     for (const path of owned) {
       const button = this.resolve(path);
-      if (button && fileToggleAction(button) === 'Expand file') button.click();
+      if (button && fileToggleAction(button) === expandFileLabel) button.click();
     }
     this.pending.clear();
     this.autoCollapsed.clear();
@@ -126,8 +127,8 @@ export class ReviewPresenter {
   private collapse(path: string): void {
     const button = this.resolve(path);
     if (!button) return;
-    if (fileToggleAction(button) === 'Expand file') return;
-    this.enqueue(path, 'Expand file', true);
+    if (fileToggleAction(button) === expandFileLabel) return;
+    this.enqueue(path, expandFileLabel, true);
   }
 
   private restore(path: string): void {

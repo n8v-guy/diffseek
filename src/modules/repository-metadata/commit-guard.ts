@@ -9,7 +9,11 @@ export class MetadataCommitGuard {
   private readonly revisions = new Map<string, number>();
   private readonly tails = new Map<string, Promise<unknown>>();
 
-  constructor(private readonly write: WriteMetadata) {}
+  private readonly write: WriteMetadata;
+
+  constructor(write: WriteMetadata) {
+    this.write = write;
+  }
 
   begin(repository: RepositoryRef): number {
     const key = repositoryKey(repository);

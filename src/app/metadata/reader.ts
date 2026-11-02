@@ -32,8 +32,13 @@ export async function readImmediateMetadata(
         pull: repository.pull,
       });
       if (cachedPull != null) {
-        const { sha: _sha, ...metadata } = cachedPull;
-        return metadata;
+        return {
+          codeowners: cachedPull.codeowners,
+          attributes: cachedPull.attributes,
+          ...(cachedPull.codeownersPath !== undefined
+            ? { codeownersPath: cachedPull.codeownersPath }
+            : {}),
+        };
       }
     }
     return (await readCache(repository)) ?? bundledMetadata;
@@ -131,6 +136,8 @@ async function readMetadata(
     readFirst(repository, ref, paths, request),
     readText(repository, ref, '.gitattributes', request),
   ]);
+  const codeownersPath =
+    codeowners.status === 'found' ? codeowners.path : fallback.codeownersPath;
   return {
     settled: codeowners.status !== 'failed' && attributes.status !== 'failed',
     metadata: {
@@ -138,10 +145,7 @@ async function readMetadata(
         codeowners.status === 'found' ? codeowners.text : fallback.codeowners,
       attributes:
         attributes.status === 'found' ? attributes.text : fallback.attributes,
-      codeownersPath:
-        codeowners.status === 'found'
-          ? codeowners.path
-          : fallback.codeownersPath,
+      ...(codeownersPath !== undefined ? { codeownersPath } : {}),
     },
   };
 }

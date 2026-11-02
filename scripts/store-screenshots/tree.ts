@@ -83,7 +83,8 @@ export async function ownAction(row: Locator): Promise<ElementHandle<HTMLElement
     if (element) return element;
     await row.page().waitForTimeout(200);
   }
-  throw new Error(`Viewed circle is missing on ${await row.getAttribute('id').catch(() => 'a row')}`);
+  const id = (await row.getAttribute('id').catch(() => null)) ?? 'a row';
+  throw new Error(`Viewed circle is missing on ${id}`);
 }
 
 export async function setFileViewed(page: Page, id: string, viewed: boolean): Promise<void> {

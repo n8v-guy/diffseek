@@ -1,3 +1,6 @@
+const ariaLabelAttribute = 'aria-label';
+const ariaPressedAttribute = 'aria-pressed';
+
 export type FilterShortcutOptions = {
   excluded: Set<string>;
   onChange: () => void;
@@ -25,9 +28,9 @@ export function itemOnlyAction(
   action.type = 'button';
   action.className = 'diffseek-menu-only';
   action.dataset.filterOnly = 'true';
-  action.setAttribute('aria-label', `Show only ${options.label}`);
+  action.setAttribute(ariaLabelAttribute, `Show only ${options.label}`);
   action.setAttribute(
-    'aria-pressed',
+    ariaPressedAttribute,
     String(
       onlyFocusApplied(options.value, options.values, options.excluded),
     ),
@@ -58,7 +61,7 @@ export function alwaysReadAction(options: {
   if (options.disabled) action.disabled = true;
   action.addEventListener('click', () => {
     if (action.disabled) return;
-    const enabled = action.getAttribute('aria-pressed') !== 'true';
+    const enabled = action.getAttribute(ariaPressedAttribute) !== 'true';
     setAlwaysRead(action, enabled);
     options.onToggle(enabled);
   });
@@ -66,9 +69,9 @@ export function alwaysReadAction(options: {
 }
 
 function setAlwaysRead(action: HTMLButtonElement, enabled: boolean): void {
-  action.setAttribute('aria-pressed', String(enabled));
+  action.setAttribute(ariaPressedAttribute, String(enabled));
   action.setAttribute(
-    'aria-label',
+    ariaLabelAttribute,
     enabled
       ? 'Stop marking generated files viewed'
       : 'Always mark generated files viewed',
@@ -82,7 +85,7 @@ export function sectionAllAction(
   action.type = 'button';
   action.className = 'diffseek-menu-all';
   action.dataset.filterAll = 'true';
-  action.setAttribute('aria-label', `Show all ${options.heading}`);
+  action.setAttribute(ariaLabelAttribute, `Show all ${options.heading}`);
   action.textContent = 'all';
   action.addEventListener('click', () => {
     options.excluded.clear();

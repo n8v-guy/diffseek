@@ -9,6 +9,16 @@ import {
   type Page,
 } from '@playwright/test';
 
+function presentBox(box: { x: number; y: number; width: number; height: number } | null): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  if (box == null) throw new Error('Missing DiffSeek menu geometry');
+  return box;
+}
+
 let context: BrowserContext;
 let fixtureSource = '';
 const fixturePath = resolve(
@@ -524,15 +534,16 @@ test('clears native filters before taking over the menu', async () => {
     page.locator('[data-diffseek="filters"]').boundingBox(),
     menu.boundingBox(),
   ]);
-  if (!buttonRect || !rootRect || !menuRect) {
-    throw new Error('Missing DiffSeek menu geometry');
-  }
+  const resetButton = presentBox(buttonRect);
+  const filtersRoot = presentBox(rootRect);
+  const menuBox = presentBox(menuRect);
   const resetGeometry = {
-    extendsRight: buttonRect.x + buttonRect.width > rootRect.x + rootRect.width,
-    extendsTop: buttonRect.y < rootRect.y,
+    extendsRight:
+      resetButton.x + resetButton.width > filtersRoot.x + filtersRoot.width,
+    extendsTop: resetButton.y < filtersRoot.y,
     insideMenuRight:
-      buttonRect.x + buttonRect.width <= menuRect.x + menuRect.width,
-    insideMenuTop: buttonRect.y >= menuRect.y,
+      resetButton.x + resetButton.width <= menuBox.x + menuBox.width,
+    insideMenuTop: resetButton.y >= menuBox.y,
   };
   expect(resetGeometry).toEqual({
     extendsRight: true,
@@ -561,17 +572,19 @@ test('stays idempotent through a deterministic native-extension action storm', a
   // Resolve on the events themselves: GitHub expands the file, then DiffSeek
   // collapses it again.
   await page.evaluate(() => {
-    (window as unknown as { recollapsed: Promise<void> }).recollapsed = new Promise((resolve) => {
+    (window as unknown as { recollapsed: Promise<void> }).recollapsed = new Promise((settle) => {
       let expanded = false;
       const observer = new MutationObserver(() => {
         const label = document.querySelector('#diff-app button')?.getAttribute('aria-label');
         if (label === 'Collapse file') expanded = true;
         else if (expanded && label === 'Expand file') {
           observer.disconnect();
-          resolve();
+          settle();
         }
       });
-      observer.observe(document.getElementById('diff-app')!, {
+      const root = document.getElementById('diff-app');
+      if (root == null) throw new Error('missing diff app');
+      observer.observe(root, {
         subtree: true,
         childList: true,
         attributes: true,
@@ -844,8 +857,8 @@ test('hides generated and viewed files and auto-views generated for a fresh inst
 test('applies a late gitattributes fetch on a fresh store', async () => {
   await writeFilterDefaults(null);
   let releaseAttributes = () => {};
-  const attributesReady = new Promise<void>((resolve) => {
-    releaseAttributes = resolve;
+  const attributesReady = new Promise<void>((settle) => {
+    releaseAttributes = settle;
   });
   const attributesRoute = 'https://github.com/octo/repo/raw/**/.gitattributes';
   await context.route(attributesRoute, async (route) => {

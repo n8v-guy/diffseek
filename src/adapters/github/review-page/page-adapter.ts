@@ -210,7 +210,7 @@ export function bindSnapshot(
 function displayedPathOf(region: HTMLElement): string | undefined {
   return region
     .querySelector('h3 code')
-    ?.textContent?.replace(/[\u200e\u200f\u202a-\u202e]/g, '');
+    ?.textContent.replace(/[\u200e\u200f\u202a-\u202e]/g, '');
 }
 
 function indexRegions(root: Document): {
@@ -235,7 +235,7 @@ function indexRegions(root: Document): {
 }
 
 function isDiffAnchor(value: string): value is `diff-${string}` {
-  return value.startsWith('diff-') && value.length > 5;
+  return value.startsWith('diff-') && value.length > 'diff-'.length;
 }
 
 function changeStatusOf(treeItem: HTMLElement): ChangeStatus | null {
@@ -249,7 +249,7 @@ function changeStatusOf(treeItem: HTMLElement): ChangeStatus | null {
 
 function ownersOf(region: HTMLElement): string[] {
   const tooltip = [...region.querySelectorAll<HTMLElement>('[role="tooltip"]')]
-    .map((element) => element.getAttribute('aria-label') ?? element.textContent ?? '')
+    .map((element) => element.getAttribute('aria-label') ?? element.textContent)
     .find((text) => text.trim().startsWith('Owned by'));
 
   return [...new Set(tooltip?.match(/@[\w-]+(?:\/[\w-]+)?/g) ?? [])];

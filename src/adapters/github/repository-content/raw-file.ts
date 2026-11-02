@@ -42,6 +42,7 @@ export function rawFileUrl(request: RawFileRequest): string {
 
 /** Failure guard only: a hung request never settles and nothing signals it. */
 const rawFileTimeoutMs = 20_000;
+const notFoundStatus = 404;
 
 export async function fetchRawFile(
   input: RawFileRequest,
@@ -52,7 +53,7 @@ export async function fetchRawFile(
     redirect: 'follow',
     signal: AbortSignal.timeout(rawFileTimeoutMs),
   });
-  if (response.status === 404) return { status: 'missing' };
+  if (response.status === notFoundStatus) return { status: 'missing' };
   if (!response.ok) {
     throw new Error(`Raw file request failed with ${response.status}`);
   }
