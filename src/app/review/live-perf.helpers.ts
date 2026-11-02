@@ -65,7 +65,6 @@ const reconcileBudget = 500;
 const warmRenderBudgetSeconds = 10;
 const defaultLiveSamples = 3;
 const durationFractionDigits = 3;
-const midpointDivisor = 2;
 const hotFailurePrefix = 'hot ';
 
 export function actionFailures(
@@ -229,11 +228,11 @@ export function liveSampleCount(env: NodeJS.ProcessEnv = process.env): number {
 export function median(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].toSorted((left, right) => left - right);
-  const mid = Math.floor(sorted.length / midpointDivisor);
+  const mid = Math.floor(sorted.length / 2);
   const upper = sorted[mid] ?? 0;
-  if (sorted.length % midpointDivisor === 1) return upper;
+  if (sorted.length % 2 === 1) return upper;
   const lower = sorted[mid - 1] ?? 0;
-  return Number(((lower + upper) / midpointDivisor).toFixed(durationFractionDigits));
+  return Number(((lower + upper) / 2).toFixed(durationFractionDigits));
 }
 
 /** Median timings and redraw volume. Durations are noisy; rebuilds are not. */

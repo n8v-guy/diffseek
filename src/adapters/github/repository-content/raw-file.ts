@@ -2,7 +2,6 @@ import { isRecord } from '@diffseek/browser/record';
 
 const notFoundStatus = 404;
 const rawFileTimeoutMs = 20_000;
-const repositorySegmentCount = 2;
 
 export interface RawFileRequest {
   path: string;
@@ -51,7 +50,7 @@ export function isRawFileRequest(value: unknown): value is RawFileRequest {
 }
 
 export function rawFileUrl(request: RawFileRequest): string {
-  const repository = validSegments(request.repo, repositorySegmentCount);
+  const repository = validSegments(request.repo, 2);
   const ref = validSegments(request.ref);
   const path = validSegments(request.path);
   if (repository === null || ref === null || path === null) {

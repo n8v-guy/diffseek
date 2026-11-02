@@ -1,4 +1,3 @@
-const globstarSlashWidth = 2;
 const regexpSyntax = /[\|\\\{\}\(\)\[\]^$+?.]/gv;
 
 export function globSource(pattern: string): string {
@@ -6,9 +5,9 @@ export function globSource(pattern: string): string {
   for (let index = 0; index < pattern.length; index += 1) {
     const character = pattern[index];
     if (character === '*' && pattern[index + 1] === '*') {
-      if (pattern[index + globstarSlashWidth] === '/') {
+      if (pattern[index + 2] === '/') {
         source += '(?:.*/)?';
-        index += globstarSlashWidth;
+        index += 2;
       } else {
         source += '.*';
         index += 1;

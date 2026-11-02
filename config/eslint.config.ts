@@ -67,7 +67,7 @@ export default defineConfig(
       '@typescript-eslint/explicit-function-return-type': 'error',
       '@typescript-eslint/explicit-module-boundary-types': 'error',
       '@typescript-eslint/no-import-type-side-effects': 'error',
-      '@typescript-eslint/no-magic-numbers': ['error', { ignore: [-1, 0, 1] }],
+      '@typescript-eslint/no-magic-numbers': ['error', { ignore: [-1, 0, 1, 2] }],
       '@typescript-eslint/no-shadow': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',

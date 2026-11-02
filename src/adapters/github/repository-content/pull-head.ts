@@ -2,7 +2,6 @@ import { isRecord } from '@diffseek/browser/record';
 
 const commitOidPattern = /"oid":"([0-9a-f]{40})"/gv;
 const pullHeadTimeoutMs = 20_000;
-const repositorySegmentCount = 2;
 
 export interface PullHeadRequest {
   pull: number;
@@ -41,7 +40,7 @@ export function isPullHeadRequest(value: unknown): value is PullHeadRequest {
 export function pullCommitsUrl(request: PullHeadRequest): string {
   const repository = request.repo.split('/');
   if (
-    repository.length !== repositorySegmentCount ||
+    repository.length !== 2 ||
     repository.some((segment) => !isRepositorySegment(segment)) ||
     !Number.isSafeInteger(request.pull) ||
     request.pull < 1
