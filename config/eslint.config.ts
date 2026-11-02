@@ -119,6 +119,7 @@ export default defineConfig(
       'sonarjs/no-inverted-boolean-check': 'off',
       'sonarjs/prefer-regexp-exec': 'off',
       'unicorn/consistent-boolean-name': 'off',
+      'unicorn/consistent-class-member-order': 'off',
       'unicorn/name-replacements': 'off',
       'unicorn/no-asterisk-prefix-in-documentation-comments': 'off',
       'unicorn/no-await-expression-member': 'off',
