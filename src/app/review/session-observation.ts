@@ -73,6 +73,10 @@ export function syncViewedLabels(files: FileRecord[]): void {
   }
 }
 
+function compareText(left: string, right: string): number {
+  return left.localeCompare(right);
+}
+
 export function projectionKeyFor(options: {
   metadataRevision: number;
   metadata: RepositoryMetadata;
@@ -83,11 +87,11 @@ export function projectionKeyFor(options: {
   files: readonly FileRecord[];
 }): string {
   const filters = [...options.filters.entries()]
-    .map(([facet, values]) => `${facet}:${[...values].sort((left, right) => left.localeCompare(right)).join(',')}`)
+    .map(([facet, values]) => `${facet}:${[...values].sort(compareText).join(',')}`)
     .join('|');
   const defaults = [
-    `hidden:${[...options.filterDefaults.hidden].sort((left, right) => left.localeCompare(right)).join(',')}`,
-    `viewed:${[...options.filterDefaults.viewed].sort((left, right) => left.localeCompare(right)).join(',')}`,
+    `hidden:${[...options.filterDefaults.hidden].sort(compareText).join(',')}`,
+    `viewed:${[...options.filterDefaults.viewed].sort(compareText).join(',')}`,
   ].join('/');
   const files = options.files
     .map((file) =>

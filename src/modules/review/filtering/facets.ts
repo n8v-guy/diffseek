@@ -1,10 +1,7 @@
-import {
-  labelFacets,
-  type FileLabel,
-  type LabelFacet,
-} from '../classification/labels';
+import type { FacetExclusions, FileLabel, LabelFacet } from '../classification/label';
+import { labelFacets } from '../classification/labels';
 
-export type FacetExclusions = Map<LabelFacet, Set<string>>;
+export type { FacetExclusions };
 
 export type FacetDefinition = {
   facet: LabelFacet;

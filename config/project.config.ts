@@ -3,7 +3,6 @@ export const TYPESCRIPT_SOURCE_ROOTS = [
   'entrypoints',
   'scripts',
   'src',
-  'test',
 ] as const;
 
 export const TEST_SUFFIXES = [

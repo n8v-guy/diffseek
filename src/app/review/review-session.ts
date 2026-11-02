@@ -178,10 +178,7 @@ export class ReviewSession {
     this.refreshObservationRoots();
   }
 
-  start(): void {
-    this.reconcile();
-    this.refreshMetadata();
-  }
+  start(): void { this.reconcile(); this.refreshMetadata(); }
 
   reconcile(): void {
     if (this.lifecycle.signal.aborted || this.reconciling) {
@@ -195,7 +192,8 @@ export class ReviewSession {
       do {
         this.dirty = false;
         this.reconcileOnce();
-      } while (this.reconcilePending());
+        // reconcileOnce writes these; a direct read is typed as a constant.
+      } while (Object.is(this.dirty, true) && Object.is(this.lifecycle.signal.aborted, false));
     } finally {
       this.reconciling = false;
     }
@@ -212,10 +210,6 @@ export class ReviewSession {
     this.observedRoots.clear();
     cancelPanelReconcile(this.scheduleState);
     this.clearInjected();
-  }
-
-  private reconcilePending(): boolean {
-    return this.dirty && !this.lifecycle.signal.aborted;
   }
 
   private reconcileOnce(): void {

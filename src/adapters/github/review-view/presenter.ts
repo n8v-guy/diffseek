@@ -8,7 +8,7 @@ import { fileToggleAction, type PageSnapshot } from '../review-page/page-adapter
 
 /** How long a native click may go unanswered before it counts as ignored. */
 const ignoredClickGuardMs = 1_500;
-const expandFileLabel = 'Expand file' as const;
+const expandFileLabel = 'Expand file';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 type CollapseAction = NonNullable<ReturnType<typeof fileToggleAction>>;

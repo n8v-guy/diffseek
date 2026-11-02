@@ -73,7 +73,7 @@ jobs:
           include-hidden-files: true
 
   release:
-    needs: [verify, zip]
+    needs: zip
     runs-on: ubuntu-latest
     permissions:
       contents: write

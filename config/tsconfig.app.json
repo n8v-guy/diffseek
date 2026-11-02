@@ -6,11 +6,11 @@
     "emitDeclarationOnly": true,
     "noEmit": false,
     "outDir": "../.cache/types/app",
-    "rootDir": "..",
+    "rootDir": "../src/app",
     "tsBuildInfoFile": "../.cache/types/app.tsbuildinfo",
     "types": ["node", "wxt/vite-builder-env"]
   },
-  "include": ["../src/app/**/*.ts", "../test/e2e/**/*.ts"],
+  "include": ["../src/app/**/*.ts"],
   "references": [
     { "path": "./tsconfig.modules.json" },
     { "path": "./tsconfig.adapters.json" }

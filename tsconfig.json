@@ -15,5 +15,5 @@
     },
     "types": ["node", "wxt/vite-builder-env"]
   },
-  "include": ["src", "entrypoints", "scripts", "config", "test", ".wxt/wxt.d.ts"]
+  "include": ["src", "entrypoints", "scripts", "config", ".wxt/wxt.d.ts"]
 }

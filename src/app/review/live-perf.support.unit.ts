@@ -17,7 +17,7 @@ import {
   parseStorageCookies,
   rebuildFailures,
   type LivePerfSample,
-} from './live-perf.helpers';
+} from './live-perf.support';
 
 describe('live-perf helpers', () => {
   it('recognizes extension metadata fetches only', () => {

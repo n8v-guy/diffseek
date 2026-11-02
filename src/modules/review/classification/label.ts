@@ -14,3 +14,5 @@ export type FileLabel = {
   value: string;
   fromLinguistLanguage?: boolean;
 };
+
+export type FacetExclusions = Map<LabelFacet, Set<string>>;

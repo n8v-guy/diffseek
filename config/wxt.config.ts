@@ -34,12 +34,11 @@ export default defineConfig({
           browser_specific_settings: {
             gecko: {
               id: 'diffseek@n8v.me',
-              strict_min_version: '140.0',
+              strict_min_version: '142.0',
               data_collection_permissions: {
                 required: ['none'],
               },
             },
-            gecko_android: { strict_min_version: '142.0' },
           },
         }
       : {}),

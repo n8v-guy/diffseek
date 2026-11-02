@@ -1,4 +1,4 @@
-import type { RedrawCounts } from '../../src/app/review/redraw-trace';
+import type { RedrawCounts } from './redraw-trace';
 
 export type { RedrawCounts };
 

@@ -136,7 +136,6 @@ async function until(
       }
       running = true;
       void (async () => {
-        const again = (): boolean => rerun && !done;
         do {
           rerun = false;
           if (await passes()) {
@@ -144,7 +143,8 @@ async function until(
             resolve();
             break;
           }
-        } while (again());
+          // Assigned from the observer; a direct read is typed as a constant.
+        } while (Object.is(rerun, true) && Object.is(done, false));
         running = false;
       })();
     };

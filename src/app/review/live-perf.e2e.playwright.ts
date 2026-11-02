@@ -29,8 +29,7 @@ import {
   type LivePerfSample,
   type LivePerfScenario,
   type RedrawCounts,
-} from '../../../test/e2e/live-perf.helpers';
-
+} from './live-perf.support';
 import {
   installLiveWaits,
   tagFilterButton,
