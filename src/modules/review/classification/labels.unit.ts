@@ -149,7 +149,7 @@ function file(path: string, extension: null | string): FileRecord {
 
 function fileAt(files: readonly FileRecord[], index: number): FileRecord {
   const record = files[index];
-  if (record === undefined) throw new Error(`Missing fixture file ${index}`);
+  if (record === undefined) throw new Error(`Missing fixture file ${String(index)}`);
   return record;
 }
 

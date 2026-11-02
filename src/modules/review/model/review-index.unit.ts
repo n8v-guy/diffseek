@@ -83,7 +83,7 @@ describe('ReviewIndex', () => {
     'constructs a %i-file index without quadratic growth',
     (size) => {
       const files = Array.from({ length: size }, (_, index) =>
-        file(`packages/package-${index % 25}/src/file-${index}.ts`),
+        file(`packages/package-${String(index % 25)}/src/file-${String(index)}.ts`),
       );
 
       const started = performance.now();
