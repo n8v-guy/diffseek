@@ -56,7 +56,7 @@
       "conditionNames": ["import", "types", "default"],
       "exportsFields": ["exports"]
     },
-    "tsConfig": { "fileName": "tsconfig.depcruise.json" },
+    "tsConfig": { "fileName": "tsconfig.json" },
     "tsPreCompilationDeps": true
   }
 }

@@ -1,5 +1,5 @@
 {
-  "extends": "../tsconfig.depcruise.json",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
     "erasableSyntaxOnly": true,
     "exactOptionalPropertyTypes": true

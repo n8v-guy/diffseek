@@ -16,12 +16,6 @@ import unicornPlugin from 'eslint-plugin-unicorn';
 import { configs as tseslintConfigs } from 'typescript-eslint';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
-const typecheckProjects = [
-  './config/tsconfig.modules.json',
-  './config/tsconfig.adapters.json',
-  './config/tsconfig.app.json',
-  './config/tsconfig.tooling.json',
-];
 const e2eFiles = ['**/*.e2e.playwright.ts'];
 const unitFiles = ['**/*.{test,spec,unit}.ts'];
 const testOverrides: Linter.RulesRecord = {
@@ -61,7 +55,7 @@ export default defineConfig(
   {
     languageOptions: {
       parserOptions: {
-        project: typecheckProjects,
+        projectService: true,
         tsconfigRootDir: repositoryRoot,
       },
     },
@@ -191,15 +185,10 @@ export default defineConfig(
       'unicorn/single-line-block-comment-style': 'off',
       'unicorn/try-complexity': 'error',
     },
-    settings: {
-      'import-x/resolver': {
-        typescript: {
-          alwaysTryTypes: true,
-          noWarnOnMultipleProjects: true,
-          project: typecheckProjects,
-        },
-      },
-    },
+  },
+  {
+    files: ['config/**', 'scripts/**'],
+    rules: { 'sonarjs/no-os-command-from-path': 'off' },
   },
   {
     files: ['config/eslint.config.ts'],
