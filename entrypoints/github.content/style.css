@@ -1,41 +1,36 @@
 :root {
-  --diffseek-accent: #633cbe;
-  --diffseek-background: #f0edff;
-  --diffseek-badge: #d8ccff;
-  --diffseek-border: #8250df;
-  --diffseek-dark-accent: #d2b8ff;
-  --diffseek-dark-background: #2b2146;
-  --diffseek-dark-badge: #4a376f;
-  --diffseek-dark-border: #a475f9;
-  --diffseek-dark-foreground: #e6dcff;
-  --diffseek-dark-hover: #3a2c5e;
-  --diffseek-foreground: #3b2e83;
-  --diffseek-hover: #e4dcff;
-}
-
-html {
-  container-name: diffseek-root;
+  --diffseek-if-light: initial;
+  --diffseek-if-dark: ;
 }
 
 [data-color-mode='dark'] {
-  --diffseek-scheme: dark;
+  --diffseek-if-light: ;
+  --diffseek-if-dark: initial;
 }
 
 @media (prefers-color-scheme: dark) {
   [data-color-mode='auto'] {
-    --diffseek-scheme: dark;
+    --diffseek-if-light: ;
+    --diffseek-if-dark: initial;
   }
 }
 
-@container diffseek-root style(--diffseek-scheme: dark) {
-  body {
-    --diffseek-accent: var(--diffseek-dark-accent);
-    --diffseek-background: var(--diffseek-dark-background);
-    --diffseek-badge: var(--diffseek-dark-badge);
-    --diffseek-border: var(--diffseek-dark-border);
-    --diffseek-foreground: var(--diffseek-dark-foreground);
-    --diffseek-hover: var(--diffseek-dark-hover);
-  }
+/* light-dark() needs Chrome 123. An `initial` switch keeps its fallback and
+   an empty one blanks it, so each pair resolves to one color. */
+:root,
+[data-color-mode] {
+  --diffseek-background: var(--diffseek-if-light, #f0edff)
+    var(--diffseek-if-dark, #2b2146);
+  --diffseek-foreground: var(--diffseek-if-light, #3b2e83)
+    var(--diffseek-if-dark, #e6dcff);
+  --diffseek-border: var(--diffseek-if-light, #8250df)
+    var(--diffseek-if-dark, #a475f9);
+  --diffseek-hover: var(--diffseek-if-light, #e4dcff)
+    var(--diffseek-if-dark, #3a2c5e);
+  --diffseek-badge: var(--diffseek-if-light, #d8ccff)
+    var(--diffseek-if-dark, #4a376f);
+  --diffseek-accent: var(--diffseek-if-light, #633cbe)
+    var(--diffseek-if-dark, #d2b8ff);
 }
 
 [data-diffseek='filters'] {
@@ -157,6 +152,17 @@ html {
   pointer-events: auto;
 }
 
+.diffseek-menu-only:hover,
+.diffseek-menu-all:hover {
+  background: var(--diffseek-accent);
+  color: var(--diffseek-background);
+}
+
+/* A toggle must not look pressed on hover: outline only, fill = state. */
+.diffseek-menu-always-read:hover {
+  box-shadow: inset 0 0 0 1px var(--diffseek-accent);
+}
+
 .diffseek-menu-row:hover .diffseek-menu-only,
 .diffseek-menu-row:has(:focus-visible) .diffseek-menu-only,
 .diffseek-menu-row:hover .diffseek-menu-always-read,
@@ -165,18 +171,6 @@ html {
 .diffseek-menu-section-title:has(:focus-visible) .diffseek-menu-all {
   opacity: 1;
   pointer-events: auto;
-}
-
-/* Doubled class beats the pressed rule without dropping below the row hover. */
-.diffseek-menu-only.diffseek-menu-only:hover,
-.diffseek-menu-all.diffseek-menu-all:hover {
-  background: var(--diffseek-accent);
-  color: var(--diffseek-background);
-}
-
-/* A toggle must not look pressed on hover: outline only, fill = state. */
-.diffseek-menu-always-read.diffseek-menu-always-read:hover {
-  box-shadow: inset 0 0 0 1px var(--diffseek-accent);
 }
 
 .diffseek-reset-filters {
