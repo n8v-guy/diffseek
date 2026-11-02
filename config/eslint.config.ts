@@ -129,6 +129,21 @@ export default defineConfig(
         { max: 120, skipBlankLines: true, skipComments: true },
       ],
       'max-params': ['error', 5],
+      '@typescript-eslint/no-magic-numbers': [
+        'error',
+        {
+          ignore: [-1, 0, 1, 2],
+          ignoreArrayIndexes: true,
+          ignoreDefaultValues: true,
+          ignoreEnums: true,
+          ignoreReadonlyClassProperties: true,
+          ignoreTypeIndexes: true,
+        },
+      ],
+      'sonarjs/no-duplicate-string': [
+        'error',
+        { ignoreStrings: 'aria-label,aria-pressed,Filter options' },
+      ],
     },
   },
   {
