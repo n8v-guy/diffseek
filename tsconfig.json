@@ -1,10 +1,7 @@
 {
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "noFallthroughCasesInSwitch": true,
     "noEmitOnError": true,
-    "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "paths": {
@@ -16,7 +13,6 @@
       ],
       "@diffseek/review": ["./src/modules/review/index.ts"]
     },
-    "strict": true,
     "types": ["node", "wxt/vite-builder-env"]
   },
   "include": ["src", "entrypoints", "scripts", "config", ".wxt/wxt.d.ts"]

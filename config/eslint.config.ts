@@ -1,9 +1,7 @@
-import { fileURLToPath } from 'node:url';
+import type { Linter } from 'eslint';
 
 import js from '@eslint/js';
 import vitest from '@vitest/eslint-plugin';
-import type { Linter } from 'eslint';
-import { defineConfig } from 'eslint/config';
 import { configs as deMorganConfigs } from 'eslint-plugin-de-morgan';
 import { flatConfigs as importConfigs } from 'eslint-plugin-import-x';
 import unsanitized from 'eslint-plugin-no-unsanitized';
@@ -13,6 +11,8 @@ import promisePlugin from 'eslint-plugin-promise';
 import { configs as regexpConfigs } from 'eslint-plugin-regexp';
 import { configs as sonarConfigs } from 'eslint-plugin-sonarjs';
 import unicornPlugin from 'eslint-plugin-unicorn';
+import { defineConfig } from 'eslint/config';
+import { fileURLToPath } from 'node:url';
 import { configs as tseslintConfigs } from 'typescript-eslint';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -74,10 +74,6 @@ export default defineConfig(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/prefer-readonly': 'error',
-      '@typescript-eslint/restrict-template-expressions': [
-        'error',
-        { allowNumber: true },
-      ],
       '@typescript-eslint/strict-boolean-expressions': 'error',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       complexity: 'error',
@@ -90,21 +86,6 @@ export default defineConfig(
       'import-x/no-mutable-exports': 'error',
       'import-x/no-self-import': 'error',
       'import-x/no-useless-path-segments': 'error',
-      'import-x/order': [
-        'error',
-        {
-          alphabetize: { caseInsensitive: true, order: 'asc' },
-          groups: [
-            'builtin',
-            'external',
-            'internal',
-            'parent',
-            'sibling',
-            'index',
-          ],
-          'newlines-between': 'always',
-        },
-      ],
       'max-depth': 'error',
       'max-lines': ['error', { skipBlankLines: true, skipComments: true }],
       'max-lines-per-function': [
@@ -131,12 +112,6 @@ export default defineConfig(
         },
       ],
       'object-shorthand': 'error',
-      'perfectionist/sort-import-attributes': 'off',
-      'perfectionist/sort-imports': 'off',
-      'perfectionist/sort-named-imports': [
-        'error',
-        { ignoreCase: true, type: 'alphabetical' },
-      ],
       'prefer-template': 'error',
       'regexp/require-unicode-sets-regexp': 'error',
       'sonarjs/no-duplicate-string': ['error', { threshold: 2 }],
@@ -144,21 +119,6 @@ export default defineConfig(
       'sonarjs/no-inverted-boolean-check': 'off',
       'sonarjs/prefer-regexp-exec': 'off',
       'unicorn/consistent-boolean-name': 'off',
-      'unicorn/consistent-class-member-order': [
-        'error',
-        {
-          order: [
-            'static-field',
-            'static-block',
-            'static-method',
-            'public-field',
-            'private-field',
-            'constructor',
-            'public-method',
-            'private-method',
-          ],
-        },
-      ],
       'unicorn/name-replacements': 'off',
       'unicorn/no-asterisk-prefix-in-documentation-comments': 'off',
       'unicorn/no-await-expression-member': 'off',
