@@ -1,4 +1,3 @@
-import type { PullHeadRequest } from '@diffseek/github/repository-content/pull-head';
 import type { RawFileRequest, RawFileResult } from '@diffseek/github/repository-content/raw-file';
 
 import {
@@ -34,8 +33,6 @@ interface MetadataRead {
 
 type ReadRawFile = (request: RawFileRequest) => Promise<RawFileResult>;
 
-type ResolvePullHead = (request: PullHeadRequest) => Promise<string>;
-
 type TextRead =
   | { status: 'failed' }
   | { status: 'found'; text: string }
@@ -59,8 +56,7 @@ export async function readImmediateMetadata(
 export async function readPullMetadata(
   review: RepositoryRef & { pull: number },
   fallback: RepositoryMetadata,
-  request: ReadRawFile = readRawFile,
-  resolveHead: ResolvePullHead = resolvePullHead,
+  { request = readRawFile, resolveHead = resolvePullHead } = {},
 ): Promise<RepositoryMetadata> {
   const ref = await resolveHead({
     pull: review.pull,
@@ -119,13 +115,11 @@ async function immediateOrBundled(
 }
 
 async function readFirst(
-  repository: RepositoryRef,
-  ref: string,
+  read: MetadataRead,
   paths: string[],
-  request: ReadRawFile,
 ): Promise<CodeownersRead> {
   for (const path of paths) {
-    const value = await readText(repository, ref, path, request);
+    const value = await readText(read, path);
     if (value.status === 'found') {
       return { path, status: 'found', text: value.text };
     }
@@ -143,8 +137,8 @@ async function readMetadata(
       ? [preferred, ...codeownersPaths.filter((path) => path !== preferred)]
       : codeownersPaths;
   const [codeowners, attributes] = await Promise.all([
-    readFirst(read.repository, read.ref, paths, read.request),
-    readText(read.repository, read.ref, '.gitattributes', read.request),
+    readFirst(read, paths),
+    readText(read, '.gitattributes'),
   ]);
   const codeownersPath =
     codeowners.status === 'found' ? codeowners.path : read.fallback.codeownersPath;
@@ -166,17 +160,12 @@ async function readSettled(read: MetadataRead): Promise<RepositoryMetadata> {
   return loaded.metadata;
 }
 
-async function readText(
-  repository: RepositoryRef,
-  ref: string,
-  path: string,
-  request: ReadRawFile,
-): Promise<TextRead> {
+async function readText(read: MetadataRead, path: string): Promise<TextRead> {
   try {
-    return textRead(await request({
+    return textRead(await read.request({
       path,
-      ref,
-      repo: `${repository.owner}/${repository.repo}`,
+      ref: read.ref,
+      repo: `${read.repository.owner}/${read.repository.repo}`,
     }));
   } catch {
     return { status: 'failed' };
