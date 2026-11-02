@@ -17,7 +17,7 @@ export async function handlePullHeadMessage(
   } catch (error) {
     return {
       message:
-        Error.isError(error) ? error.message : 'Pull head request failed',
+        error instanceof Error ? error.message : 'Pull head request failed',
       status: 'error',
     };
   }

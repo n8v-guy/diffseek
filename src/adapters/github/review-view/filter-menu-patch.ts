@@ -1,11 +1,5 @@
-import { dataAttribute } from '../dom-data';
-
 import { applyCheckedState } from './filter-default-state';
-import {
-  type FilterMenuOptions,
-  type MenuRowModel,
-  menuRowModels,
-} from './filter-menu-model';
+import { type FilterMenuOptions, type MenuRowModel, menuRowModels } from './filter-menu-model';
 import { hasTransientExclusions } from './filter-reset';
 import { onlyFocusApplied } from './filter-shortcuts';
 import { configureViewedAction } from './menu-viewed-action';
@@ -146,11 +140,10 @@ function rowsMatchButtons(
 ): boolean {
   if (buttons.length !== rows.length) return false;
   for (const [index, row] of rows.entries()) {
-    const button = buttons[index];
+    const button = buttons.at(index);
     if (
-      button === undefined ||
-      dataAttribute(button, 'filterKind') !== row.facet ||
-      dataAttribute(button, 'filterValue') !== row.value ||
+      button?.dataset.filterKind !== row.facet ||
+      button.dataset.filterValue !== row.value ||
       !sectionShortcutMatches(button, row)
     ) {
       return false;

@@ -2,6 +2,11 @@ name: Live E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      head_sha:
+        description: Main commit whose CI run succeeded
+        required: true
+        type: string
 
 concurrency:
   group: live-e2e
@@ -11,15 +16,58 @@ permissions: {}
 
 jobs:
   live:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
+      actions: read
       contents: read
 
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          fetch-depth: 0
           persist-credentials: false
+          ref: main
+      - name: Require this main commit and a successful CI run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$HEAD_SHA" != "$RUN_SHA" ]; then
+            echo "Live E2E for ${HEAD_SHA} was dispatched from ${RUN_SHA}." >&2
+            exit 1
+          fi
+          git fetch origin main
+          git merge-base --is-ancestor "$HEAD_SHA" origin/main
+          i=0
+          while [ "$i" -lt 60 ]; do
+            state="$(
+              gh api "repos/${GH_REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
+                | jq -r --arg sha "$HEAD_SHA" '
+                    [ .workflow_runs[]
+                      | select(.name == "CI" and .head_sha == $sha) ]
+                    | if any(.status != "completed") then "pending"
+                      elif any(.conclusion == "success") then "success"
+                      elif length == 0 then "missing"
+                      else "failure" end
+                  '
+            )"
+            if [ "$state" = "success" ]; then
+              exit 0
+            fi
+            if [ "$state" = "failure" ]; then
+              echo "CI for ${HEAD_SHA} did not succeed." >&2
+              exit 1
+            fi
+            i=$((i + 1))
+            sleep 2
+          done
+          echo "CI for ${HEAD_SHA} did not succeed in time." >&2
+          exit 1
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
@@ -58,5 +106,6 @@ jobs:
       - name: Start the release
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.sha }}
-        run: gh workflow run release.yaml --ref "$HEAD_SHA"
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        run: gh workflow run release.yaml --repo "$GH_REPO" --ref main -f head_sha="$HEAD_SHA"

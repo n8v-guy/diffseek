@@ -1,4 +1,4 @@
-import { isRecord, recordField } from '@diffseek/browser/record';
+import { isRecord } from '@diffseek/browser/record';
 
 const commitOidPattern = /"oid":"([0-9a-f]{40})"/gv;
 const pullHeadTimeoutMs = 20_000;
@@ -22,7 +22,7 @@ export async function fetchPullHead(
   if (!response.ok) {
     throw new Error(`Pull head request failed with ${response.status}`);
   }
-  const commits = (await response.text()).matchAll(commitOidPattern).toArray();
+  const commits = [...(await response.text()).matchAll(commitOidPattern)];
   const oid = commits.at(-1)?.[1];
   if (oid === undefined || oid.length === 0) {
     throw new Error('Pull head commit is unavailable');
@@ -33,8 +33,8 @@ export async function fetchPullHead(
 export function isPullHeadRequest(value: unknown): value is PullHeadRequest {
   return (
     isRecord(value) &&
-    typeof recordField(value, 'repo') === 'string' &&
-    typeof recordField(value, 'pull') === 'number'
+    typeof value.repo === 'string' &&
+    typeof value.pull === 'number'
   );
 }
 

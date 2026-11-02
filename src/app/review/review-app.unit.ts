@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
-import { dataAttribute } from '@diffseek/github/dom-data';
 import type { markViewed } from '@diffseek/github/review-page/viewed-actions';
 
 import {
@@ -335,7 +334,7 @@ async function rollsBackPresentationWhenGitHubContractsDisappear(): Promise<void
     .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
     ?.click();
   expect(
-    dataAttribute(document.getElementById('diff-app'), 'diffseekFilteredOut'),
+    (document.getElementById('diff-app'))?.dataset.diffseekFilteredOut,
   ).toBe('true');
 
   await nextReconcile(() => {
@@ -343,7 +342,7 @@ async function rollsBackPresentationWhenGitHubContractsDisappear(): Promise<void
   });
 
   expect(
-    dataAttribute(document.getElementById('diff-config'), 'diffseekFilteredOut'),
+    (document.getElementById('diff-config'))?.dataset.diffseekFilteredOut,
   ).toBeUndefined();
   expect(
     document.querySelector('#diff-config button')?.getAttribute('aria-label'),

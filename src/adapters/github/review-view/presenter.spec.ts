@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { emptyFacetExclusions } from '@diffseek/review';
 import type { FileLabel, FilterState } from '@diffseek/review';
 
-import { dataAttribute } from '../dom-data';
 import fixture from '../review-page/fixtures/github-pr.html?raw';
 import { type PageSnapshot, scanPage } from '../review-page/page-adapter';
 import { parseFragment, replaceDocument } from '../review-page/test-dom';
@@ -157,7 +156,7 @@ async function untilDom(check: () => void): Promise<void> {
     });
     const timer = setTimeout(() => {
       observer.disconnect();
-      const error = Error.isError(lastError)
+      const error = lastError instanceof Error
         ? lastError
         : new Error('untilDom: condition never held');
       reject(error);
@@ -210,7 +209,7 @@ describe('ReviewPresenter hiding', () => {
 
     expect(document.getElementById(configPath)?.hidden).toBe(false);
     expect(
-      dataAttribute(document.getElementById(diffConfig), 'diffseekFilteredOut'),
+      (document.getElementById(diffConfig))?.dataset.diffseekFilteredOut,
     ).toBeUndefined();
   });
 
@@ -236,14 +235,14 @@ describe('ReviewPresenter collapse', () => {
     const { presenter, snapshot, state } = excludingConfig();
 
     presenter.apply(snapshot, state);
-    expect(dataAttribute(document.getElementById(diffConfig), 'diffseekFilteredOut')).toBe(
+    expect((document.getElementById(diffConfig))?.dataset.diffseekFilteredOut).toBe(
       'true',
     );
     expect(buttonLabel()).toBe(expandFile);
 
     presenter.clear(snapshot);
     expect(
-      dataAttribute(document.getElementById(diffConfig), 'diffseekFilteredOut'),
+      (document.getElementById(diffConfig))?.dataset.diffseekFilteredOut,
     ).toBeUndefined();
     await untilDom(() => {
       expect(buttonLabel()).toBe(collapseFile);

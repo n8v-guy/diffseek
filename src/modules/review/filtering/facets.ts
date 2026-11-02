@@ -81,7 +81,7 @@ export function facetChoices(
       );
     }
   }
-  return sortGroup.keys().toArray().toSorted((left, right) => {
+  return [...sortGroup.keys()].toSorted((left, right) => {
     const byGroup = (sortGroup.get(left) ?? 0) - (sortGroup.get(right) ?? 0);
     return (
       byGroup ||

@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 
-import { isRecord, isUnknownArray, recordField } from './record';
+import { isRecord, isUnknownArray } from './record';
 
 const rememberedFilterFacets = ['viewed', 'generated'] as const;
 
@@ -60,7 +60,7 @@ function isRememberedFilterFacet(
 
 function storedDefaults(value: unknown): FilterDefaults {
   if (!isRecord(value)) return emptyDefaults();
-  const hiddenValue = recordField(value, 'hidden');
+  const hiddenValue = value.hidden;
   const hidden = new Set(
     isUnknownArray(hiddenValue)
       ? hiddenValue.filter(isRememberedFilterFacet)
@@ -69,7 +69,7 @@ function storedDefaults(value: unknown): FilterDefaults {
   // Older records stored mark-as-read only beside always-hide. `viewed`
   // is now the independent auto-view toggle, so that pair is read as
   // generated always-hide plus auto-view, without rewriting storage.
-  const viewedValue = recordField(value, 'viewed');
+  const viewedValue = value.viewed;
   const viewed = new Set<DefaultViewedFacet>(
     isUnknownArray(viewedValue) && viewedValue.includes('generated')
       ? ['generated']

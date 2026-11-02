@@ -18,10 +18,6 @@ export interface MetadataWatch {
   treeKey: null | string;
 }
 
-interface FlightGate {
-  flight: null | Promise<void>;
-}
-
 interface MetadataRead {
   aborted: () => boolean;
   apply: (metadata: RepositoryMetadata) => void;
@@ -97,9 +93,7 @@ function beginMetadataRefresh(
     return;
   }
   state.pending = false;
-  const gate: FlightGate = { flight: null };
-  gate.flight = runMetadataFlight(state, start, gate);
-  state.flight = gate.flight;
+  state.flight = runMetadataFlight(state, start);
 }
 
 async function commitDefault(
@@ -111,18 +105,6 @@ async function commitDefault(
   } catch {
     // The pull-head metadata still applies when the default-branch write fails.
   }
-}
-
-function finishMetadataFlight(
-  state: MetadataRefresh,
-  start: () => Promise<boolean>,
-  gate: FlightGate,
-): void {
-  if (state.flight !== gate.flight) return;
-  state.flight = null;
-  if (!state.pending || state.settled) return;
-  state.pending = false;
-  beginMetadataRefresh(state, start);
 }
 
 async function readDefaultMetadata(
@@ -172,11 +154,14 @@ async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
 async function runMetadataFlight(
   state: MetadataRefresh,
   start: () => Promise<boolean>,
-  gate: FlightGate,
 ): Promise<void> {
   try {
     await rememberSettled(state, start);
   } finally {
-    finishMetadataFlight(state, start, gate);
+    state.flight = null;
+    if (state.pending && !state.settled) {
+      state.pending = false;
+      beginMetadataRefresh(state, start);
+    }
   }
 }

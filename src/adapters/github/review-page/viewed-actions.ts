@@ -36,6 +36,14 @@ export interface ActionResult {
 /** What a viewed batch covers; picks the toast wording. */
 export type ViewedTarget = 'auto-view' | 'category' | 'file' | 'folder';
 
+interface DocumentOwner {
+  ownerDocument: unknown;
+}
+
+interface ElementHost {
+  Element: unknown;
+}
+
 interface MarkOptions {
   onProgress?: (completed: number, requested: number) => void;
   signal?: AbortSignal;
@@ -50,6 +58,10 @@ interface ViewedWait {
   signal?: AbortSignal;
   timeoutMs: number;
   viewed: boolean;
+}
+
+interface ViewOwner {
+  defaultView: unknown;
 }
 
 /**
@@ -166,15 +178,29 @@ function iconAnchor(item: HTMLElement): HTMLElement | null {
   return anchor;
 }
 
+function isDocumentOwner(target: object): target is DocumentOwner {
+  return 'ownerDocument' in target;
+}
+
+function isElementConstructor(value: unknown): value is typeof Element {
+  return typeof value === 'function';
+}
+
+function isElementHost(value: unknown): value is ElementHost {
+  return typeof value === 'object' && value !== null && 'Element' in value;
+}
+
 function isPageElement(target: EventTarget | null): target is Element {
-  if (!(target instanceof Node) || target.ownerDocument === null) return false;
-  const ownerDocument = target.ownerDocument;
-  const ElementType = ownerDocument.defaultView?.Element;
+  const ElementType = pageElementConstructor(target);
   return ElementType !== undefined && target instanceof ElementType;
 }
 
 function isViewed(button: HTMLButtonElement): boolean {
   return viewedControlState(button) === true;
+}
+
+function isViewOwner(value: unknown): value is ViewOwner {
+  return typeof value === 'object' && value !== null && 'defaultView' in value;
 }
 
 function listenForViewedActions(document: Document): void {
@@ -240,6 +266,22 @@ function onViewedActionClick(event: MouseEvent): void {
   event.stopPropagation();
   event.stopImmediatePropagation();
   handler();
+}
+
+function pageElementConstructor(
+  target: EventTarget | null,
+): typeof Element | undefined {
+  if (
+    target === null ||
+    typeof target !== 'object' ||
+    !isDocumentOwner(target) ||
+    !isViewOwner(target.ownerDocument)
+  ) {
+    return undefined;
+  }
+  const view = target.ownerDocument.defaultView;
+  if (!isElementHost(view) || !isElementConstructor(view.Element)) return undefined;
+  return view.Element;
 }
 
 function pressedValue(file: boolean, bucket: CountBucket): string {

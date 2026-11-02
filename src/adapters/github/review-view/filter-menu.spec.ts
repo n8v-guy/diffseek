@@ -2,10 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import type { FileRecord } from '@diffseek/review';
 
-import { dataAttribute } from '../dom-data';
-
 import { mountFilterMenu } from './filter-menu';
-import { changeHandler, fallbackLabels, fileAt, files, filters, menu, menuExcludingGroup, viewedHandler, withoutGenerated } from './filter-menu.fixture';
+import {
+  changeHandler,
+  fallbackLabels,
+  fileAt,
+  files,
+  filters,
+  menu,
+  menuExcludingGroup,
+  viewedHandler,
+  withoutGenerated,
+} from './filter-menu.fixture';
 
 describe('mountFilterMenu ownership', () => {
   it('owns the menu contents while retaining hidden native items', () => {
@@ -88,7 +96,7 @@ describe('mountFilterMenu ownership', () => {
 
 function ownerValues(element: ParentNode): (string | undefined)[] {
   return [...element.querySelectorAll('[data-filter-kind="owners"]')].map(
-    (item) => (item instanceof HTMLElement ? dataAttribute(item, 'filterValue') : undefined),
+    (item) => (item instanceof HTMLElement ? item.dataset.filterValue : undefined),
   );
 }
 
@@ -103,7 +111,7 @@ function topLevelKinds(element: ParentNode): (string | undefined)[] {
     ...element.querySelectorAll<HTMLElement>(
       '[data-diffseek="filters"] > .diffseek-menu-content > .diffseek-menu-row [data-filter-kind]',
     ),
-  ].map((item) => dataAttribute(item, 'filterKind'));
+  ].map((item) => item.dataset.filterKind);
 }
 
 describe('filter menu fallback sections', () => {
@@ -150,7 +158,7 @@ describe('filter menu fallback sections', () => {
     ).not.toBeNull();
     expect(
       [...element.querySelectorAll<HTMLElement>('[data-filter-kind="groups"]')].map(
-        (item) => dataAttribute(item, 'filterValue'),
+        (item) => item.dataset.filterValue,
       ),
     ).toStrictEqual(['Tests', 'No groups']);
   });

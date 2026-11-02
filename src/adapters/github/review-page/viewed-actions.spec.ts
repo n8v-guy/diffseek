@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { emptyFacetExclusions, ReviewIndex } from '@diffseek/review';
+import { emptyFacetExclusions, type FileRecord, ReviewIndex } from '@diffseek/review';
 
 import fixture from './fixtures/github-pr.html?raw';
 import type { PageSnapshot } from './page-adapter';
@@ -36,6 +36,71 @@ function confirmViewed(button: HTMLButtonElement): void {
     button.setAttribute('aria-pressed', 'true');
     button.setAttribute('aria-label', 'Viewed');
   });
+}
+
+function iframeAnchor(frameDocument: Document): HTMLElement {
+  const anchor = frameDocument.querySelector<HTMLElement>(
+    '[data-diffseek-viewed-action="true"]',
+  );
+  if (!anchor) throw new Error('Missing iframe anchor');
+  return anchor;
+}
+
+function iframeDocument(): Document {
+  const frame = document.createElement('iframe');
+  document.body.append(frame);
+  const frameDocument = frame.contentDocument;
+  if (frameDocument === null) throw new Error('Missing iframe document');
+  return frameDocument;
+}
+
+function iframeFile(path: string): FileRecord {
+  return {
+    anchor: 'diff-src-app',
+    capabilities: { collapse: false, viewed: true },
+    extension: 'ts',
+    generated: false,
+    labels: [],
+    owners: [],
+    path,
+    status: 'modified',
+    viewed: false,
+  };
+}
+
+function iframeSnapshot(
+  frameDocument: Document,
+  tree: HTMLElement,
+  path: string,
+): SupportedSnapshot {
+  return {
+    collapseControl: (): null => null,
+    files: [iframeFile(path)],
+    region: (): null => null,
+    supported: true,
+    tree: (): HTMLElement => tree,
+    treeItem: (): HTMLElement | null => frameDocument.getElementById(path),
+    treeItems: (): HTMLElement[] =>
+      [...tree.querySelectorAll<HTMLElement>('[role="treeitem"]')],
+    unavailable: new Map(),
+    viewedControl: (): null => null,
+  };
+}
+
+function iframeTree(frameDocument: Document, path: string): HTMLElement {
+  const tree = frameDocument.createElement('div');
+  tree.setAttribute('role', 'tree');
+  const item = frameDocument.createElement('div');
+  item.id = path;
+  item.setAttribute('role', 'treeitem');
+  const iconWrap = frameDocument.createElement('div');
+  const icon = frameDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('class', 'octicon octicon-file');
+  iconWrap.append(icon);
+  item.append(iconWrap);
+  tree.append(item);
+  frameDocument.body.append(tree);
+  return tree;
 }
 
 function loadFixture(): void {
@@ -370,6 +435,18 @@ describe('viewed action reconciliation', () => {
     expect(document.querySelector('[data-diffseek-viewed-action]')).toBeNull();
     expect(document.querySelector('.diffseek-viewed-icon-anchor')).toBeNull();
     expect(document.querySelector('[role="tree"] [aria-pressed]')).toBeNull();
+  });
+
+  it('handles a viewed click whose target lives in an iframe document', () => {
+    const frameDocument = iframeDocument();
+    const path = 'src/app.ts';
+    const tree = iframeTree(frameDocument, path);
+    const onAction = viewedHandler();
+    mountViewedActions(iframeSnapshot(frameDocument, tree, path), onAction);
+    const anchor = iframeAnchor(frameDocument);
+    expect(anchor).not.toBeInstanceOf(Element);
+    anchor.click();
+    expect(onAction).toHaveBeenCalledWith('file', true, [path]);
   });
 
   it('does not mutate retained overlay state when it is unchanged', async () => {

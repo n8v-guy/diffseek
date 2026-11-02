@@ -1,10 +1,6 @@
-import { isRecord, recordField } from '@diffseek/browser/record';
+import { isRecord } from '@diffseek/browser/record';
 
-import {
-  isRawFileRequest,
-  type RawFileRequest,
-  type RawFileResult,
-} from './raw-file';
+import { isRawFileRequest, type RawFileRequest, type RawFileResult } from './raw-file';
 
 export const rawFileMessageType = 'diffseek:read-raw-file';
 
@@ -20,7 +16,7 @@ export type RawFileMessageResult =
 export function isRawFileMessage(value: unknown): value is RawFileMessage {
   return (
     isRecord(value) &&
-    recordField(value, 'type') === rawFileMessageType &&
-    isRawFileRequest(recordField(value, 'request'))
+    value.type === rawFileMessageType &&
+    isRawFileRequest(value.request)
   );
 }

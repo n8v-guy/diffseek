@@ -108,11 +108,6 @@ async function extensionWorker(): Promise<Worker> {
 }
 
 
-const htmlContentType = 'text/html';
-const textContentType = 'text/plain';
-const viewedAppButton = '#diff-app button[aria-label="Viewed"]';
-const fileTreeMarkup = '<ul role="tree" aria-label="File Tree">';
-const bodyCloseTag = '</body>';
 const fixtureFolderItems = `
       <li id="src" role="treeitem" aria-label="src"><div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-directory-fill"></svg></div><div>src</div></li>
       <li id="docs" role="treeitem" aria-label="docs"><div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-directory-fill"></svg></div><div>docs</div></li>`;
@@ -204,10 +199,13 @@ const fixturePageScript = String.raw`
 export function instrument(source: string, startsWithNativeFilter = false): string {
   const nativeMenu = startsWithNativeFilter ? nativeFilterMenu : '';
   return source
-    .replace(fileTreeMarkup, () => `${fileTreeMarkup}${fixtureFolderItems}`)
     .replace(
-      bodyCloseTag,
-      () => `${nativeMenu}${fixturePageScript}${bodyCloseTag}`,
+      '<ul role="tree" aria-label="File Tree">',
+      () => `<ul role="tree" aria-label="File Tree">${fixtureFolderItems}`,
+    )
+    .replace(
+      '</body>',
+      () => `${nativeMenu}${fixturePageScript}</body>`,
     );
 }
 
@@ -217,11 +215,11 @@ export async function markAllViewed(page: Page): Promise<void> {
   await expect(
     page.locator('#diff-generated button[aria-label="Viewed"]'),
   ).toHaveAttribute(pressedAttribute, 'true');
-  await page.locator(viewedAppButton).click();
+  await page.locator('#diff-app button[aria-label="Viewed"]').click();
   await expect(page.locator(`#src [aria-label="${markRest}"]`)).toBeVisible();
   await page.locator(`#src [aria-label="${markRest}"]`).click();
   await expect(
-    page.locator(viewedAppButton),
+    page.locator('#diff-app button[aria-label="Viewed"]'),
   ).toHaveAttribute(pressedAttribute, 'true');
 }
 
@@ -232,7 +230,7 @@ export async function openPull(pull: number, nativeFilter = false): Promise<Page
     async (route) => {
       await route.fulfill({
         body: instrument(browserSession.fixtureSource, nativeFilter),
-        contentType: htmlContentType,
+        contentType: 'text/html',
       });
     },
   );
@@ -271,7 +269,7 @@ export async function startExtensionBrowser(): Promise<void> {
       async (route) => {
         await route.fulfill({
           body: `{"oid":"${headOid}"}`,
-          contentType: htmlContentType,
+          contentType: 'text/html',
         });
       },
     );
@@ -280,14 +278,14 @@ export async function startExtensionBrowser(): Promise<void> {
       if (url.endsWith('/.gitattributes')) {
         await route.fulfill({
           body: attributesBody,
-          contentType: textContentType,
+          contentType: 'text/plain',
         });
       } else if (url.endsWith('/CODEOWNERS') && !url.includes('/.github/')) {
         await route.fulfill({
           body: url.includes(`/raw/${headOid}/`)
             ? 'src/** @pull-source'
             : 'src/** @source',
-          contentType: textContentType,
+          contentType: 'text/plain',
         });
       } else {
         await route.fulfill({ body: '', status: 404 });

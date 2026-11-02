@@ -266,6 +266,6 @@ function stopUntil(
 }
 
 function untilFailure(lastError: unknown): Error {
-  if (Error.isError(lastError)) return lastError;
+  if (lastError instanceof Error) return lastError;
   return new Error('until: condition never held');
 }

@@ -1,7 +1,5 @@
 import path from 'node:path';
 
-import { envValue } from '../../src/adapters/browser/env.ts';
-
 const prUrl = 'https://github.com/sha-tm/diffseek-test-data/pull/2';
 export const changesUrl = `${prUrl}/changes?new_files_changed=true`;
 export const compareUrl =
@@ -29,9 +27,9 @@ export const accent = '#d9480f';
 export const clipWidth = outWidth / scale;
 export const clipHeight = outHeight / scale;
 export const extensionPath = path.resolve(
-  envValue(process.env, 'EXTENSION_PATH') ?? '.output/chrome-mv3',
+  process.env.EXTENSION_PATH ?? '.output/chrome-mv3',
 );
-export const shotDir = path.resolve(envValue(process.env, 'SHOT_DIR') ?? 'screenshots/store');
+export const shotDir = path.resolve(process.env.SHOT_DIR ?? 'screenshots/store');
 export const totalFiles = 82;
 // The demo PR's resting state: exactly these files viewed, 12/82.
 export const baseline = [

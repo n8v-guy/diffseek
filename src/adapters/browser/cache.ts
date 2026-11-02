@@ -1,11 +1,8 @@
 import { browser } from 'wxt/browser';
 
-import type {
-  RepositoryMetadata,
-  RepositoryRef,
-} from '@diffseek/repository-metadata';
+import type { RepositoryMetadata, RepositoryRef } from '@diffseek/repository-metadata';
 
-import { isRecord, isUnknownArray, recordField } from './record';
+import { isRecord, isUnknownArray } from './record';
 
 const cacheEntryVersion = 2;
 
@@ -76,21 +73,21 @@ function cacheKey(repository: RepositoryRef): string {
 function isCacheEntry(value: unknown): value is CacheEntry {
   return (
     isRecord(value) &&
-    recordField(value, 'version') === cacheEntryVersion &&
-    typeof recordField(value, 'codeowners') === 'string' &&
-    typeof recordField(value, 'attributes') === 'string'
+    value.version === cacheEntryVersion &&
+    typeof value.codeowners === 'string' &&
+    typeof value.attributes === 'string'
   );
 }
 
 function isPullCacheEntry(value: unknown): value is PullCacheEntry {
   return (
     isRecord(value) &&
-    typeof recordField(value, 'owner') === 'string' &&
-    typeof recordField(value, 'repo') === 'string' &&
-    typeof recordField(value, 'pull') === 'number' &&
-    typeof recordField(value, 'sha') === 'string' &&
-    typeof recordField(value, 'codeowners') === 'string' &&
-    typeof recordField(value, 'attributes') === 'string'
+    typeof value.owner === 'string' &&
+    typeof value.repo === 'string' &&
+    typeof value.pull === 'number' &&
+    typeof value.sha === 'string' &&
+    typeof value.codeowners === 'string' &&
+    typeof value.attributes === 'string'
   );
 }
 
@@ -107,7 +104,7 @@ function metadataFrom(value: RepositoryMetadata): RepositoryMetadata {
 
 async function readPullEntries(): Promise<PullCacheEntry[]> {
   const stored = await browser.storage.local.get(pullCacheKey);
-  const value = recordField(stored, pullCacheKey);
+  const value = stored[pullCacheKey];
   return isUnknownArray(value) ? value.filter(isPullCacheEntry) : [];
 }
 

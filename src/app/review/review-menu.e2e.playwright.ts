@@ -40,6 +40,16 @@ test('clears native filters before taking over the menu', async () => {
   );
 
   await expect(menu).toHaveAttribute('data-diffseek-menu-owned', 'true');
+  await page.locator('html').evaluate((html) => {
+    html.dataset.colorMode = 'dark';
+  });
+  await expect(page.locator('[data-diffseek="filters"]')).toHaveCSS(
+    'background-color',
+    'rgb(43, 33, 70)',
+  );
+  await page.locator('html').evaluate((html) => {
+    delete html.dataset.colorMode;
+  });
   await expect(nativeLanguage).toBeHidden();
   await expect(menu.locator('[role="separator"]').first()).toBeHidden();
   await expect(viewed).toBeVisible();

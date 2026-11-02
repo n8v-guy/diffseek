@@ -46,7 +46,9 @@ jobs:
       - if: ${{ !cancelled() }}
         run: pipx run zizmor==1.31.1 .github/workflows
 
-  # Replaces workflow_run. Live E2E starts only after both jobs pass on main.
+  # zizmor's dangerous-triggers audit flags workflow_run itself. Dispatch the
+  # follow-up on main and pass the commit as an input; live and release then
+  # require a successful CI run for that same main SHA.
   start-live:
     needs: [test, strict]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -57,5 +59,6 @@ jobs:
       - name: Start live end-to-end
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.sha }}
-        run: gh workflow run live-e2e.yaml --ref "$HEAD_SHA"
+        run: gh workflow run live-e2e.yaml --repo "$GH_REPO" --ref main -f head_sha="$HEAD_SHA"

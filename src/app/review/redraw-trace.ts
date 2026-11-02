@@ -1,5 +1,3 @@
-import { dataAttribute, setDataAttribute } from '@diffseek/github/dom-data';
-
 export interface RedrawCounts {
   domMutations: number;
   panelNetLoss: number;
@@ -117,12 +115,12 @@ export function noteReconcile(root: Document): void {
     trace.reconciles += 1;
     publish(root, trace);
   }
-  const epoch = dataAttribute(root.documentElement, 'diffseekFirstRenderEpoch');
+  const epoch = root.documentElement.dataset.diffseekFirstRenderEpoch;
   if (
     (epoch === undefined || epoch === '') &&
     root.querySelector('[data-diffseek-viewed-action]')
   ) {
-    setDataAttribute(root.documentElement, 'diffseekFirstRenderEpoch', String(Date.now()));
+    root.documentElement.dataset.diffseekFirstRenderEpoch = String(Date.now());
   }
 }
 

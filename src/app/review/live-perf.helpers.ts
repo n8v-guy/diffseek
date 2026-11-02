@@ -1,9 +1,6 @@
-import { envValue } from '@diffseek/browser/env';
-import { isUnknownArray, recordField } from '@diffseek/browser/record';
+import { isUnknownArray } from '@diffseek/browser/record';
 
 import type { RedrawCounts } from './redraw-trace';
-
-
 
 /** Live DiffSeek performance defaults for sha-tm/diffseek-test-data#1 (seed 185108). */
 export const defaultLivePrUrl =
@@ -77,7 +74,13 @@ export function actionFailures(
   budgets: LivePerfBudgets,
 ): string[] {
   const failures = rebuildFailures(
-    { ...counts, firstRenderSeconds: 0, menuOpenSeconds: 0, panelsSeconds: 0, scenario: 'hot' },
+    {
+      ...counts,
+      firstRenderSeconds: 0,
+      menuOpenSeconds: 0,
+      panelsSeconds: 0,
+      scenario: 'hot',
+    },
     budgets,
   ).map((failure) => withAction(failure, action));
   if (counts.reconciles > budgets.actionReconciles) {
@@ -91,27 +94,48 @@ export function actionFailures(
 export function defaultLivePerfBudgets(
   env: NodeJS.ProcessEnv = process.env,
 ): LivePerfBudgets {
+  // Broken GitHub behavior (observed 2026-10-31): GitHub itself now redraws
+  // the file tree and diff panels exactly once on a cold load and on a warm
+  // reload, with nothing lost. Cold and warm expect exactly this many;
+  // temporary, revisit when GitHub stops it.
   return {
-    actionReconciles: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_ACTION_RECONCILES'), actionReconcileBudget),
-    coldFirstRenderSeconds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S'), coldRenderBudgetSeconds),
-    coldPanelRebuilds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_COLD_PANEL_REBUILDS'), 1),
-    coldPanelsSeconds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S'), panelsLimitSeconds),
-    // Broken GitHub behavior (observed 2026-10-31): GitHub itself now redraws
-    // the file tree and diff panels exactly once on a cold load and on a warm
-    // reload, with nothing lost. Cold and warm expect exactly this many;
-    // temporary, revisit when GitHub stops it.
-    coldTreeRebuilds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_COLD_TREE_REBUILDS'), 1),
-    domMutations: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_MUTATIONS'), mutationBudget),
-    hotFirstRenderSeconds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S'), hotRenderBudgetSeconds),
-    hotPanelsSeconds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S'), panelsLimitSeconds),
-    menuOpenSeconds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_MENU_S'), menuBudgetSeconds),
-    panelRebuilds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_PANEL_REBUILDS'), 0),
-    reconciles: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_RECONCILES'), reconcileBudget),
-    treeRebuilds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_TREE_REBUILDS'), 0),
-    warmFirstRenderSeconds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S'), warmRenderBudgetSeconds),
-    warmPanelRebuilds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_WARM_PANEL_REBUILDS'), 1),
-    warmPanelsSeconds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S'), panelsLimitSeconds),
-    warmTreeRebuilds: numberEnv(envValue(env, 'DIFFSEEK_LIVE_BUDGET_WARM_TREE_REBUILDS'), 1),
+    actionReconciles: numberEnv(
+      env.DIFFSEEK_LIVE_BUDGET_ACTION_RECONCILES,
+      actionReconcileBudget,
+    ),
+    coldFirstRenderSeconds: numberEnv(
+      env.DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S,
+      coldRenderBudgetSeconds,
+    ),
+    coldPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANEL_REBUILDS, 1),
+    coldPanelsSeconds: numberEnv(
+      env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S,
+      panelsLimitSeconds,
+    ),
+    coldTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_TREE_REBUILDS, 1),
+    domMutations: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MUTATIONS, mutationBudget),
+    hotFirstRenderSeconds: numberEnv(
+      env.DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S,
+      hotRenderBudgetSeconds,
+    ),
+    hotPanelsSeconds: numberEnv(
+      env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S,
+      panelsLimitSeconds,
+    ),
+    menuOpenSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MENU_S, menuBudgetSeconds),
+    panelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_PANEL_REBUILDS, 0),
+    reconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_RECONCILES, reconcileBudget),
+    treeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_TREE_REBUILDS, 0),
+    warmFirstRenderSeconds: numberEnv(
+      env.DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S,
+      warmRenderBudgetSeconds,
+    ),
+    warmPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANEL_REBUILDS, 1),
+    warmPanelsSeconds: numberEnv(
+      env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S,
+      panelsLimitSeconds,
+    ),
+    warmTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_TREE_REBUILDS, 1),
   };
 }
 
@@ -198,7 +222,7 @@ export function livePerfSummary(report: {
 }
 
 export function liveSampleCount(env: NodeJS.ProcessEnv = process.env): number {
-  const samples = numberEnv(envValue(env, 'DIFFSEEK_LIVE_SAMPLES'), defaultLiveSamples);
+  const samples = numberEnv(env.DIFFSEEK_LIVE_SAMPLES, defaultLiveSamples);
   return Math.max(1, Math.floor(samples));
 }
 
@@ -283,7 +307,7 @@ export function parseInlineStorageState(source: string): unknown {
 }
 
 export function parseStorageCookies(raw: unknown): CookieLike[] {
-  const cookies = isRecord(raw) ? recordField(raw, 'cookies') : undefined;
+  const cookies = isRecord(raw) ? raw.cookies : undefined;
   if (!isUnknownArray(cookies)) {
     throw new Error('storageState JSON must include a cookies array');
   }
@@ -331,8 +355,8 @@ function cookieIdentity(
   cookie: Record<string, unknown>,
   index: number,
 ): { name: string; value: string } {
-  const name = recordField(cookie, 'name');
-  const value = recordField(cookie, 'value');
+  const name = cookie.name;
+  const value = cookie.value;
   if (typeof name !== 'string' || typeof value !== 'string') {
     throw new TypeError(`storageState cookies[${index}] is missing name/value`);
   }
@@ -371,15 +395,15 @@ function readCookie(cookie: unknown, index: number): CookieLike {
     throw new Error(`storageState cookies[${index}] is invalid`);
   }
   const identity = cookieIdentity(cookie, index);
-  const domain = recordField(cookie, 'domain');
+  const domain = cookie.domain;
   if (typeof domain !== 'string') {
     throw new TypeError(`storageState cookies[${index}] is missing domain`);
   }
-  const expires = optionalNumber(recordField(cookie, 'expires'));
-  const httpOnly = optionalBoolean(recordField(cookie, 'httpOnly'));
-  const path = optionalString(recordField(cookie, 'path'));
-  const sameSite = optionalSameSite(recordField(cookie, 'sameSite'));
-  const secure = optionalBoolean(recordField(cookie, 'secure'));
+  const expires = optionalNumber(cookie.expires);
+  const httpOnly = optionalBoolean(cookie.httpOnly);
+  const path = optionalString(cookie.path);
+  const sameSite = optionalSameSite(cookie.sameSite);
+  const secure = optionalBoolean(cookie.secure);
   return {
     domain,
     name: identity.name,

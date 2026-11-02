@@ -1,9 +1,6 @@
-import { isRecord, recordField } from '@diffseek/browser/record';
+import { isRecord } from '@diffseek/browser/record';
 
-import {
-  isPullHeadRequest,
-  type PullHeadRequest,
-} from './pull-head';
+import { isPullHeadRequest, type PullHeadRequest } from './pull-head';
 
 export const pullHeadMessageType = 'diffseek:resolve-pull-head';
 
@@ -19,7 +16,7 @@ export type PullHeadMessageResult =
 export function isPullHeadMessage(value: unknown): value is PullHeadMessage {
   return (
     isRecord(value) &&
-    recordField(value, 'type') === pullHeadMessageType &&
-    isPullHeadRequest(recordField(value, 'request'))
+    value.type === pullHeadMessageType &&
+    isPullHeadRequest(value.request)
   );
 }

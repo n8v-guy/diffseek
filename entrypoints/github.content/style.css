@@ -149,17 +149,6 @@ html {
   white-space: nowrap;
 }
 
-.diffseek-menu-only:hover,
-.diffseek-menu-all:hover {
-  background: var(--diffseek-accent);
-  color: var(--diffseek-background);
-}
-
-/* A toggle must not look pressed on hover: outline only, fill = state. */
-.diffseek-menu-always-read:hover {
-  box-shadow: inset 0 0 0 1px var(--diffseek-accent);
-}
-
 .diffseek-menu-only[aria-pressed='true'],
 .diffseek-menu-always-read[aria-pressed='true'] {
   background: var(--diffseek-foreground);
@@ -176,6 +165,18 @@ html {
 .diffseek-menu-section-title:has(:focus-visible) .diffseek-menu-all {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* Doubled class beats the pressed rule without dropping below the row hover. */
+.diffseek-menu-only.diffseek-menu-only:hover,
+.diffseek-menu-all.diffseek-menu-all:hover {
+  background: var(--diffseek-accent);
+  color: var(--diffseek-background);
+}
+
+/* A toggle must not look pressed on hover: outline only, fill = state. */
+.diffseek-menu-always-read.diffseek-menu-always-read:hover {
+  box-shadow: inset 0 0 0 1px var(--diffseek-accent);
 }
 
 .diffseek-reset-filters {

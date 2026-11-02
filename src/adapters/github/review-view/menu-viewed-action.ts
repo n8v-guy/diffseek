@@ -1,11 +1,4 @@
-import {
-  type LabelFacet,
-  scopeAriaPressed,
-  scopeViewedLabel,
-  viewedMark,
-} from '@diffseek/review';
-
-import { setDataAttribute } from '../dom-data';
+import { type LabelFacet, scopeAriaPressed, scopeViewedLabel, viewedMark } from '@diffseek/review';
 
 const ariaDisabled = 'aria-disabled';
 const menuViewedActionClass = 'diffseek-menu-viewed-action';
@@ -56,7 +49,7 @@ export function menuViewedCounter(
   const counter = document.createElement('button');
   counter.type = 'button';
   counter.className = 'diffseek-menu-count';
-  setDataAttribute(counter, 'diffseekMenuCountAction', 'true');
+  counter.dataset.diffseekMenuCountAction = 'true';
   counter.textContent = `${options.visible}/${options.total}`;
   configureViewedAction(counter, options);
   return counter;
@@ -68,7 +61,7 @@ export function menuViewedOverlay(
   const action = document.createElement('button');
   action.type = 'button';
   action.className = menuViewedActionClass;
-  setDataAttribute(action, 'diffseekMenuViewedAction', 'true');
+  action.dataset.diffseekMenuViewedAction = 'true';
   configureViewedAction(action, options);
   return action;
 }

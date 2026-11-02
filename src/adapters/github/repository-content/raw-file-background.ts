@@ -14,7 +14,7 @@ export async function handleRawFileMessage(
   } catch (error) {
     return {
       message:
-        Error.isError(error) ? error.message : 'Raw file request failed',
+        error instanceof Error ? error.message : 'Raw file request failed',
       status: 'error',
     };
   }

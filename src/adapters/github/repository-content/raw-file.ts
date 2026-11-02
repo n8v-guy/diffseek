@@ -1,4 +1,4 @@
-import { isRecord, recordField } from '@diffseek/browser/record';
+import { isRecord } from '@diffseek/browser/record';
 
 const notFoundStatus = 404;
 const rawFileTimeoutMs = 20_000;
@@ -44,9 +44,9 @@ export async function fetchRawFile(
 export function isRawFileRequest(value: unknown): value is RawFileRequest {
   if (!isRecord(value)) return false;
   return (
-    typeof recordField(value, 'repo') === 'string' &&
-    typeof recordField(value, 'ref') === 'string' &&
-    typeof recordField(value, 'path') === 'string'
+    typeof value.repo === 'string' &&
+    typeof value.ref === 'string' &&
+    typeof value.path === 'string'
   );
 }
 

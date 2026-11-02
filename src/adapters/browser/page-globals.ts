@@ -11,7 +11,19 @@ declare global {
   var recollapsed: Promise<void>;
   var renderScene: (scene: unknown) => void;
 
+  var __liveCheck: (condition: unknown) => unknown;
+  var __liveCheckDom: (condition: unknown) => unknown;
+  var __liveCheckReview: (condition: unknown) => unknown;
+  var __liveFilterButton: () => HTMLButtonElement | null;
+  var __liveHolds: (result: unknown) => boolean;
+  var __liveInteractive: (button: HTMLButtonElement) => boolean;
+  var __liveLinkPrefix: (prefix: string) => boolean;
+  var __liveMenuState: () => '' | 'open' | 'replaced';
+  var __liveObserve: (test: () => unknown) => Promise<unknown>;
   var __liveTagFilterButton: () => void;
+  var __liveTextMatches: (selector: string, pattern: string) => boolean;
+  var __liveUnviewedRow: () => boolean;
+  var __liveVisible: (element: Element | null) => boolean;
   var __liveWait: (condition: unknown) => Promise<unknown>;
   var __liveWaitElement: (
     element: Element,

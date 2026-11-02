@@ -7,6 +7,9 @@ import '@diffseek/browser/page-globals';
  * page that resolves the moment its condition holds, so measurements are not
  * quantized by Playwright's retry intervals. The Node-side timeout is only a
  * failure guard, never pacing.
+ *
+ * Each helper is its own init script. Playwright serializes only the function
+ * passed to addInitScript, so the page copies talk through globalThis.
  */
 export type DomCondition =
   | { key: string; kind: 'dataset-above'; value: number }
@@ -30,108 +33,21 @@ interface LiveGuard {
   ms: number;
 }
 
-const liveWaitPageSource = `
-function liveHolds(result) {
-  return result !== false && result !== null && result !== undefined && result !== '' && result !== 0;
-}
-function liveVisible(element) {
-  return element !== null && (typeof element.checkVisibility !== 'function' || element.checkVisibility());
-}
-function liveFilterButton() {
-  for (const button of globalThis.document.querySelectorAll('button')) {
-    const labelledBy = button.getAttribute('aria-labelledby');
-    const label = button.getAttribute('aria-label') ?? (labelledBy === null ? '' : labelledBy.split(/\\s+/v).map((id) => globalThis.document.getElementById(id)?.textContent ?? '').join(' ').trim());
-    if (label === 'Filter options') return button;
-  }
-  return null;
-}
-function liveInteractive(button) {
-  const style = button.getAttribute('style') ?? '';
-  if (style.includes('anchor-name')) return true;
-  const key = Object.keys(button).find((name) => name.startsWith('__reactProps$'));
-  const props = key === undefined ? null : button[key];
-  return typeof props?.onClick === 'function';
-}
-function liveCheck(condition) {
-  const root = globalThis.document;
-  switch (condition.kind) {
-    case 'absent':
-      return root.querySelector(condition.selector) === null;
-    case 'attr':
-      return root.querySelector(condition.selector)?.getAttribute(condition.name) === condition.value;
-    case 'dataset-above':
-      return Number(root.documentElement.dataset[condition.key] ?? '0') > condition.value;
-    case 'filter-button-ready': {
-      const button = liveFilterButton();
-      return button !== null && liveInteractive(button);
-    }
-    case 'filter-menu-or-replaced': {
-      if (root.querySelector('[data-diffseek="filters"]')) return 'open';
-      const button = liveFilterButton();
-      return button !== null && !Object.hasOwn(button.dataset, 'liveClicked') ? 'replaced' : false;
-    }
-    case 'link-prefix':
-      return [...root.querySelectorAll('a')].some((link) => {
-        const text = link.textContent;
-        return text !== null && text.trim().startsWith(condition.prefix) && liveVisible(link);
-      });
-    case 'present':
-      return liveVisible(root.querySelector(condition.selector));
-    case 'text': {
-      const text = root.querySelector(condition.selector)?.textContent?.trim();
-      return text !== undefined && text !== null && new RegExp(condition.pattern).test(text);
-    }
-    case 'trace-settled': {
-      const data = root.documentElement.dataset;
-      return data.diffseekTreeOpen === '0' && data.diffseekPanelOpen === '0';
-    }
-    case 'unviewed-file-row':
-      return [...root.querySelectorAll('[role="treeitem"]:not([aria-expanded])')].some((row) =>
-        [...row.querySelectorAll('[data-diffseek-viewed-action][aria-pressed="false"]')].some(
-          (action) => action.closest('[role="treeitem"]') === row,
-        ),
-      );
-    default:
-      return false;
-  }
-}
-function liveObserve(test) {
-  return new Promise((resolve) => {
-    const first = test();
-    if (liveHolds(first)) {
-      resolve(first);
-      return;
-    }
-    const observer = new globalThis.MutationObserver(() => {
-      const result = test();
-      if (!liveHolds(result)) return;
-      observer.disconnect();
-      resolve(result);
-    });
-    observer.observe(globalThis.document, {
-      attributes: true,
-      characterData: true,
-      childList: true,
-      subtree: true,
-    });
-  });
-}
-function installLiveWaitPage() {
-  const define = (name, value) => {
-    Object.defineProperty(globalThis, name, { configurable: true, value, writable: true });
-  };
-  define('__liveWait', (condition) => liveObserve(() => liveCheck(condition)));
-  define('__liveWaitElement', (element, name, value) => liveObserve(() => element.getAttribute(name) === value));
-  define('__liveTagFilterButton', () => {
-    liveFilterButton()?.setAttribute('data-live-clicked', '');
-  });
-}
-installLiveWaitPage();
-`;
-
 /** Installs the in-page observer helpers into every document of the context. */
 export async function installLiveWaits(context: BrowserContext): Promise<void> {
-  await context.addInitScript(liveWaitPageSource);
+  await context.addInitScript(installLiveHolds);
+  await context.addInitScript(installLiveVisible);
+  await context.addInitScript(installLiveFilterButton);
+  await context.addInitScript(installLiveInteractive);
+  await context.addInitScript(installLiveCheckDom);
+  await context.addInitScript(installLiveMenuState);
+  await context.addInitScript(installLiveLinkPrefix);
+  await context.addInitScript(installLiveTextMatches);
+  await context.addInitScript(installLiveUnviewedRow);
+  await context.addInitScript(installLiveCheckReview);
+  await context.addInitScript(installLiveCheck);
+  await context.addInitScript(installLiveObserve);
+  await context.addInitScript(installLiveWaitEntry);
 }
 
 export async function tagFilterButton(page: Page): Promise<void> {
@@ -182,4 +98,257 @@ async function guardWait<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+function installLiveCheck(): void {
+  Object.defineProperty(globalThis, '__liveCheck', {
+    configurable: true,
+    value(condition: DomCondition): unknown {
+      const dom = globalThis.__liveCheckDom(condition);
+      if (dom !== undefined) return dom;
+      return globalThis.__liveCheckReview(condition);
+    },
+    writable: true,
+  });
+}
+
+function installLiveCheckDom(): void {
+  Object.defineProperty(globalThis, '__liveCheckDom', {
+    configurable: true,
+    value(condition: DomCondition): unknown {
+      const root = globalThis.document;
+      if (condition.kind === 'absent') {
+        return root.querySelector(condition.selector) === null;
+      }
+      if (condition.kind === 'attr') {
+        return (
+          root.querySelector(condition.selector)?.getAttribute(condition.name) ===
+          condition.value
+        );
+      }
+      if (condition.kind === 'dataset-above') {
+        const raw = root.documentElement.dataset[condition.key] ?? '0';
+        return Number(raw) > condition.value;
+      }
+      if (condition.kind === 'present') {
+        return globalThis.__liveVisible(root.querySelector(condition.selector));
+      }
+      if (condition.kind === 'trace-settled') {
+        const data = root.documentElement.dataset;
+        return (
+          data.diffseekTreeOpen === '0' && data.diffseekPanelOpen === '0'
+        );
+      }
+      return undefined;
+    },
+    writable: true,
+  });
+}
+
+function installLiveCheckReview(): void {
+  Object.defineProperty(globalThis, '__liveCheckReview', {
+    configurable: true,
+    value(condition: DomCondition): unknown {
+      if (condition.kind === 'filter-button-ready') {
+        const button = globalThis.__liveFilterButton();
+        return button !== null && globalThis.__liveInteractive(button);
+      }
+      if (condition.kind === 'filter-menu-or-replaced') {
+        return globalThis.__liveMenuState();
+      }
+      if (condition.kind === 'link-prefix') {
+        return globalThis.__liveLinkPrefix(condition.prefix);
+      }
+      if (condition.kind === 'text') {
+        return globalThis.__liveTextMatches(condition.selector, condition.pattern);
+      }
+      if (condition.kind === 'unviewed-file-row') return globalThis.__liveUnviewedRow();
+      return false;
+    },
+    writable: true,
+  });
+}
+
+function installLiveFilterButton(): void {
+  Object.defineProperty(globalThis, '__liveFilterButton', {
+    configurable: true,
+    value(): HTMLButtonElement | null {
+      for (const button of globalThis.document.querySelectorAll('button')) {
+        if (buttonLabel(button) === 'Filter options') return button;
+      }
+      return null;
+    },
+    writable: true,
+  });
+
+  function buttonLabel(button: HTMLButtonElement): string {
+    const labelledBy = button.getAttribute('aria-labelledby');
+    const label = button.getAttribute('aria-label');
+    if (label !== null) return label;
+    if (labelledBy === null) return '';
+    return labelledBy
+      .split(/\s+/v)
+      .map((id) => globalThis.document.getElementById(id)?.textContent ?? '')
+      .join(' ')
+      .trim();
+  }
+}
+
+function installLiveHolds(): void {
+  Object.defineProperty(globalThis, '__liveHolds', {
+    configurable: true,
+    value(result: unknown): boolean {
+      const blocked: readonly unknown[] = [false, null, undefined, '', 0];
+      return !blocked.includes(result);
+    },
+    writable: true,
+  });
+}
+
+function installLiveInteractive(): void {
+  Object.defineProperty(globalThis, '__liveInteractive', {
+    configurable: true,
+    value(button: HTMLButtonElement): boolean {
+      const style = button.getAttribute('style') ?? '';
+      if (style.includes('anchor-name')) return true;
+      const key = Object.keys(button).find((name) => name.startsWith('__reactProps$'));
+      if (key === undefined || !Object.hasOwn(button, key)) return false;
+      const props = Reflect.get(button, key) as unknown;
+      return (
+        typeof props === 'object' &&
+        props !== null &&
+        'onClick' in props &&
+        typeof props.onClick === 'function'
+      );
+    },
+    writable: true,
+  });
+}
+
+function installLiveLinkPrefix(): void {
+  Object.defineProperty(globalThis, '__liveLinkPrefix', {
+    configurable: true,
+    value(prefix: string): boolean {
+      return [...globalThis.document.querySelectorAll('a')].some((link) => {
+        const text = link.textContent.trim();
+        return text.startsWith(prefix) && globalThis.__liveVisible(link);
+      });
+    },
+    writable: true,
+  });
+}
+
+function installLiveMenuState(): void {
+  Object.defineProperty(globalThis, '__liveMenuState', {
+    configurable: true,
+    value(): '' | 'open' | 'replaced' {
+      if (globalThis.document.querySelector('[data-diffseek="filters"]')) {
+        return 'open';
+      }
+      const button = globalThis.__liveFilterButton();
+      if (button !== null && !Object.hasOwn(button.dataset, 'liveClicked')) {
+        return 'replaced';
+      }
+      return '';
+    },
+    writable: true,
+  });
+}
+
+function installLiveObserve(): void {
+  Object.defineProperty(globalThis, '__liveObserve', {
+    configurable: true,
+    value(test: () => unknown): Promise<unknown> {
+      return new Promise((resolve) => {
+        const first = test();
+        if (globalThis.__liveHolds(first)) {
+          resolve(first);
+          return;
+        }
+        const observer = new MutationObserver(() => {
+          const result = test();
+          if (!globalThis.__liveHolds(result)) return;
+          observer.disconnect();
+          resolve(result);
+        });
+        observer.observe(globalThis.document, {
+          attributes: true,
+          characterData: true,
+          childList: true,
+          subtree: true,
+        });
+      });
+    },
+    writable: true,
+  });
+}
+
+function installLiveTextMatches(): void {
+  Object.defineProperty(globalThis, '__liveTextMatches', {
+    configurable: true,
+    value(selector: string, pattern: string): boolean {
+      const text = globalThis.document.querySelector(selector)?.textContent.trim();
+      return text !== undefined && new RegExp(pattern).test(text);
+    },
+    writable: true,
+  });
+}
+
+function installLiveUnviewedRow(): void {
+  Object.defineProperty(globalThis, '__liveUnviewedRow', {
+    configurable: true,
+    value(): boolean {
+      const rows = globalThis.document.querySelectorAll(
+        '[role="treeitem"]:not([aria-expanded])',
+      );
+      return [...rows].some((row) =>
+        [...row.querySelectorAll('[data-diffseek-viewed-action][aria-pressed="false"]')].some(
+          (action) => action.closest('[role="treeitem"]') === row,
+        ),
+      );
+    },
+    writable: true,
+  });
+}
+
+function installLiveVisible(): void {
+  Object.defineProperty(globalThis, '__liveVisible', {
+    configurable: true,
+    value(element: Element | null): boolean {
+      return (
+        element !== null &&
+        (typeof element.checkVisibility !== 'function' || element.checkVisibility())
+      );
+    },
+    writable: true,
+  });
+}
+
+function installLiveWaitEntry(): void {
+  const define = {
+    configurable: true,
+    writable: true,
+  };
+  Object.defineProperties(globalThis, {
+    __liveTagFilterButton: {
+      ...define,
+      value(): void {
+        globalThis.__liveFilterButton()?.setAttribute('data-live-clicked', '');
+      },
+    },
+    __liveWait: {
+      ...define,
+      value(condition: unknown): Promise<unknown> {
+        return globalThis.__liveObserve(() => globalThis.__liveCheck(condition));
+      },
+    },
+    __liveWaitElement: {
+      ...define,
+      value(element: Element, name: string, expected: string): Promise<unknown> {
+        return globalThis.__liveObserve(
+          () => element.getAttribute(name) === expected,
+        );
+      },
+    },
+  });
 }

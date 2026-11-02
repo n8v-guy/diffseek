@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { dataAttribute } from '../dom-data';
-
 import {
   applyCheckedState,
   cycleFilterDefault,
@@ -63,7 +61,7 @@ describe('filter default state', () => {
       'shown',
     );
     expect(options.filterDefaults?.viewed).toStrictEqual(new Set(['generated']));
-    expect(dataAttribute(item, 'defaultViewed')).toBeUndefined();
+    expect(item.dataset.defaultViewed).toBeUndefined();
   });
 
   it('shows generated files on the first click from the fresh always-hide default', () => {

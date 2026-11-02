@@ -1,11 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
-import { dataAttribute } from '@diffseek/github/dom-data';
 import type { markViewed } from '@diffseek/github/review-page/viewed-actions';
 
 import type { ReviewApp } from './review-app';
-import { type ImmediateReader, installReviewPage, marked, metadataSource, nextReconcile, openMenu, type PullReader, pullReview, reviewApp, signalled, until } from './review-app.fixture';
+import {
+  type ImmediateReader,
+  installReviewPage,
+  marked,
+  metadataSource,
+  nextReconcile,
+  openMenu,
+  type PullReader,
+  pullReview,
+  reviewApp,
+  signalled,
+  until,
+} from './review-app.fixture';
 
 describe('fresh filter defaults', () => {
   beforeEach(async (): Promise<void> => {
@@ -197,7 +208,7 @@ async function ignoreRejection(promise: Promise<unknown>): Promise<void> {
   try {
     await promise;
   } catch (error) {
-    if (Error.isError(error)) return;
+    if (error instanceof Error) return;
     throw error;
   }
 }
@@ -387,7 +398,7 @@ async function repairsAnOwnedMenuAfterGitHubReplacesItsChildren(): Promise<void>
   const menu = document.querySelector<HTMLElement>(
     '[role="menu"][aria-label="Filter options"]',
   );
-  expect(dataAttribute(menu, 'diffseekMenuOwned')).toBe('true');
+  expect(menu?.dataset.diffseekMenuOwned).toBe('true');
 
   await nextReconcile(() => {
     menu?.querySelector('[data-diffseek="filters"]')?.remove();
@@ -401,7 +412,7 @@ async function repairsAnOwnedMenuAfterGitHubReplacesItsChildren(): Promise<void>
     [...(menu?.children ?? [])].some(
       (child) =>
         child instanceof HTMLElement &&
-        dataAttribute(child, 'diffseek') !== 'filters' &&
+        child.dataset.diffseek !== 'filters' &&
         child.hidden === false,
     ),
   ).toBe(false);

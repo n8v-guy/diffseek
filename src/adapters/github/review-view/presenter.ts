@@ -1,10 +1,6 @@
 import { type FilterState, matchesFacets, ReviewIndex } from '@diffseek/review';
 
-import { clearDataAttribute, dataAttribute, setDataAttribute } from '../dom-data';
-import {
-  fileToggleAction,
-  type PageSnapshot,
-} from '../review-page/page-adapter';
+import { fileToggleAction, type PageSnapshot } from '../review-page/page-adapter';
 
 /** How long a native click may go unanswered before it counts as ignored. */
 const ariaLabel = 'aria-label';
@@ -89,14 +85,14 @@ function applyFile(
   state.desiredCollapsed.set(file.path, wantCollapsed);
   if (treeItem.hidden !== wantCollapsed) treeItem.hidden = wantCollapsed;
   if (matches) {
-    if (dataAttribute(region, 'diffseekFilteredOut') !== undefined) {
-      clearDataAttribute(region, 'diffseekFilteredOut');
+    if (region.dataset.diffseekFilteredOut !== undefined) {
+      delete region.dataset.diffseekFilteredOut;
     }
     restore(state, file.path);
     return;
   }
-  if (dataAttribute(region, 'diffseekFilteredOut') !== 'true') {
-    setDataAttribute(region, 'diffseekFilteredOut', 'true');
+  if (region.dataset.diffseekFilteredOut !== 'true') {
+    region.dataset.diffseekFilteredOut = 'true';
   }
   collapse(state, file.path);
 }
@@ -131,7 +127,7 @@ function clearFile(
   });
   state.desiredCollapsed.set(path, false);
   treeItem.hidden = false;
-  clearDataAttribute(region, 'diffseekFilteredOut');
+  delete region.dataset.diffseekFilteredOut;
   restore(state, path);
 }
 
@@ -236,7 +232,7 @@ function revealSnapshot(snapshot: null | SupportedSnapshot | undefined): void {
     const treeItem = snapshot.treeItem(file.path);
     const region = snapshot.region(file.path);
     if (treeItem) treeItem.hidden = false;
-    if (region) clearDataAttribute(region, 'diffseekFilteredOut');
+    if (region) delete region.dataset.diffseekFilteredOut;
   }
 }
 

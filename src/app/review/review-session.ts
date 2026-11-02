@@ -1,8 +1,4 @@
-import type {
-  FilterDefaults,
-  FilterDefaultState,
-} from '@diffseek/browser/filter-defaults';
-import { clearDataAttribute } from '@diffseek/github/dom-data';
+import type { FilterDefaults, FilterDefaultState } from '@diffseek/browser/filter-defaults';
 import {
   bindSnapshot,
   type PageSnapshot,
@@ -11,10 +7,7 @@ import {
   scanPage,
   treeStructureKey,
 } from '@diffseek/github/review-page/page-adapter';
-import type {
-  markViewed,
-  ViewedTarget,
-} from '@diffseek/github/review-page/viewed-actions';
+import type { markViewed, ViewedTarget } from '@diffseek/github/review-page/viewed-actions';
 import { mountFilterMenu } from '@diffseek/github/review-view/filter-menu';
 import { ReviewPresenter } from '@diffseek/github/review-view/presenter';
 import {
@@ -31,16 +24,8 @@ import {
   showUnavailable,
 } from '@diffseek/github/review-view/review-ui';
 import type { ReviewRef } from '@diffseek/github/routing/page-route';
-import type {
-  MetadataCommitGuard,
-  RepositoryMetadata,
-  RepositoryRef,
-} from '@diffseek/repository-metadata';
-import {
-  emptyFacetExclusions,
-  excludedFacetCount,
-  FileCatalog,
-} from '@diffseek/review';
+import type { MetadataCommitGuard, RepositoryMetadata, RepositoryRef } from '@diffseek/repository-metadata';
+import { emptyFacetExclusions, excludedFacetCount, FileCatalog } from '@diffseek/review';
 
 import { ViewedActionExecutor } from './action-executor';
 import {
@@ -49,11 +34,7 @@ import {
   metadataRefreshState,
   metadataWatch,
 } from './metadata-refresh';
-import {
-  installRedrawTrace,
-  noteReconcile,
-  trackDiffseekWrites,
-} from './redraw-trace';
+import { installRedrawTrace, noteReconcile, trackDiffseekWrites } from './redraw-trace';
 import {
   enqueueDefaultViewed,
   viewedPathFromClick,
@@ -168,7 +149,7 @@ export class ReviewSession {
     };
     options.root.addEventListener('click', this.onNativeClick, { capture: true });
     installRedrawTrace(options.root);
-    clearDataAttribute(options.root.documentElement, 'diffseekFirstRenderEpoch');
+    delete options.root.documentElement.dataset.diffseekFirstRenderEpoch;
     this.observer = new MutationObserver((records): void => {
       const mode = scheduleForMutations(records);
       if (mode) this.schedule(mode);
@@ -521,11 +502,10 @@ export class ReviewSession {
       refreshObservedFiles(root, this.catalog.files());
       return bindSnapshot(root, this.catalog.files(), this.unavailable);
     }
-    const next = scanPage(root);
     if (treeKey !== this.treeKey) this.classifyKey = '';
     this.treeKey = treeKey;
     this.regionKey = regionKey;
-    return next;
+    return scanPage(root);
   }
 
   start(): void {

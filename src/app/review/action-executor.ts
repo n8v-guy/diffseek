@@ -49,21 +49,6 @@ export class ViewedActionExecutor {
     this.markFiles = options.markFiles ?? markViewed;
   }
 
-  advance(command: ViewedCommand, requested: number, processed: number): number {
-    const next = processed + 1;
-    command.onProgress?.(next, requested);
-    return next;
-  }
-
-  async afterTail(
-    command: ViewedCommand,
-    epoch: number,
-    revisions: ReadonlyMap<string, number>,
-  ): Promise<ActionResult | null> {
-    await this.tail;
-    return this.execute(command, epoch, revisions);
-  }
-
   cancel(): void {
     this.epoch += 1;
     this.active?.abort();
@@ -80,7 +65,26 @@ export class ViewedActionExecutor {
     return result;
   }
 
-  async execute(
+  invalidate(path: string): void {
+    this.revisions.set(path, this.revision(path) + 1);
+  }
+
+  private advance(command: ViewedCommand, requested: number, processed: number): number {
+    const next = processed + 1;
+    command.onProgress?.(next, requested);
+    return next;
+  }
+
+  private async afterTail(
+    command: ViewedCommand,
+    epoch: number,
+    revisions: ReadonlyMap<string, number>,
+  ): Promise<ActionResult | null> {
+    await this.tail;
+    return this.execute(command, epoch, revisions);
+  }
+
+  private async execute(
     command: ViewedCommand,
     epoch: number,
     revisions: ReadonlyMap<string, number>,
@@ -103,11 +107,7 @@ export class ViewedActionExecutor {
     return result;
   }
 
-  invalidate(path: string): void {
-    this.revisions.set(path, this.revision(path) + 1);
-  }
-
-  isCurrent(command: ViewedCommand): boolean {
+  private isCurrent(command: ViewedCommand): boolean {
     const current = this.current();
     return (
       current?.reviewKey === command.reviewKey &&
@@ -115,7 +115,7 @@ export class ViewedActionExecutor {
     );
   }
 
-  async markEach(attempt: MarkAttempt): Promise<ActionResult | null> {
+  private async markEach(attempt: MarkAttempt): Promise<ActionResult | null> {
     let processed = 0;
     for (const path of attempt.command.paths) {
       const next = await this.markOne(attempt, path, processed);
@@ -125,7 +125,7 @@ export class ViewedActionExecutor {
     return attempt.result;
   }
 
-  async markOne(
+  private async markOne(
     attempt: MarkAttempt,
     path: string,
     processed: number,
@@ -155,22 +155,18 @@ export class ViewedActionExecutor {
     return this.advance(attempt.command, attempt.result.requested, processed);
   }
 
-  async ready(epoch: number): Promise<boolean> {
+  private async ready(epoch: number): Promise<boolean> {
     if (epoch !== this.epoch) return false;
     await this.beforeExecute();
     return epoch === this.epoch;
   }
 
-  revision(path: string): number {
+  private revision(path: string): number {
     return this.revisions.get(path) ?? 0;
   }
 
-  signalAborted(signal: AbortSignal): boolean {
-    return signal.aborted;
-  }
-
-  stopped(controller: AbortController, epoch: number): boolean {
-    return this.signalAborted(controller.signal) || epoch !== this.epoch;
+  private stopped(controller: AbortController, epoch: number): boolean {
+    return controller.signal.aborted || epoch !== this.epoch;
   }
 }
 

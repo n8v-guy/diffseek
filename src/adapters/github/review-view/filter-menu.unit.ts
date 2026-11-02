@@ -3,10 +3,16 @@ import { describe, expect, it, vi } from 'vitest';
 import type { FilterDefaultState, RememberedFilterFacet } from '@diffseek/browser/filter-defaults';
 import type { FileRecord, FilterState, LabelFacet } from '@diffseek/review';
 
-import { dataAttribute } from '../dom-data';
-
 import { mountFilterMenu } from './filter-menu';
-import { changeHandler, files, filters, menu, menuExcludingGroup, viewedHandler, withSecondOwner } from './filter-menu.fixture';
+import {
+  changeHandler,
+  files,
+  filters,
+  menu,
+  menuExcludingGroup,
+  viewedHandler,
+  withSecondOwner,
+} from './filter-menu.fixture';
 
 function countText(element: ParentNode, selector: string): null | string | undefined {
   return element.querySelector(selector)?.textContent;
@@ -65,7 +71,7 @@ describe('mountFilterMenu owner prefixes', () => {
     const owners = [
       ...element.querySelectorAll<HTMLElement>('[data-filter-kind="owners"]'),
     ];
-    expect(owners.map((owner) => dataAttribute(owner, 'filterValue'))).toStrictEqual([
+    expect(owners.map((owner) => owner.dataset.filterValue)).toStrictEqual([
       '@team/backend',
       '@team/platform',
       'Unmapped',
