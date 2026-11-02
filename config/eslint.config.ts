@@ -143,8 +143,7 @@ export default defineConfig(
       'prefer-template': 'error',
       'regexp/require-unicode-sets-regexp': 'error',
       'sonarjs/cognitive-complexity': ['error', 15],
-      // Sonar's own default. A repeated pair is not a clone.
-      'sonarjs/no-duplicate-string': ['error', { threshold: 3 }],
+      'sonarjs/no-duplicate-string': ['error', { threshold: 2 }],
       'sonarjs/no-global-this': 'off',
       'sonarjs/no-inverted-boolean-check': 'off',
       'sonarjs/prefer-regexp-exec': 'off',
@@ -173,10 +172,9 @@ export default defineConfig(
       'unicorn/no-unsafe-dom-html': 'error',
       'unicorn/no-useless-undefined': 'off',
       'unicorn/numeric-separators-style': 'off',
-      // Error.isError and Iterator#toArray() are newer than Firefox 140.
+      // Error.isError needs Chrome 134; no minimum_chrome_version is declared.
       'unicorn/prefer-error-is-error': 'off',
       'unicorn/prefer-global-this': 'off',
-      'unicorn/prefer-iterator-to-array': 'off',
       'unicorn/prefer-query-selector': 'off',
       'unicorn/prefer-scoped-selector': 'off',
       'unicorn/prefer-simple-condition-first': 'off',
