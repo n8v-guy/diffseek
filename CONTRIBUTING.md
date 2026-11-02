@@ -80,5 +80,5 @@ Git hooks run automatically: before a commit, lint fixes on staged code, the
 repository structure rules, and the binary check; before a push, the full CI
 check (structure, binaries, unused code, types, tests with coverage,
 production dependency audit, and build). CI also runs the stricter lint,
-duplication, dependency, type-coverage, stylesheet, Firefox store,
-bundle-size, and workflow gates.
+duplication, dependency, type-coverage, stylesheet, Firefox store, and
+workflow gates.

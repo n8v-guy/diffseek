@@ -1,7 +1,6 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": ["@tsconfig/strictest/tsconfig.json", "../tsconfig.json"],
   "compilerOptions": {
-    "erasableSyntaxOnly": true,
-    "exactOptionalPropertyTypes": true
+    "erasableSyntaxOnly": true
   }
 }

@@ -12,7 +12,6 @@
   },
   "include": [
     "../config/**/*.ts",
-    "../config/**/*.d.ts",
     "../entrypoints/**/*.ts",
     "../scripts/**/*.ts",
     "../.wxt/wxt.d.ts"

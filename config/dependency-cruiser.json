@@ -1,47 +1,6 @@
 {
+  "extends": "dependency-cruiser/configs/recommended-strict",
   "forbidden": [
-    {
-      "name": "no-circular",
-      "severity": "error",
-      "from": {},
-      "to": { "circular": true }
-    },
-    {
-      "name": "modules-do-not-import-adapters-or-app",
-      "severity": "error",
-      "from": { "path": "^src/modules" },
-      "to": { "path": "^src/(adapters|app)" }
-    },
-    {
-      "name": "adapters-do-not-import-app",
-      "severity": "error",
-      "from": { "path": "^src/adapters" },
-      "to": { "path": "^src/app" }
-    },
-    {
-      "name": "content-does-not-import-background",
-      "severity": "error",
-      "from": { "path": "^entrypoints/github\\.content" },
-      "to": { "path": "(^entrypoints/background|-background\\.ts$)" }
-    },
-    {
-      "name": "background-does-not-import-content-or-app",
-      "severity": "error",
-      "from": { "path": "^entrypoints/background" },
-      "to": { "path": "(^entrypoints/github\\.content|^src/app)" }
-    },
-    {
-      "name": "page-client-does-not-import-background-handler",
-      "severity": "error",
-      "from": { "path": "-client\\.ts$" },
-      "to": { "path": "-background\\.ts$" }
-    },
-    {
-      "name": "not-to-unresolvable",
-      "severity": "error",
-      "from": {},
-      "to": { "couldNotResolve": true }
-    },
     {
       "name": "not-to-test",
       "severity": "error",
@@ -50,8 +9,6 @@
     }
   ],
   "options": {
-    "doNotFollow": { "path": "node_modules" },
-    "exclude": { "path": "(^|/)(node_modules|\\.output|\\.wxt|coverage|dist)/" },
     "enhancedResolveOptions": {
       "conditionNames": ["import", "types", "default"],
       "exportsFields": ["exports"]

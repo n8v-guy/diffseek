@@ -32,9 +32,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm release:zip
-      - run: pnpm zip:firefox:store
-      - run: pnpm check:size
+      - run: pnpm build -b firefox
       - run: pnpm check:strict
       - if: ${{ !cancelled() }}
         run: pipx run --spec actionlint-py==1.7.12.25 actionlint

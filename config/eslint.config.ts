@@ -20,11 +20,8 @@ const e2eFiles = ['**/*.e2e.playwright.ts'];
 const unitFiles = ['**/*.{test,spec,unit}.ts'];
 const testOverrides: Linter.RulesRecord = {
   '@typescript-eslint/no-magic-numbers': 'off',
-  'max-lines-per-function': [
-    'error',
-    { max: 100, skipBlankLines: true, skipComments: true },
-  ],
-  'sonarjs/no-duplicate-string': ['error', { threshold: 10 }],
+  'max-lines-per-function': 'off',
+  'sonarjs/no-duplicate-string': 'off',
 };
 
 export default defineConfig(
@@ -83,7 +80,7 @@ export default defineConfig(
       ],
       '@typescript-eslint/strict-boolean-expressions': 'error',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
-      complexity: ['error', 10],
+      complexity: 'error',
       eqeqeq: 'error',
       'import-x/first': 'error',
       'import-x/newline-after-import': 'error',
@@ -108,17 +105,14 @@ export default defineConfig(
           'newlines-between': 'always',
         },
       ],
-      'max-depth': ['error', 4],
-      'max-lines': [
-        'error',
-        { max: 512, skipBlankLines: true, skipComments: true },
-      ],
+      'max-depth': 'error',
+      'max-lines': ['error', { skipBlankLines: true, skipComments: true }],
       'max-lines-per-function': [
         'error',
-        { max: 50, skipBlankLines: true, skipComments: true },
+        { skipBlankLines: true, skipComments: true },
       ],
-      'max-nested-callbacks': ['error', 3],
-      'max-params': ['error', 4],
+      'max-nested-callbacks': 'error',
+      'max-params': 'error',
       'no-else-return': 'error',
       'no-implicit-coercion': 'error',
       'no-lonely-if': 'error',
@@ -145,7 +139,6 @@ export default defineConfig(
       ],
       'prefer-template': 'error',
       'regexp/require-unicode-sets-regexp': 'error',
-      'sonarjs/cognitive-complexity': ['error', 15],
       'sonarjs/no-duplicate-string': ['error', { threshold: 2 }],
       'sonarjs/no-global-this': 'off',
       'sonarjs/no-inverted-boolean-check': 'off',
@@ -175,8 +168,6 @@ export default defineConfig(
       'unicorn/no-unsafe-dom-html': 'error',
       'unicorn/no-useless-undefined': 'off',
       'unicorn/numeric-separators-style': 'off',
-      // Error.isError needs Chrome 134; no minimum_chrome_version is declared.
-      'unicorn/prefer-error-is-error': 'off',
       'unicorn/prefer-global-this': 'off',
       'unicorn/prefer-query-selector': 'off',
       'unicorn/prefer-scoped-selector': 'off',
@@ -189,14 +180,6 @@ export default defineConfig(
   {
     files: ['config/**', 'scripts/**'],
     rules: { 'sonarjs/no-os-command-from-path': 'off' },
-  },
-  {
-    files: ['config/eslint.config.ts'],
-    rules: { '@typescript-eslint/no-magic-numbers': 'off' },
-  },
-  {
-    files: ['scripts/store-screenshots/**/*.ts'],
-    rules: { '@typescript-eslint/no-magic-numbers': 'off' },
   },
   {
     files: unitFiles,

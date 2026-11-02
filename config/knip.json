@@ -1,5 +1,4 @@
 {
-  "ignoreDependencies": ["stylelint-config-standard"],
   "entry": ["config/*.config.ts", "entrypoints/**/*.ts"],
   "project": [
     "config/**/*.ts",
