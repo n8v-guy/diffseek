@@ -37,6 +37,7 @@ export default defineConfig({
           id: 'diffseek@n8v.me',
           strict_min_version: '140.0',
         },
+        gecko_android: { strict_min_version: '142.0' },
       },
     }),
   }),
