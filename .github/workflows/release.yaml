@@ -64,12 +64,23 @@ jobs:
 
       - run: pnpm release:zip
 
+      - run: pnpm zip:firefox
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: chrome-extension-zip
-          path: .output/*.zip
+          path: .output/*-chrome.zip
           if-no-files-found: error
           # .output is a dot-directory; v4 skips hidden paths by default.
+          include-hidden-files: true
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: firefox-extension-zips
+          path: |
+            .output/*-firefox.zip
+            .output/*-sources.zip
+          if-no-files-found: error
           include-hidden-files: true
 
   release:
@@ -88,6 +99,11 @@ jobs:
           name: chrome-extension-zip
           path: .output
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: firefox-extension-zips
+          path: .output
+
       - name: Publish versioned GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -98,22 +114,23 @@ jobs:
           shopt -s nullglob
           sha="$HEAD_SHA"
           zips=(.output/*.zip)
-          if [ "${#zips[@]}" -ne 1 ]; then
-            echo "expected exactly one ZIP in .output, found ${#zips[@]}" >&2
+          chrome=(.output/diffseek-*-chrome.zip)
+          if [ "${#zips[@]}" -ne 3 ] || [ "${#chrome[@]}" -ne 1 ]; then
+            echo "expected the Chrome, Firefox, and sources ZIPs in .output, found ${#zips[@]}" >&2
             printf '%s\n' "${zips[@]}" >&2
             exit 1
           fi
-          zip="${zips[0]}"
+          zip="${chrome[0]}"
           base=$(basename "$zip")
-          case "$base" in
-            diffseek-*-chrome.zip) ;;
-            *)
-              echo "unexpected ZIP name: $base" >&2
-              exit 1
-              ;;
-          esac
           version="${base#diffseek-}"
           version="${version%-chrome.zip}"
+          firefox=".output/diffseek-${version}-firefox.zip"
+          sources=".output/diffseek-${version}-sources.zip"
+          if [ ! -f "$firefox" ] || [ ! -f "$sources" ]; then
+            echo "missing Firefox ZIP or sources ZIP for ${version}" >&2
+            printf '%s\n' "${zips[@]}" >&2
+            exit 1
+          fi
           tag="v${version}"
           title="DiffSeek ${tag}"
 
@@ -134,9 +151,9 @@ jobs:
           } >"$notes"
 
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$zip" --clobber
+            gh release upload "$tag" "$zip" "$firefox" "$sources" --clobber
           else
-            gh release create "$tag" "$zip" \
+            gh release create "$tag" "$zip" "$firefox" "$sources" \
               --title "$title" \
               --notes-file "$notes" \
               --target "$sha" \
