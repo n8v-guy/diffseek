@@ -180,3 +180,26 @@ fast ones, and they hide what the code is actually waiting for. **Cost:** A
 streamed page can get one pass per frame instead of one per quiet period, and a background tab defers coalesced passes until it is shown. A
 notification no longer disappears on its own while the reviewer only reads,
 and the minimum is a timer: it reads the same on every machine.
+
+## D014 — Built-in formats follow the common review slices
+
+**Decision:** Sixteen formats are built in and applied before repository
+.gitattributes, which still win. The set is the Octoverse 2025 contributor
+leaders (TypeScript, Python, JavaScript, Java, C#) and the languages that
+complete that report's new-repository set and the Octoverse 2024 top ten
+(C and C++ as one format, Go, PHP, Shell), plus Ruby, Rust, Kotlin, Swift,
+CSS with the preprocessors Linguist keeps beside it, HTML with the template
+languages Linguist groups with HTML, and Dart. Extensions come from Linguist
+`languages.yml`. A format also claims the config and companion files that
+travel with it. Tests, docs, config, style folders, and asset folders are
+groups decided from the whole path, not only the filename. Vendor, dist, and
+generated directories are marked generated. A path is a test only when a
+segment or suffix is the convention (`test`, `tests`, `__tests__`, `spec`,
+`*_test.go`, `*Test.java`), so `latest`, `contest`, and `attestation` are
+not tests. Cache version 3 still stores the repository files unchanged.
+
+**Why:** Reviewers slice a diff by language and by role, and those signals
+live in directories as much as in suffixes. Merging defaults underneath the
+stored files keeps a customization without a cache rewrite. **Cost:** A wide
+repository `group` rule overrides the built-in Tests group on the paths it
+matches. JSON in a style folder counts as CSS. C and C++ share one format.

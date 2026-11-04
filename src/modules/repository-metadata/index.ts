@@ -1,4 +1,7 @@
-export { bundledGitAttributes } from './bundled-gitattributes';
+export {
+  bundledGitAttributes,
+  rulesFromMetadata,
+} from './bundled-gitattributes';
 export {
   ownersForPathOrNull,
   parseCodeowners,

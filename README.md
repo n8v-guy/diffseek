@@ -15,7 +15,7 @@ Every file and folder in GitHub's file tree gets a viewed badge. An empty circle
 ## More than GitHub's filter
 
 - All the CODEOWNERS to single out or filter
-- Groups: built-in Tests, Docs and Config, or your own
+- Groups: built-in Tests, Docs, Config, Styles and Assets, or your own
 - Formats, from extensions to aliases (e.g. ts/tsx, cpp/hpp)
 - Viewed, Generated and change status
 
