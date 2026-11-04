@@ -26,7 +26,6 @@ const formats: readonly Format[] = [
   { name: 'C/C++', extensions: ['.c', '.cc', '.cpp', '.h', '.hpp'] },
   { name: 'Kotlin', extensions: ['.kt', '.kts'] },
   { name: 'CSS', extensions: ['.css', '.scss'] },
-  { name: 'HTML', extensions: ['.html', '.vue', '.svelte'] },
 ];
 
 const docPatterns = ['docs/**', '**/*.md', '**/*.mdx'];
