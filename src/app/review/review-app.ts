@@ -35,7 +35,7 @@ type ReviewAppOptions = {
     repository: RepositoryRef,
   ) => Promise<{ metadata: RepositoryMetadata; changed: boolean }>;
   readPull?: (
-    review: ReviewRef,
+    review: ReviewRef & { paths: string[] },
     fallback: RepositoryMetadata,
   ) => Promise<RepositoryMetadata>;
   markFiles?: typeof markViewed;

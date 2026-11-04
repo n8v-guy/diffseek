@@ -14,6 +14,7 @@ type MetadataRead = {
   commit: (metadata: RepositoryMetadata) => Promise<boolean>;
   aborted: () => boolean;
   apply: (metadata: RepositoryMetadata) => void;
+  onSettled?: () => void;
 };
 
 export type MetadataWatch = {
@@ -24,6 +25,7 @@ export type MetadataWatch = {
 };
 
 export type MetadataRefresh = {
+  key: string;
   settled: boolean;
   flight: Promise<void> | null;
   pending: boolean;
@@ -34,7 +36,7 @@ export function metadataWatch(): MetadataWatch {
 }
 
 export function metadataRefreshState(): MetadataRefresh {
-  return { settled: false, flight: null, pending: false };
+  return { key: '', settled: false, flight: null, pending: false };
 }
 
 /** First observation records the baseline and does not count as a retry. */
@@ -60,8 +62,19 @@ export function consumeMetadataOpportunity(
 export function loadReviewMetadata(
   state: MetadataRefresh,
   options: MetadataRead,
+  key = '',
 ): void {
-  beginMetadataRefresh(state, () => replaceReviewMetadata(options));
+  if (state.key !== key) {
+    state.key = key;
+    state.settled = false;
+  }
+  beginMetadataRefresh(state, () => {
+    const current = state.key;
+    return replaceReviewMetadata({
+      ...options,
+      aborted: () => options.aborted() || state.key !== current,
+    });
+  }, options.onSettled);
 }
 
 async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
@@ -94,6 +107,7 @@ function reportReadFailure(error: unknown): void {
 function beginMetadataRefresh(
   state: MetadataRefresh,
   start: () => Promise<boolean>,
+  onSettled?: () => void,
 ): void {
   if (state.settled) return;
   if (state.flight) {
@@ -101,17 +115,21 @@ function beginMetadataRefresh(
     return;
   }
   state.pending = false;
+  const key = state.key;
   const flight = start()
     .catch(() => false)
     .then((settled) => {
-      if (settled) state.settled = true;
+      if (settled && state.key === key) {
+        state.settled = true;
+        onSettled?.();
+      }
     })
     .finally(() => {
       if (state.flight !== flight) return;
       state.flight = null;
       if (!state.pending || state.settled) return;
       state.pending = false;
-      beginMetadataRefresh(state, start);
+      beginMetadataRefresh(state, start, onSettled);
     });
   state.flight = flight;
 }

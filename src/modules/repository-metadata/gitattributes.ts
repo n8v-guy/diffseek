@@ -19,7 +19,10 @@ const supported = new Set([
   'linguist-generated',
 ]);
 
-export function parseGitAttributes(source: string): GitAttributeRule[] {
+export function parseGitAttributes(
+  source: string,
+  directory = '',
+): GitAttributeRule[] {
   const rules: GitAttributeRule[] = [];
 
   for (const rawLine of source.split(/\r?\n/)) {
@@ -37,7 +40,7 @@ export function parseGitAttributes(source: string): GitAttributeRule[] {
       if (supported.has(name)) assignments.set(name, value);
     }
     if (assignments.size > 0) {
-      rules.push({ matcher: compilePattern(pattern), assignments });
+      rules.push({ matcher: compilePattern(pattern, directory), assignments });
     }
   }
 
@@ -102,8 +105,11 @@ function tokens(line: string): string[] {
   return result;
 }
 
-function compilePattern(source: string): RegExp {
+function compilePattern(source: string, directory: string): RegExp {
   const pattern = source.replace(/^\//, '');
-  const prefix = pattern.includes('/') ? '^' : '(?:^|.*/)';
-  return new RegExp(`${prefix}${globSource(pattern)}$`);
+  const scope = directory
+    ? `${directory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`
+    : '';
+  const prefix = source.includes('/') ? '' : '(?:.*/)?';
+  return new RegExp(`^${scope}${prefix}${globSource(pattern)}$`);
 }

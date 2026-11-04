@@ -969,6 +969,35 @@ describe('fresh filter defaults', () => {
 });
 
 describe('review app interactions', () => {
+  it('waits for nested exceptions before automatically marking files viewed', async () => {
+    await fakeBrowser.storage.local.set({
+      'diffseek:filter-defaults': { hidden: ['generated'], viewed: ['generated'] },
+    });
+    const root = { codeowners: '', attributes: 'src/** linguist-generated' };
+    const loaded = {
+      ...root,
+      nestedAttributes: { src: 'generated.ts linguist-generated=false' },
+    };
+    const gate = Promise.withResolvers<typeof loaded>();
+    const markFiles = vi.fn(async (_snapshot: SupportedSnapshot, paths: string[]) => ({
+      requested: paths.length, completed: paths, failed: [],
+    }));
+    const app = await reviewApp({
+      readImmediate: async () => root,
+      readPull: () => gate.promise,
+      markFiles: signalled(markFiles),
+    });
+    expect(document.querySelector('[data-diffseek="snackbar"]')).toBeNull();
+    expect(markFiles).not.toHaveBeenCalled();
+
+    gate.resolve(loaded);
+    await until(() => expect(markFiles).toHaveBeenCalledTimes(2));
+    expect(markFiles.mock.calls.flatMap(([, paths]) => paths))
+      .toEqual(['src/app.ts', 'src/new.ts']);
+    expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
+    app.stop();
+  });
+
   it('hides and marks generated files viewed from the persisted default', async () => {
     await fakeBrowser.storage.local.set({
       'diffseek:filter-defaults': {

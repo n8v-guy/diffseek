@@ -26,11 +26,114 @@ const sha = 'a'.repeat(40);
 describe('repository metadata', () => {
   beforeEach(() => fakeBrowser.reset());
 
+  it('loads nested attributes without a root file and upgrades cached PR metadata', async () => {
+    const fallback = { codeowners: '', attributes: bundledGitAttributes };
+    await writePullCache(review, sha, fallback);
+    const directory = 'apps/contributor/shared/openapi';
+    const pull = {
+      ...review,
+      paths: [`${directory}/metadata.json`, `${directory}/gateway.json`],
+    };
+    const request = vi.fn(async (input: RawFileRequest) =>
+      input.path === `${directory}/.gitattributes`
+        ? found('*.json linguist-generated=true')
+        : missing,
+    );
+
+    const result = await readPullMetadata(pull, fallback, request, async () => sha);
+
+    expect(result).toMatchObject({
+      nestedAttributes: {
+        apps: '',
+        'apps/contributor': '',
+        'apps/contributor/shared': '',
+        [directory]: '*.json linguist-generated=true',
+      },
+    });
+    expect(request.mock.calls.map(([input]) => input.path)).toEqual([
+      'apps/.gitattributes',
+      'apps/contributor/.gitattributes',
+      'apps/contributor/shared/.gitattributes',
+      `${directory}/.gitattributes`,
+    ]);
+    expect(await readImmediateMetadata(pull)).toEqual(result);
+
+    request.mockClear();
+    expect(await readPullMetadata(pull, fallback, request, async () => sha))
+      .toEqual(result);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('starts immediately with bundled source files on a cold cache', async () => {
     expect(await readImmediateMetadata(repository)).toEqual({
       codeowners: '',
       attributes: bundledGitAttributes,
     });
+  });
+
+  it('extends a cached head for streamed paths and drops deleted rules on a new head', async () => {
+    const fallback = { codeowners: '', attributes: '' };
+    const request = vi.fn(async (input: RawFileRequest) =>
+      input.path === 'apps/.gitattributes' || input.path === 'web/.gitattributes'
+        ? found('*.json linguist-generated=true')
+        : missing,
+    );
+    const first = await readPullMetadata(
+      { ...review, paths: ['apps/client.json'] }, fallback, request, async () => sha,
+    );
+    request.mockClear();
+    const pull = { ...review, paths: ['apps/client.json', 'web/client.json'] };
+    const extended = await readPullMetadata(pull, first, request, async () => sha);
+
+    expect(request.mock.calls.map(([input]) => input.path)).toEqual(['web/.gitattributes']);
+    expect(extended.nestedAttributes).toEqual({
+      apps: '*.json linguist-generated=true',
+      web: '*.json linguist-generated=true',
+    });
+    const updated = await readPullMetadata(pull, extended, async () => missing, async () => 'b'.repeat(40));
+    expect(updated.nestedAttributes).toEqual({ apps: '', web: '' });
+  });
+
+  it('leaves failed nested reads retryable instead of caching them as missing', async () => {
+    const fallback = { codeowners: '', attributes: '' };
+    await writePullCache(review, sha, fallback);
+    const pull = { ...review, paths: ['apps/client.json'] };
+    await expect(readPullMetadata(pull, fallback, async () => {
+      throw new Error('offline');
+    }, async () => sha)).rejects.toThrow('Repository metadata request failed');
+    expect(await readPullCache(review)).toEqual({ ...fallback, sha });
+
+    const retry = await readPullMetadata(pull, fallback,
+      async () => found('*.json linguist-generated=true'), async () => sha);
+    expect(retry.nestedAttributes).toEqual({ apps: '*.json linguist-generated=true' });
+  });
+
+  it('bounds concurrent ancestor reads and waits for active requests before rejecting', async () => {
+    const fallback = { codeowners: '', attributes: '' };
+    await writePullCache(review, sha, fallback);
+    const gates = Array.from({ length: 4 }, () => Promise.withResolvers<RawFileResult>());
+    const started = Promise.withResolvers<undefined>();
+    let calls = 0;
+    let settled = false;
+    const request = vi.fn(async () => {
+      const gate = gates[calls++];
+      if (calls === gates.length) started.resolve(undefined);
+      return gate ? gate.promise : missing;
+    });
+    const pending = readPullMetadata({
+      ...review, paths: ['a/x.json', 'b/x.json', 'c/x.json', 'd/x.json', 'e/x.json'],
+    }, fallback, request, async () => sha);
+    const rejected = pending.finally(() => { settled = true; })
+      .catch((error: unknown) => error);
+    await started.promise;
+    expect(calls).toBe(4);
+    gates[0]?.reject(new Error('offline'));
+    await expect(gates[0]?.promise).rejects.toThrow('offline');
+    expect(settled).toBe(false);
+    for (const gate of gates.slice(1)) gate.resolve(missing);
+    expect(await rejected).toEqual(new Error('Repository metadata request failed'));
+    expect(calls).toBe(5);
+    expect(await readPullCache(review)).toEqual({ ...fallback, sha });
   });
 
   it('starts with bundled source files when storage is unavailable', async () => {

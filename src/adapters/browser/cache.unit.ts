@@ -14,6 +14,7 @@ const metadata = {
   codeowners: '*.ts @team',
   attributes: '*.ts group=code',
   codeownersPath: 'CODEOWNERS',
+  nestedAttributes: { apps: '*.json linguist-generated=true', 'apps/source': '' },
 };
 
 describe('metadata cache', () => {
@@ -22,6 +23,15 @@ describe('metadata cache', () => {
   it('round-trips default-branch metadata', async () => {
     await writeCache(repository, metadata);
     await expect(readCache(repository)).resolves.toEqual(metadata);
+  });
+
+  it('rejects malformed nested attributes from storage', async () => {
+    await fakeBrowser.storage.local.set({
+      'diffseek:metadata:prs': [{
+        ...repository, pull: 1, sha, ...metadata, nestedAttributes: { apps: false },
+      }],
+    });
+    await expect(readPullCache({ ...repository, pull: 1 })).resolves.toBeNull();
   });
 
   it('keeps the 10 most recent pull requests and evicts the oldest', async () => {
