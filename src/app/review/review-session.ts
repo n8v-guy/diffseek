@@ -36,10 +36,13 @@ import {
   type RepositoryMetadata,
 } from '@diffseek/repository-metadata';
 import {
+  changedSurfaces,
   emptyFacetExclusions,
   excludedFacetCount,
   FileCatalog,
+  planView,
   ReviewIndex,
+  type ViewPlan,
 } from '@diffseek/review';
 
 import type { DefaultMetadata } from '../metadata/reader';
@@ -65,7 +68,6 @@ import {
   type PanelReconcileSchedule,
   type PanelScheduleOptions,
   pendingDefaultViewed,
-  projectionKeyFor,
   queuePanelReconcile,
   refreshViewedState,
   retainNativeOwners,
@@ -116,7 +118,7 @@ export class ReviewSession {
   private defaultViewedInFlight = 0;
   private readonly metadataWatch = metadataWatch();
   private readonly metadataRefresh = metadataRefreshState();
-  private projectionFingerprint = '';
+  private applied: ViewPlan | null = null;
   private treeKey: string | null = null;
   private regionKey = '';
   private treeNode: Element | null = null;
@@ -248,7 +250,7 @@ export class ReviewSession {
     this.regionNodes = regions;
     if (!next.supported) {
       if (metadataOpportunity) this.refreshMetadata();
-      this.projectionFingerprint = '';
+      this.applied = null;
       this.treeKey = null;
       this.regionKey = '';
       this.classifyKey = '';
@@ -275,24 +277,32 @@ export class ReviewSession {
     if (this.reopenStaleMetadata() || metadataOpportunity) this.refreshMetadata();
     removeUnavailable(this.options.root);
     this.classifyIfNeeded(catalogSnapshot);
+    this.presentView(catalogSnapshot, structureChanged);
+  }
+
+  /** Computes the desired view, then writes only what differs from the applied one. */
+  private presentView(
+    catalogSnapshot: SupportedSnapshot,
+    structureChanged: boolean,
+  ): void {
+    const root = this.options.root;
     const defaultViewedPaths = this.metadataRefresh.settled
       ? pendingDefaultViewed(catalogSnapshot.files, this.options.filterDefaults, this.defaultViewedAttempts)
       : [];
     const generatedDefaultBusy =
       this.defaultViewedInFlight > 0 || defaultViewedPaths.length > 0;
-    const menus = filterMenus(this.options.root);
-    const fingerprint = projectionKeyFor({
-      metadataRevision: this.metadataRevision,
-      metadata: this.metadata,
+    const menus = filterMenus(root);
+    const plan = planView({
+      files: catalogSnapshot.files,
       filters: this.filters,
       filterDefaults: this.options.filterDefaults,
       generatedDefaultBusy,
-      menuCount: menus.length,
-      files: catalogSnapshot.files,
     });
-    const projectionChanged = fingerprint !== this.projectionFingerprint;
-    const staleMenus = menus.filter(menuNeedsRemount);
-    if (!structureChanged && !projectionChanged && staleMenus.length === 0) {
+    const change = changedSurfaces(this.applied, plan);
+    this.applied = plan;
+    const pageStale = structureChanged || change.page;
+    const staleMenus = change.menu ? menus : menus.filter(menuNeedsRemount);
+    if (!pageStale && staleMenus.length === 0 && defaultViewedPaths.length === 0) {
       // GitHub expanding a filtered file changes neither key. Re-collapse it.
       if (filteredFileExpanded(root)) {
         this.presenter.apply(catalogSnapshot, this.filters);
@@ -301,28 +311,27 @@ export class ReviewSession {
       return;
     }
     trackDiffseekWrites(root, () => {
-      if (structureChanged || projectionChanged) {
-        const index = new ReviewIndex(catalogSnapshot.files);
-        this.presenter.apply(catalogSnapshot, this.filters, index);
-        mountViewedActions(
-          catalogSnapshot,
-          (target, viewed, paths) => this.batch(target, viewed, paths),
-          index,
-          this.filters,
-        );
+      if (pageStale) this.applyPage(catalogSnapshot);
+      if (defaultViewedPaths.length > 0) {
+        this.enqueueDefaultViewed(defaultViewedPaths);
       }
-      if (projectionChanged) {
-        this.projectionFingerprint = fingerprint;
-        if (defaultViewedPaths.length > 0) {
-          this.enqueueDefaultViewed(defaultViewedPaths);
-        }
-      }
-      for (const menu of projectionChanged ? menus : staleMenus) {
+      for (const menu of staleMenus) {
         this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
       }
     });
     this.reattachObservers();
     this.emitReconciled();
+  }
+
+  private applyPage(snapshot: SupportedSnapshot): void {
+    const index = new ReviewIndex(snapshot.files);
+    this.presenter.apply(snapshot, this.filters, index);
+    mountViewedActions(
+      snapshot,
+      (target, viewed, paths) => this.batch(target, viewed, paths),
+      index,
+      this.filters,
+    );
   }
 
   private reattachObservers(): void {
