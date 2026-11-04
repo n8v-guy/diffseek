@@ -1,3 +1,4 @@
+import type { RepositoryCache } from '@diffseek/browser';
 import {
   fileTreeElement,
   filterMenus,
@@ -5,13 +6,12 @@ import {
 } from '@diffseek/github';
 import type { RepositoryMetadata } from '@diffseek/repository-metadata';
 
+import type { DefaultMetadata } from '../metadata/reader';
+
 type MetadataRead = {
-  readPull: () => Promise<RepositoryMetadata>;
-  refreshDefault: () => Promise<{
-    metadata: RepositoryMetadata;
-    changed: boolean;
-  }>;
-  commit: (metadata: RepositoryMetadata) => Promise<boolean>;
+  readPull: (base: DefaultMetadata) => Promise<DefaultMetadata>;
+  refreshDefault: () => Promise<DefaultMetadata>;
+  commit: (cache: RepositoryCache) => Promise<boolean>;
   aborted: () => boolean;
   apply: (metadata: RepositoryMetadata) => void;
   onSettled?: () => void;
@@ -25,7 +25,6 @@ export type MetadataWatch = {
 };
 
 export type MetadataRefresh = {
-  key: string;
   settled: boolean;
   flight: Promise<void> | null;
   pending: boolean;
@@ -36,7 +35,7 @@ export function metadataWatch(): MetadataWatch {
 }
 
 export function metadataRefreshState(): MetadataRefresh {
-  return { key: '', settled: false, flight: null, pending: false };
+  return { settled: false, flight: null, pending: false };
 }
 
 /** First observation records the baseline and does not count as a retry. */
@@ -62,41 +61,25 @@ export function consumeMetadataOpportunity(
 export function loadReviewMetadata(
   state: MetadataRefresh,
   options: MetadataRead,
-  key = '',
 ): void {
-  if (state.key !== key) {
-    state.key = key;
-    state.settled = false;
-  }
-  beginMetadataRefresh(state, () => {
-    const current = state.key;
-    return replaceReviewMetadata({
-      ...options,
-      aborted: () => options.aborted() || state.key !== current,
-    });
-  }, options.onSettled);
+  beginMetadataRefresh(state, () => replaceReviewMetadata(options), options.onSettled);
 }
 
 async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
-  const applied = { pull: false };
-  await Promise.all([
-    options
-      .readPull()
-      .then((metadata) => {
-        applied.pull = true;
-        if (!options.aborted()) options.apply(metadata);
-      })
-      .catch(reportReadFailure),
-    options
-      .refreshDefault()
-      .then(async (result) => {
-        if (options.aborted() || !result.changed) return;
-        await options.commit(result.metadata).catch(() => false);
-        if (!applied.pull && !options.aborted()) options.apply(result.metadata);
-      })
-      .catch(reportReadFailure),
-  ]);
-  return applied.pull && !options.aborted();
+  try {
+    const base = await options.refreshDefault();
+    if (options.aborted()) return false;
+    options.apply(base.metadata);
+    if (base.changed) await options.commit(base.cache).catch(() => false);
+    const pulled = await options.readPull(base);
+    if (options.aborted()) return false;
+    options.apply(pulled.metadata);
+    if (pulled.changed) await options.commit(pulled.cache).catch(() => false);
+    return true;
+  } catch (error) {
+    reportReadFailure(error);
+    return false;
+  }
 }
 
 /** The review keeps going; developers and tests still see the failed read. */
@@ -115,11 +98,10 @@ function beginMetadataRefresh(
     return;
   }
   state.pending = false;
-  const key = state.key;
   const flight = start()
     .catch(() => false)
     .then((settled) => {
-      if (settled && state.key === key) {
+      if (settled) {
         state.settled = true;
         onSettled?.();
       }

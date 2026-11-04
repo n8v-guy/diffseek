@@ -65,7 +65,7 @@ export async function fetchRawFile(
   };
 }
 
-function validSegments(value: string, exact?: number): string[] | null {
+export function validSegments(value: string, exact?: number): string[] | null {
   if (
     !value ||
     value.startsWith('/') ||

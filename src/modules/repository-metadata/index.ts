@@ -11,4 +11,13 @@ export {
   type DiffSeekAttributes,
   type GitAttributeRule,
 } from './gitattributes';
+export {
+  chooseCodeowners,
+  codeownersLocations,
+  isMetadataPath,
+  metadataFromFiles,
+  pullMetadataPaths,
+  unloadedMetadataPaths,
+  type MetadataFiles,
+} from './metadata-files';
 export type { RepositoryMetadata, RepositoryRef } from './metadata';

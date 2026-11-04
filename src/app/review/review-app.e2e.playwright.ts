@@ -7,6 +7,7 @@ import {
   test,
   type BrowserContext,
   type Page,
+  type Route,
 } from '@playwright/test';
 
 function presentBox(box: { x: number; y: number; width: number; height: number } | null): {
@@ -32,7 +33,21 @@ const attributesBody = [
   '*.ts linguist-language=TypeScript',
   'src/generated.ts linguist-generated',
 ].join('\n');
+const searchRoute = (url: URL) =>
+  url.hostname === 'github.com' && url.pathname === '/search';
 const filterDefaultsKey = 'diffseek:filter-defaults';
+
+function searchResponse(paths: string[]) {
+  const results = paths.map((path, index) => ({ path, blob_sha: `blob${index}` }));
+  return {
+    contentType: 'application/json',
+    body: JSON.stringify({
+      payload: {
+        blackbirdSearchRoute: { results, result_count: results.length, page_count: 1, page: 1, errors: [], logged_in: true },
+      },
+    }),
+  };
+}
 
 test.beforeAll(async () => {
   fixtureSource = await readFile(fixturePath, 'utf8');
@@ -54,6 +69,9 @@ test.beforeAll(async () => {
       });
     },
   );
+  await context.route(searchRoute, async (route) => {
+    await route.fulfill(searchResponse(['.gitattributes', 'CODEOWNERS']));
+  });
   await context.route('https://github.com/octo/repo/raw/**', async (route) => {
     const url = decodeURIComponent(route.request().url());
     if (/\/raw\/[^/]+\/\.gitattributes$/.test(url)) {
@@ -62,12 +80,7 @@ test.beforeAll(async () => {
         body: attributesBody,
       });
     } else if (url.endsWith('/CODEOWNERS') && !url.includes('/.github/')) {
-      await route.fulfill({
-        contentType: 'text/plain',
-        body: url.includes(`/raw/${'c'.repeat(40)}/`)
-          ? 'src/** @pull-source'
-          : 'src/** @source',
-      });
+      await route.fulfill({ contentType: 'text/plain', body: 'src/** @source' });
     } else {
       await route.fulfill({ status: 404, body: '' });
     }
@@ -178,7 +191,7 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
   ).toBeVisible();
   await expect(
     page.locator(
-      '[data-filter-kind="owners"][data-filter-value="@pull-source"]',
+      '[data-filter-kind="owners"][data-filter-value="@source"]',
     ),
   ).toBeVisible();
   const finalMenuHeight = await page
@@ -400,7 +413,7 @@ test('clears native filters before taking over the menu', async () => {
   ).toHaveText(['Owners', 'Groups', 'Formats', 'Change status']);
 
   const ownerRow = page.locator(
-    '.diffseek-menu-row:has([data-filter-kind="owners"][data-filter-value="@pull-source"])',
+    '.diffseek-menu-row:has([data-filter-kind="owners"][data-filter-value="@source"])',
   );
   const ownerItem = ownerRow.locator('.diffseek-menu-item');
   const ownerCounter = ownerRow.locator('.diffseek-menu-count');
@@ -435,7 +448,7 @@ test('clears native filters before taking over the menu', async () => {
   await expect(ownerRow).toHaveCSS('background-color', 'rgb(228, 220, 255)');
   await expect(
     page.locator(
-      '[data-filter-kind="owners"]:not([data-filter-value="@pull-source"])',
+      '[data-filter-kind="owners"]:not([data-filter-value="@source"])',
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
   const ownersTitle = page.locator(
@@ -525,7 +538,7 @@ test('clears native filters before taking over the menu', async () => {
   await ownerOnly.click();
   await expect(
     page.locator(
-      '[data-filter-kind="owners"]:not([data-filter-value="@pull-source"])',
+      '[data-filter-kind="owners"]:not([data-filter-value="@source"])',
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
   await expect(reset).toBeVisible();
@@ -913,6 +926,12 @@ test('hides nested generated files across streamed paths and cached revisits', a
   ]);
   const attributesRoute = 'https://github.com/octo/repo/raw/**/.gitattributes';
   let requests = 0;
+  let searches = 0;
+  const searchNested = async (route: Route) => {
+    searches += 1;
+    await route.fulfill(searchResponse([...attributes.keys()]));
+  };
+  await context.route(searchRoute, searchNested);
   await context.route(attributesRoute, async (route) => {
     requests += 1;
     const path = new URL(route.request().url()).pathname
@@ -976,6 +995,7 @@ test('hides nested generated files across streamed paths and cached revisits', a
       .toHaveAttribute('data-diffseek-filtered-out', 'true');
 
     const fetched = requests;
+    expect(searches).toBe(1);
     await page.reload();
     await page.getByLabel('Filter options').click();
     await expect(generatedCount).toHaveText('0/2');
@@ -984,7 +1004,9 @@ test('hides nested generated files across streamed paths and cached revisits', a
     await expect(page.locator(`[role="treeitem"][id="${manualPath}"]`))
       .toBeVisible();
     expect(requests).toBe(fetched);
+    expect(searches).toBe(1);
   } finally {
+    await context.unroute(searchRoute, searchNested);
     await context.unroute(attributesRoute);
   }
 });

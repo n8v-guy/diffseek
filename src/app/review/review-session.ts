@@ -1,6 +1,7 @@
 import type {
   FilterDefaultState,
   FilterDefaults,
+  RepositoryCache,
 } from '@diffseek/browser';
 import {
   afterNextPaint,
@@ -27,10 +28,12 @@ import {
   type ReviewRef,
   type ViewedTarget,
 } from '@diffseek/github';
-import type {
-  MetadataCommitGuard,
-  RepositoryMetadata,
-  RepositoryRef,
+import {
+  pullMetadataPaths,
+  unloadedMetadataPaths,
+  type MetadataCommitGuard,
+  type MetadataFiles,
+  type RepositoryMetadata,
 } from '@diffseek/repository-metadata';
 import {
   emptyFacetExclusions,
@@ -38,6 +41,8 @@ import {
   FileCatalog,
   ReviewIndex,
 } from '@diffseek/review';
+
+import type { DefaultMetadata } from '../metadata/reader';
 
 import { ViewedActionExecutor } from './action-executor';
 import {
@@ -75,14 +80,14 @@ export type ReviewSessionOptions = {
   root: Document;
   review: ReviewRef;
   metadata: RepositoryMetadata;
-  metadataCommits: MetadataCommitGuard;
+  metadataCommits: MetadataCommitGuard<RepositoryCache>;
   refreshDefault: (
-    repository: RepositoryRef,
-  ) => Promise<{ metadata: RepositoryMetadata; changed: boolean }>;
+    review: ReviewRef & { paths: string[] },
+  ) => Promise<DefaultMetadata>;
   readPull: (
     review: ReviewRef & { paths: string[] },
-    fallback: RepositoryMetadata,
-  ) => Promise<RepositoryMetadata>;
+    base: DefaultMetadata,
+  ) => Promise<DefaultMetadata>;
   markFiles: typeof markViewed;
   filterDefaults: FilterDefaults;
   writeFilterDefaults: (defaults: FilterDefaults) => Promise<void>;
@@ -119,6 +124,9 @@ export class ReviewSession {
   private classifyKey = '';
   private unavailable = new Map<string, string>();
   private metadata: RepositoryMetadata;
+  private metadataFiles: MetadataFiles = {};
+  private metadataPathCount = 0;
+  private pullPathCount = 0;
 
   private readonly options: ReviewSessionOptions;
 
@@ -210,7 +218,8 @@ export class ReviewSession {
 
   private reconcileOnce(): void {
     const firstObservation = !this.metadataWatch.ready;
-    const metadataOpportunity = consumeMetadataOpportunity(this.metadataWatch, this.options.root);
+    const metadataOpportunity =
+      consumeMetadataOpportunity(this.metadataWatch, this.options.root) || firstObservation;
     // Disconnect while writing so our own hidden/dataset toggles do not
     // immediately re-schedule another full reconcile during panel storms.
     this.observer.disconnect();
@@ -238,9 +247,7 @@ export class ReviewSession {
     this.treeNode = tree;
     this.regionNodes = regions;
     if (!next.supported) {
-      if (firstObservation || metadataOpportunity) {
-        this.refreshMetadata();
-      }
+      if (metadataOpportunity) this.refreshMetadata();
       this.projectionFingerprint = '';
       this.treeKey = null;
       this.regionKey = '';
@@ -265,10 +272,7 @@ export class ReviewSession {
       files: this.catalog.files(),
     };
     this.snapshot = catalogSnapshot;
-    const metadataKey = catalogSnapshot.files.map((file) => file.path).join('\n');
-    if (metadataOpportunity || metadataKey !== this.metadataRefresh.key) {
-      this.refreshMetadata(metadataKey);
-    }
+    if (this.reopenStaleMetadata() || metadataOpportunity) this.refreshMetadata();
     removeUnavailable(this.options.root);
     this.classifyIfNeeded(catalogSnapshot);
     const defaultViewedPaths = this.metadataRefresh.settled
@@ -408,21 +412,47 @@ export class ReviewSession {
     });
   }
 
-  private refreshMetadata(key = this.metadataRefresh.key): void {
+  /** Streamed paths only reopen a settled read for files not loaded yet. */
+  private reopenStaleMetadata(): boolean {
+    const paths = this.catalogPaths();
+    if (!this.metadataRefresh.settled || paths.length === this.metadataPathCount) {
+      return false;
+    }
+    this.metadataPathCount = paths.length;
+    const stale =
+      unloadedMetadataPaths(this.metadataFiles, paths).length > 0 ||
+      pullMetadataPaths(paths).length > this.pullPathCount;
+    if (stale) this.metadataRefresh.settled = false;
+    return stale;
+  }
+
+  private catalogPaths(): string[] {
+    return this.catalog.files().map((file) => file.path);
+  }
+
+  private refreshMetadata(): void {
     loadReviewMetadata(this.metadataRefresh, {
-      readPull: () => this.options.readPull({
-        ...this.options.review,
-        paths: this.catalog.files().map((file) => file.path),
-      }, this.metadata),
-      refreshDefault: () => this.options.refreshDefault(this.options.review),
-      commit: (metadata) => this.options.metadataCommits.commit(this.options.review, this.metadataRevision, metadata),
+      refreshDefault: async () => {
+        const result = await this.options.refreshDefault({
+          ...this.options.review,
+          paths: this.catalogPaths(),
+        });
+        this.metadataFiles = result.cache.files;
+        return result;
+      },
+      readPull: (base) => {
+        const paths = this.catalogPaths();
+        this.pullPathCount = pullMetadataPaths(paths).length;
+        return this.options.readPull({ ...this.options.review, paths }, base);
+      },
+      commit: (cache) => this.options.metadataCommits.commit(this.options.review, this.metadataRevision, cache),
       aborted: () => this.lifecycle.signal.aborted,
       onSettled: () => this.reconcile(),
       apply: (metadata) => {
         if (JSON.stringify(this.metadata) === JSON.stringify(metadata)) return;
         this.metadata = metadata; this.classifyKey = ''; this.reconcile();
       },
-    }, key);
+    });
   }
 
   private classifyIfNeeded(snapshot: SupportedSnapshot): void {

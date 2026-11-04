@@ -24,16 +24,17 @@ request reviews. GitHub remains the review system and visual authority.
   without changing any other facet.
 - **Review index** — immutable descendant and ancestor lookup built from one page
   observation.
-- **Metadata level** — recent pull-request cache, cached default branch, bundled
-  assumptions, or the uncached pull-request head. A default-branch refresh only
-  prefills the cache, and only when that repository has none yet.
+- **Metadata level** — cached default branch or bundled assumptions, plus the
+  pull request's own version of any metadata file its diff touches. The cache
+  refreshes once a day or on every third distinct pull request.
 - **Native action** — a click on a current GitHub control followed by observable
   confirmation on the page.
 
 ## Invariants
 
 - Unsupported files stay native, visible, and outside unavailable batch actions.
-- Metadata levels replace one another; they never merge.
+- A pull request's own metadata file replaces the default branch's file; metadata
+  levels otherwise never merge.
 - Native actions run in invocation order and re-resolve their controls.
 - Filtering never changes GitHub's file order.
 - One filter model owns tree visibility and visible/total counts.

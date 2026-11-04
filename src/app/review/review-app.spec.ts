@@ -3,42 +3,58 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import type { PageSnapshot } from '@diffseek/github';
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
+import type {
+  MetadataFiles,
+  RepositoryMetadata,
+} from '@diffseek/repository-metadata';
+
+import type { DefaultMetadata } from '../metadata/reader';
 
 import { startReviewApp } from './review-app';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 const emptyMetadata = { codeowners: '', attributes: '' };
-const inertMetadata = {
-  readImmediate: async () => emptyMetadata,
-  refreshDefault: async () => ({
-    metadata: emptyMetadata,
-    changed: false,
-  }),
-  readPull: async (
-    _review: unknown,
-    fallback: typeof emptyMetadata,
-  ) => fallback,
-};
+
+function loadedDefault(
+  metadata: RepositoryMetadata,
+  changed = false,
+  files: MetadataFiles = {},
+): DefaultMetadata {
+  return { metadata, cache: { files, refreshedAt: 0, pulls: [], overlays: {} }, changed };
+}
+
 const changesPath = '/octo/repo/pull/1/changes';
 
 function metadataSource(attributes: string) {
   const metadata = { ...emptyMetadata, attributes };
   return {
     readImmediate: async () => metadata,
-    refreshDefault: async () => ({ metadata, changed: false }),
+    refreshDefault: async () => loadedDefault(metadata),
   };
 }
 
+type AppOptions = NonNullable<Parameters<typeof startReviewApp>[0]>;
+type Overrides = Omit<AppOptions, 'readPull'> & {
+  readPull?: (
+    review: Parameters<NonNullable<AppOptions['readPull']>>[0],
+    base: DefaultMetadata,
+  ) => Promise<RepositoryMetadata>;
+};
+
 function reviewApp(
-  extra: Partial<Parameters<typeof startReviewApp>[0]> = {},
+  extra: Overrides = {},
   pathname: () => string = () => changesPath,
 ) {
+  const readImmediate = extra.readImmediate ?? (async () => emptyMetadata);
+  const { readPull = async (_review, base) => base.metadata, ...rest } = extra;
   return startReviewApp({
-    ...inertMetadata,
+    readImmediate,
+    refreshDefault: async () => loadedDefault(await readImmediate({ owner: 'octo', repo: 'repo' })),
     root: document,
     pathname,
-    ...extra,
+    ...rest,
+    readPull: async (review, base) => loadedDefault(await readPull(review, base)),
   });
 }
 
@@ -80,6 +96,16 @@ async function nextReconcile(action: () => void): Promise<void> {
   });
   action();
   await ready;
+}
+
+function streamTreeItem(path: string): Promise<void> {
+  return nextReconcile(() => {
+    document.querySelector('[role="tree"]')?.insertAdjacentHTML('beforeend', `
+      <li id="${path}" role="treeitem" aria-label="${path}">
+        <div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-added"></svg></div>
+        <a href="#diff-${path.replaceAll(/\W/g, '-')}">${path}</a>
+      </li>`);
+  });
 }
 
 const calls = new EventTarget();
@@ -224,31 +250,17 @@ describe('review app lifecycle', () => {
     app.stop();
   });
 
-  it('replaces cached metadata with PR-head content while default refresh stays isolated', async () => {
+  it('replaces cached metadata with the default branch and then the PR side', async () => {
     openMenu();
-    let resolveDefault:
-      | ((value: {
-          metadata: { codeowners: string; attributes: string };
-          changed: boolean;
-        }) => void)
-      | undefined;
-    let resolvePull:
-      | ((value: { codeowners: string; attributes: string }) => void)
-      | undefined;
+    const files = { 'web/.gitattributes': { blob: 'b', text: '' } };
+    let resolveDefault = (_value: DefaultMetadata): void => undefined;
+    let resolvePull = (_value: RepositoryMetadata): void => undefined;
     const refreshDefault = vi.fn(
-      () =>
-        new Promise<{
-          metadata: { codeowners: string; attributes: string };
-          changed: boolean;
-        }>((resolve) => {
-          resolveDefault = resolve;
-        }),
+      () => new Promise<DefaultMetadata>((resolve) => { resolveDefault = resolve; }),
     );
     const readPull = vi.fn(
-      () =>
-        new Promise<{ codeowners: string; attributes: string }>((resolve) => {
-          resolvePull = resolve;
-        }),
+      (_review: unknown, _base: DefaultMetadata) =>
+        new Promise<RepositoryMetadata>((resolve) => { resolvePull = resolve; }),
     );
     const app = await reviewApp({
       readImmediate: async () => ({
@@ -260,97 +272,65 @@ describe('review app lifecycle', () => {
     });
 
     expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull();
-    expect(readPull).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ pull: 1 }), { codeowners: '', attributes: 'src/** group=cached' });
-    expect(refreshDefault).toHaveBeenCalledOnce();
-    resolvePull?.({
-      codeowners: '',
-      attributes: 'src/** group=pull',
-    });
+    expect(readPull).not.toHaveBeenCalled();
+    resolveDefault(loadedDefault({ codeowners: '', attributes: 'src/** group=default' }, true, files));
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
+    expect(readPull.mock.calls[0]?.[1].cache.files).toEqual(files);
+    expect(document.querySelector('[data-filter-value="default"]')).not.toBeNull();
+    expect(document.querySelector('[data-filter-value="cached"]')).toBeNull();
+    resolvePull({ codeowners: '', attributes: 'src/** group=pull' });
     await until(() =>
       expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(),
     );
-    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
-    resolveDefault?.({
-      metadata: {
-        codeowners: '',
-        attributes: 'src/** group=default',
-      },
-      changed: true,
-    });
     await until(async () => {
-      const stored = await fakeBrowser.storage.local.get(
-        'diffseek:metadata:octo/repo',
-      );
-      expect(stored['diffseek:metadata:octo/repo']).toMatchObject({
-        attributes: 'src/** group=default',
-      });
+      const stored = await fakeBrowser.storage.local.get('diffseek:metadata:octo/repo');
+      expect(stored['diffseek:metadata:octo/repo']).toMatchObject({ version: 3, files });
     });
-    expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull();
     expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
-    expect(document.querySelector('[data-filter-value="cached"]')).toBeNull();
+    expect(refreshDefault).toHaveBeenCalledOnce();
     app.stop();
   });
 
-  it('continues to PR-head metadata when the default refresh fails', async () => {
+  it('keeps cached metadata and skips the PR side when the default read fails', async () => {
     openMenu();
-    const readPull = vi.fn().mockResolvedValue({
-      codeowners: '',
-      attributes: 'src/** group=pull',
-    });
+    const readPull = vi.fn();
     const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'src/** group=cached',
       }),
-      refreshDefault: async () => {
+      refreshDefault: signalled(async () => {
         throw new Error('default unavailable');
-      },
-      readPull: signalled(readPull),
+      }),
+      readPull,
     });
 
     await until(() =>
-      expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(),
+      expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull(),
     );
-    expect(readPull).toHaveBeenCalledWith(
-      expect.objectContaining({ pull: 1 }),
-      { codeowners: '', attributes: 'src/** group=cached' },
-    );
+    expect(readPull).not.toHaveBeenCalled();
     app.stop();
   });
 
-  it('keeps PR-head metadata when the default-branch cache write fails', async () => {
+  it('applies the default branch and the PR side when the cache write fails', async () => {
     openMenu();
     const setSpy = vi
       .spyOn(fakeBrowser.storage.local, 'set')
       .mockRejectedValueOnce(new Error('storage unavailable'));
-    const readPull = vi.fn().mockResolvedValue({
-      codeowners: '',
-      attributes: 'src/** group=pull',
-    });
     const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '',
         attributes: 'src/** group=cached',
       }),
-      refreshDefault: async () => ({
-        metadata: {
-          codeowners: '',
-          attributes: 'src/** group=default',
-        },
-        changed: true,
-      }),
-      readPull: signalled(readPull),
+      refreshDefault: async () =>
+        loadedDefault({ codeowners: '', attributes: 'src/** group=default' }, true),
+      readPull: async () => ({ codeowners: '', attributes: 'src/** group=pull' }),
     });
 
+    await until(() => expect(setSpy).toHaveBeenCalled());
     await until(() =>
       expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(),
     );
-    await until(() => expect(setSpy).toHaveBeenCalled());
-    expect(readPull).toHaveBeenCalledWith(
-      expect.objectContaining({ pull: 1 }),
-      { codeowners: '', attributes: 'src/** group=cached' },
-    );
-    expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
     setSpy.mockRestore();
     app.stop();
   });
@@ -366,13 +346,11 @@ describe('review app lifecycle', () => {
       readPull: async () => {
         throw new Error('offline');
       },
-      refreshDefault: async () => ({
-        metadata: {
-          codeowners: '',
-          attributes: 'src/generated.ts linguist-generated',
-        },
-        changed: true,
-      }),
+      refreshDefault: async () =>
+        loadedDefault(
+          { codeowners: '', attributes: 'src/generated.ts linguist-generated' },
+          true,
+        ),
     });
 
     await until(() =>
@@ -390,13 +368,9 @@ describe('review app lifecycle', () => {
 
   it('classifies immediately from cached metadata and mounts ephemeral UI once', async () => {
     openMenu();
-    const refreshDefault = vi.fn().mockResolvedValue({
-      metadata: {
-        codeowners: '*.ts @cached',
-        attributes: 'src/** group=Code',
-      },
-      changed: false,
-    });
+    const refreshDefault = vi.fn().mockResolvedValue(
+      loadedDefault({ codeowners: '*.ts @cached', attributes: 'src/** group=Code' }),
+    );
     const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '*.ts @cached',
@@ -610,7 +584,7 @@ describe('metadata refresh', () => {
       .mockResolvedValueOnce(loaded);
     const app = await reviewApp({
       readImmediate: async () => immediate,
-      refreshDefault: async () => ({ metadata: immediate, changed: false }),
+      refreshDefault: async () => loadedDefault(immediate),
       readPull: signalled(readPull),
     });
     await until(() => expect(readPull).toHaveBeenCalledOnce());
@@ -637,7 +611,7 @@ describe('metadata refresh', () => {
       .mockResolvedValueOnce(loaded);
     const app = await reviewApp({
       readImmediate: async () => immediate,
-      refreshDefault: async () => ({ metadata: immediate, changed: false }),
+      refreshDefault: async () => loadedDefault(immediate),
       readPull: signalled(readPull),
     });
     await until(() => expect(readPull).toHaveBeenCalledOnce());
@@ -667,7 +641,7 @@ describe('metadata refresh', () => {
     );
     const app = await reviewApp({
       readImmediate: async () => immediate,
-      refreshDefault: async () => ({ metadata: immediate, changed: false }),
+      refreshDefault: async () => loadedDefault(immediate),
       readPull: signalled(readPull),
     });
     await until(() => expect(readPull).toHaveBeenCalledOnce());
@@ -685,6 +659,53 @@ describe('metadata refresh', () => {
     app.stop();
   });
 
+  it('reopens a settled read only for streamed paths that need an unloaded ancestor', async () => {
+    const root = { blob: 'r', text: '' };
+    const known = { '.gitattributes': root, 'web/.gitattributes': { blob: 'w' } };
+    const fetched = { ...known, 'web/.gitattributes': { blob: 'w', text: 'web/** group=Web' } };
+    const refreshDefault = vi.fn<(review: { paths: string[] }) => Promise<DefaultMetadata>>()
+      .mockResolvedValueOnce(loadedDefault(immediate, true, known))
+      .mockResolvedValueOnce(loadedDefault(immediate, true, fetched));
+    const readPull = vi.fn(async (_review: unknown, base: DefaultMetadata) => base.metadata);
+    const app = await reviewApp({
+      readImmediate: async () => immediate,
+      refreshDefault: signalled(refreshDefault),
+      readPull: signalled(readPull),
+    });
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
+
+    await streamTreeItem('src/more.ts');
+    await streamTreeItem('docs/more.md');
+    expect(refreshDefault).toHaveBeenCalledOnce();
+    expect(readPull).toHaveBeenCalledOnce();
+
+    await streamTreeItem('web/page.ts');
+    await until(() => expect(readPull).toHaveBeenCalledTimes(2));
+    expect(refreshDefault.mock.lastCall?.[0].paths).toContain('web/page.ts');
+
+    await streamTreeItem('web/other.ts');
+    await streamTreeItem('src/last.ts');
+    expect(refreshDefault).toHaveBeenCalledTimes(2);
+    expect(readPull).toHaveBeenCalledTimes(2);
+    app.stop();
+  });
+
+  it('reads the PR side again only when a streamed path is itself metadata', async () => {
+    const refreshDefault = vi.fn().mockResolvedValue(loadedDefault(immediate));
+    const readPull = vi.fn(async (_review: { paths: string[] }, base: DefaultMetadata) => base.metadata);
+    const app = await reviewApp({
+      readImmediate: async () => immediate,
+      refreshDefault: signalled(refreshDefault),
+      readPull: signalled(readPull),
+    });
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
+
+    await streamTreeItem('web/.gitattributes');
+    await until(() => expect(readPull).toHaveBeenCalledTimes(2));
+    expect(readPull.mock.lastCall?.[0].paths).toContain('web/.gitattributes');
+    app.stop();
+  });
+
   it('keeps cached metadata when the pull-head read fails', async () => {
     openMenu();
     const readPull = vi.fn(async () => {
@@ -692,10 +713,8 @@ describe('metadata refresh', () => {
     });
     const app = await reviewApp({
       readImmediate: async () => ({ codeowners: '', attributes: 'src/** group=FromCache' }),
-      refreshDefault: async () => ({
-        metadata: { codeowners: '', attributes: 'src/** group=FromCache' },
-        changed: false,
-      }),
+      refreshDefault: async () =>
+        loadedDefault({ codeowners: '', attributes: 'src/** group=FromCache' }),
       readPull: signalled(readPull),
     });
     await until(() =>

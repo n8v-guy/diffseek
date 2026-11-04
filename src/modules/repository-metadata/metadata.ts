@@ -6,7 +6,6 @@ export type RepositoryRef = {
 export type RepositoryMetadata = {
   codeowners: string;
   attributes: string;
-  /** Directory-scoped files; an empty string also records a missing file. */
+  /** Directory-scoped files. */
   nestedAttributes?: Record<string, string>;
-  codeownersPath?: string;
 };

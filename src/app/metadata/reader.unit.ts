@@ -1,482 +1,454 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
-import {
-  readCache,
-  readPullCache,
-  writeCache,
-  writePullCache,
-} from '@diffseek/browser';
-import type { RawFileRequest, RawFileResult } from '@diffseek/github';
-import {
-  bundledGitAttributes,
-  MetadataCommitGuard,
-} from '@diffseek/repository-metadata';
+import { readCache, writeCache } from '@diffseek/browser';
+import type { MetadataSearchResult, RawFileRequest, RawFileResult } from '@diffseek/github';
+import { bundledGitAttributes } from '@diffseek/repository-metadata';
 
 import {
   readImmediateMetadata,
   readPullMetadata,
   refreshDefaultMetadata,
+  type DefaultMetadata,
 } from './reader';
 
 const repository = { owner: 'owner', repo: 'repo' };
-const review = { ...repository, pull: 42 };
-const sha = 'a'.repeat(40);
+const day = 86_400_000;
+const head = 'c'.repeat(40);
+const indexed: MetadataSearchResult = [
+  { path: '.github/CODEOWNERS', blob: 'o1' },
+  { path: 'CODEOWNERS', blob: 'o2' },
+  { path: 'docs/CODEOWNERS', blob: 'o3' },
+  { path: '.gitattributes', blob: 'g0' },
+  { path: 'apps/.gitattributes', blob: 'g1' },
+  { path: 'apps/web/.gitattributes', blob: 'g2' },
+  { path: 'tools/.gitattributes', blob: 'g3' },
+];
+const texts: Record<string, string> = {
+  '.github/CODEOWNERS': '* @github',
+  CODEOWNERS: '* @root',
+  '.gitattributes': '*.ts group=Code',
+  'apps/.gitattributes': '*.json linguist-generated=true',
+  'apps/web/.gitattributes': '*.json linguist-generated=false',
+  'tools/.gitattributes': '*.js group=Tools',
+};
 
-describe('repository metadata', () => {
-  beforeEach(() => fakeBrowser.reset());
+type Raw = (input: RawFileRequest) => Promise<RawFileResult>;
+const raw = (files: Record<string, string> = texts) =>
+  vi.fn<Raw>(async ({ path }) => {
+    const text = files[path];
+    return text === undefined
+      ? { status: 'missing' }
+      : { status: 'found', text, contentType: 'text/plain', url: '' };
+  });
+const searching = (results = indexed) =>
+  vi.fn(async (_request: { repo: string }) => results);
+const refresh = (pull: number, paths: string[], now: number, request: ReturnType<typeof raw>, search = searching()) =>
+  refreshDefaultMetadata({ ...repository, pull, paths }, { request, search, now: () => now });
+const requested = (request: ReturnType<typeof raw>) =>
+  request.mock.calls.map(([input]) => input.path);
 
-  it('loads nested attributes without a root file and upgrades cached PR metadata', async () => {
-    const fallback = { codeowners: '', attributes: bundledGitAttributes };
-    await writePullCache(review, sha, fallback);
-    const directory = 'apps/contributor/shared/openapi';
-    const pull = {
-      ...review,
-      paths: [`${directory}/metadata.json`, `${directory}/gateway.json`],
-    };
-    const request = vi.fn(async (input: RawFileRequest) =>
-      input.path === `${directory}/.gitattributes`
-        ? found('*.json linguist-generated=true')
-        : missing,
-    );
+async function commit(result: DefaultMetadata): Promise<DefaultMetadata> {
+  await writeCache(repository, result.cache);
+  return result;
+}
 
-    const result = await readPullMetadata(pull, fallback, request, async () => sha);
+beforeEach(() => fakeBrowser.reset());
 
-    expect(result).toMatchObject({
-      nestedAttributes: {
-        apps: '',
-        'apps/contributor': '',
-        'apps/contributor/shared': '',
-        [directory]: '*.json linguist-generated=true',
-      },
-    });
-    expect(request.mock.calls.map(([input]) => input.path)).toEqual([
+describe('cold read', () => {
+  it('searches once, reads only the chosen CODEOWNERS and ancestor attributes, never probing', async () => {
+    const request = raw();
+    const search = searching();
+
+    const result = await refresh(1, ['apps/web/main.ts', 'apps/lib/a.ts'], 1_000, request, search);
+
+    expect(search).toHaveBeenCalledExactlyOnceWith({ repo: 'owner/repo' });
+    expect(requested(request)).toHaveLength(4);
+    expect(requested(request)).toEqual(expect.arrayContaining([
+      '.github/CODEOWNERS',
+      '.gitattributes',
       'apps/.gitattributes',
-      'apps/contributor/.gitattributes',
-      'apps/contributor/shared/.gitattributes',
-      `${directory}/.gitattributes`,
-    ]);
-    expect(await readImmediateMetadata(pull)).toEqual(result);
+      'apps/web/.gitattributes',
+    ]));
+    expect(request.mock.calls.every(([input]) => input.ref === 'HEAD')).toBe(true);
+    expect(result.metadata).toEqual({
+      codeowners: '* @github',
+      attributes: '*.ts group=Code',
+      nestedAttributes: {
+        apps: '*.json linguist-generated=true',
+        'apps/web': '*.json linguist-generated=false',
+      },
+    });
+    expect(result.cache).toMatchObject({ refreshedAt: 1_000, pulls: [1] });
+    expect(result.cache.files['tools/.gitattributes']).toEqual({ blob: 'g3' });
+    expect(result.changed).toBe(true);
+  });
 
-    request.mockClear();
-    expect(await readPullMetadata(pull, fallback, request, async () => sha))
-      .toEqual(result);
+  it('caches an empty search as none, then makes no request until the next refresh', async () => {
+    const request = raw();
+    const none = await commit(await refresh(1, ['a.ts'], 0, request, searching([])));
+
     expect(request).not.toHaveBeenCalled();
-  });
+    expect(none.metadata).toEqual({ codeowners: '', attributes: bundledGitAttributes, nestedAttributes: {} });
+    expect(none.cache.files).toEqual({});
 
-  it('starts immediately with bundled source files on a cold cache', async () => {
-    expect(await readImmediateMetadata(repository)).toEqual({
-      codeowners: '',
-      attributes: bundledGitAttributes,
-    });
-  });
-
-  it('extends a cached head for streamed paths and drops deleted rules on a new head', async () => {
-    const fallback = { codeowners: '', attributes: '' };
-    const request = vi.fn(async (input: RawFileRequest) =>
-      input.path === 'apps/.gitattributes' || input.path === 'web/.gitattributes'
-        ? found('*.json linguist-generated=true')
-        : missing,
-    );
-    const first = await readPullMetadata(
-      { ...review, paths: ['apps/client.json'] }, fallback, request, async () => sha,
-    );
-    request.mockClear();
-    const pull = { ...review, paths: ['apps/client.json', 'web/client.json'] };
-    const extended = await readPullMetadata(pull, first, request, async () => sha);
-
-    expect(request.mock.calls.map(([input]) => input.path)).toEqual(['web/.gitattributes']);
-    expect(extended.nestedAttributes).toEqual({
-      apps: '*.json linguist-generated=true',
-      web: '*.json linguist-generated=true',
-    });
-    const updated = await readPullMetadata(pull, extended, async () => missing, async () => 'b'.repeat(40));
-    expect(updated.nestedAttributes).toEqual({ apps: '', web: '' });
-  });
-
-  it('leaves failed nested reads retryable instead of caching them as missing', async () => {
-    const fallback = { codeowners: '', attributes: '' };
-    await writePullCache(review, sha, fallback);
-    const pull = { ...review, paths: ['apps/client.json'] };
-    await expect(readPullMetadata(pull, fallback, async () => {
-      throw new Error('offline');
-    }, async () => sha)).rejects.toThrow('Repository metadata request failed');
-    expect(await readPullCache(review)).toEqual({ ...fallback, sha });
-
-    const retry = await readPullMetadata(pull, fallback,
-      async () => found('*.json linguist-generated=true'), async () => sha);
-    expect(retry.nestedAttributes).toEqual({ apps: '*.json linguist-generated=true' });
-  });
-
-  it('bounds concurrent ancestor reads and waits for active requests before rejecting', async () => {
-    const fallback = { codeowners: '', attributes: '' };
-    await writePullCache(review, sha, fallback);
-    const gates = Array.from({ length: 4 }, () => Promise.withResolvers<RawFileResult>());
-    const started = Promise.withResolvers<undefined>();
-    let calls = 0;
-    let settled = false;
-    const request = vi.fn(async () => {
-      const gate = gates[calls++];
-      if (calls === gates.length) started.resolve(undefined);
-      return gate ? gate.promise : missing;
-    });
-    const pending = readPullMetadata({
-      ...review, paths: ['a/x.json', 'b/x.json', 'c/x.json', 'd/x.json', 'e/x.json'],
-    }, fallback, request, async () => sha);
-    const rejected = pending.finally(() => { settled = true; })
-      .catch((error: unknown) => error);
-    await started.promise;
-    expect(calls).toBe(4);
-    gates[0]?.reject(new Error('offline'));
-    await expect(gates[0]?.promise).rejects.toThrow('offline');
-    expect(settled).toBe(false);
-    for (const gate of gates.slice(1)) gate.resolve(missing);
-    expect(await rejected).toEqual(new Error('Repository metadata request failed'));
-    expect(calls).toBe(5);
-    expect(await readPullCache(review)).toEqual({ ...fallback, sha });
-  });
-
-  it('starts with bundled source files when storage is unavailable', async () => {
-    vi.spyOn(fakeBrowser.storage.local, 'get').mockRejectedValueOnce(
-      new Error('storage unavailable'),
-    );
-
-    await expect(readImmediateMetadata(repository)).resolves.toEqual({
-      codeowners: '',
-      attributes: bundledGitAttributes,
-    });
-  });
-
-  it('starts known pull requests from their cache and unknown ones from HEAD', async () => {
-    await writeCache(repository, {
-      codeowners: '*.ts @head',
-      attributes: '*.ts group=head',
-    });
-    await writePullCache(review, sha, {
-      codeowners: '*.ts @pull',
-      attributes: '*.ts group=pull',
-      codeownersPath: 'CODEOWNERS',
-    });
-
-    await expect(readImmediateMetadata(review)).resolves.toEqual({
-      codeowners: '*.ts @pull',
-      attributes: '*.ts group=pull',
-      codeownersPath: 'CODEOWNERS',
-    });
-    await expect(
-      readImmediateMetadata({ ...repository, pull: 99 }),
-    ).resolves.toEqual({
-      codeowners: '*.ts @head',
-      attributes: '*.ts group=head',
-    });
-  });
-
-  it('caches an empty HEAD probe so warm revisits skip the walk', async () => {
-    const request = vi.fn(async () => missing);
-    const guard = new MetadataCommitGuard(writeCache);
-    const revision = guard.begin(repository);
-    const first = await refreshDefaultMetadata(repository, request);
-    await guard.commit(repository, revision, first.metadata);
-
-    expect(first.changed).toBe(true);
-    expect(first.metadata).toEqual({
-      codeowners: '',
-      attributes: bundledGitAttributes,
-    });
-    request.mockClear();
-    const second = await refreshDefaultMetadata(repository, request);
-
-    expect(second.changed).toBe(false);
+    const search = searching();
+    const warm = await refresh(1, ['a.ts', 'b/c.ts'], day - 1, request, search);
+    expect(search).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
+    expect(warm.metadata).toEqual(none.metadata);
   });
 
-  it('refreshes default-branch source files once and skips later HEAD fetches', async () => {
-    const request = vi.fn(async (input: RawFileRequest) => {
-      if (input.path === 'CODEOWNERS') return found('*.ts @typescript');
-      if (input.path === '.gitattributes') {
-        return found('server/** group=backend');
-      }
-      return missing;
+  it('picks CODEOWNERS from the search results by precedence', async () => {
+    const request = raw();
+    const results = indexed.filter(({ path }) => path.endsWith('CODEOWNERS') && path !== '.github/CODEOWNERS');
+
+    await refresh(1, ['a.ts'], 0, request, searching(results));
+    expect(requested(request)).toEqual(['CODEOWNERS']);
+  });
+
+  it('falls back to bounded spot-checks when search is unusable', async () => {
+    const request = raw({ 'docs/CODEOWNERS': '* @docs', '.gitattributes': '*.ts group=Code' });
+    const search = vi.fn(async () => {
+      throw new Error('Metadata search is unavailable');
     });
 
-    const guard = new MetadataCommitGuard(writeCache);
-    const revision = guard.begin(repository);
-    const first = await refreshDefaultMetadata(repository, request);
-    await guard.commit(repository, revision, first.metadata);
+    const result = await refresh(1, ['apps/web/main.ts', 'tools/x.js'], 0, request, search);
 
-    expect(first.changed).toBe(true);
-    expect(codeownersRequested(request)).toEqual([
+    expect(requested(request)).toEqual([
+      '.gitattributes',
       '.github/CODEOWNERS',
       'CODEOWNERS',
-    ]);
-    request.mockClear();
-    const second = await refreshDefaultMetadata(repository, request);
-
-    expect(second.changed).toBe(false);
-    expect(request).not.toHaveBeenCalled();
-    expect(await readImmediateMetadata(repository)).toEqual({
-      codeowners: '*.ts @typescript',
-      attributes: 'server/** group=backend',
-      codeownersPath: 'CODEOWNERS',
-    });
-  });
-
-  it('does not refetch HEAD CODEOWNERS or gitattributes when already cached', async () => {
-    await writeCache(repository, {
-      codeowners: '*.ts @cached',
-      attributes: '*.ts group=cached',
-    });
-    const request = vi.fn(async () => found('*.ts @fresh'));
-
-    const result = await refreshDefaultMetadata(repository, request);
-
-    expect(result).toEqual({
-      metadata: {
-        codeowners: '*.ts @cached',
-        attributes: '*.ts group=cached',
-      },
-      changed: false,
-    });
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it('replaces fallback files from the uncached PR head and stores the PR', async () => {
-    await writeCache(repository, {
-      codeowners: '*.ts @default',
-      attributes: '*.ts group=default',
-    });
-    const fallback = await readImmediateMetadata(repository);
-    const request = vi.fn(async (input: RawFileRequest) => {
-      if (input.path === '.gitattributes') return found('*.ts group=pull');
-      if (input.path === 'CODEOWNERS') return found('*.ts @pull');
-      return missing;
-    });
-    const resolveHead = vi.fn().mockResolvedValue(sha);
-
-    const result = await readPullMetadata(review, fallback, request, resolveHead);
-
-    expect(result).toEqual({
-      codeowners: '*.ts @pull',
-      attributes: '*.ts group=pull',
-      codeownersPath: 'CODEOWNERS',
-    });
-    expect(codeownersRequested(request)).toEqual([
-      '.github/CODEOWNERS',
-      'CODEOWNERS',
-    ]);
-    expect(resolveHead).toHaveBeenCalledWith({
-      repo: 'owner/repo',
-      pull: 42,
-    });
-    expect(await readImmediateMetadata(review)).toEqual(result);
-    expect(await readImmediateMetadata(repository)).toEqual(fallback);
-  });
-
-  it('skips CODEOWNERS and gitattributes fetches when the PR head SHA is cached', async () => {
-    await writePullCache(review, sha, {
-      codeowners: '*.ts @pull',
-      attributes: '*.ts group=pull',
-      codeownersPath: 'CODEOWNERS',
-    });
-    const request = vi.fn(async () => found('*.ts @fresh'));
-
-    const result = await readPullMetadata(
-      review,
-      {
-        codeowners: '*.ts @default',
-        attributes: '*.ts group=default',
-      },
-      request,
-      async () => sha,
-    );
-
-    expect(result).toEqual({
-      codeowners: '*.ts @pull',
-      attributes: '*.ts group=pull',
-      codeownersPath: 'CODEOWNERS',
-    });
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it('refetches PR files when the cached head SHA changed', async () => {
-    await writePullCache(review, sha, {
-      codeowners: '*.ts @stale',
-      attributes: '*.ts group=stale',
-    });
-    const request = vi.fn(async (input: RawFileRequest) =>
-      input.path === 'CODEOWNERS' ? found('*.ts @fresh') : missing,
-    );
-
-    const result = await readPullMetadata(
-      review,
-      {
-        codeowners: '*.ts @default',
-        attributes: '*.ts group=default',
-      },
-      request,
-      async () => 'b'.repeat(40),
-    );
-
-    expect(result).toEqual({
-      codeowners: '*.ts @fresh',
-      attributes: '*.ts group=default',
-      codeownersPath: 'CODEOWNERS',
-    });
-    expect(codeownersRequested(request)).toEqual([
-      '.github/CODEOWNERS',
-      'CODEOWNERS',
-    ]);
-  });
-
-  it('keeps the previous fallback for files absent from the PR head', async () => {
-    const fallback = {
-      codeowners: '*.ts @default',
-      attributes: '*.ts group=default',
-    };
-
-    const result = await readPullMetadata(
-      review,
-      fallback,
-      async (input) =>
-        input.path === 'CODEOWNERS' ? found('*.ts @pull') : missing,
-      async () => 'b'.repeat(40),
-    );
-
-    expect(result).toEqual({
-      codeowners: '*.ts @pull',
-      attributes: '*.ts group=default',
-      codeownersPath: 'CODEOWNERS',
-    });
-  });
-
-  it('tries the default-branch CODEOWNERS path first on the PR head', async () => {
-    await writeCache(repository, {
-      codeowners: '*.ts @cached',
-      attributes: '*.ts group=cached',
-      codeownersPath: 'CODEOWNERS',
-    });
-    const request = vi.fn(async (input: RawFileRequest) => {
-      if (input.path === 'CODEOWNERS') return found('*.ts @fresh');
-      if (input.path === '.gitattributes') return found('*.ts group=fresh');
-      return found('*.ts @other');
-    });
-
-    const result = await readPullMetadata(
-      review,
-      {
-        codeowners: '*.ts @cached',
-        attributes: '*.ts group=cached',
-        codeownersPath: 'docs/CODEOWNERS',
-      },
-      request,
-      async () => sha,
-    );
-
-    expect(result).toEqual({
-      codeowners: '*.ts @fresh',
-      attributes: '*.ts group=fresh',
-      codeownersPath: 'CODEOWNERS',
-    });
-    expect(codeownersRequested(request)).toEqual(['CODEOWNERS']);
-  });
-
-  it('continues past a missing HEAD CODEOWNERS path in GitHub order', async () => {
-    await writeCache(repository, {
-      codeowners: '*.ts @cached',
-      attributes: '*.ts group=cached',
-      codeownersPath: 'docs/CODEOWNERS',
-    });
-    const request = vi.fn(async (input: RawFileRequest) => {
-      if (input.path === '.github/CODEOWNERS') return found('*.ts @github');
-      if (input.path === '.gitattributes') return found('*.ts group=fresh');
-      return missing;
-    });
-
-    const result = await readPullMetadata(
-      review,
-      {
-        codeowners: '*.ts @cached',
-        attributes: '*.ts group=cached',
-        codeownersPath: 'CODEOWNERS',
-      },
-      request,
-      async () => sha,
-    );
-
-    expect(result).toEqual({
-      codeowners: '*.ts @github',
-      attributes: '*.ts group=fresh',
-      codeownersPath: '.github/CODEOWNERS',
-    });
-    expect(codeownersRequested(request)).toEqual([
       'docs/CODEOWNERS',
-      '.github/CODEOWNERS',
     ]);
+    expect(result.metadata).toEqual({
+      codeowners: '* @docs',
+      attributes: '*.ts group=Code',
+      nestedAttributes: {},
+    });
   });
 
-  it('does not retry or store a failed gitattributes read', async () => {
-    let attempts = 0;
-    const request = vi.fn(async (input: RawFileRequest) => {
-      if (input.path !== '.gitattributes') return missing;
-      attempts += 1;
+  it('stops spot-checking at the first CODEOWNERS and makes at most four requests', async () => {
+    const request = raw({ CODEOWNERS: '* @root' });
+    const search = vi.fn(async (): Promise<MetadataSearchResult> => {
+      throw new Error('signed out');
+    });
+    await refresh(1, ['a/b/c/d.ts'], 0, request, search);
+    expect(requested(request)).toEqual(['.gitattributes', '.github/CODEOWNERS', 'CODEOWNERS']);
+
+    const none = raw({});
+    await refresh(2, ['a/b/c/d.ts'], 0, none, search);
+    expect(none).toHaveBeenCalledTimes(4);
+  });
+
+  it('serves bundled assumptions for an empty fallback and never stores a failed read', async () => {
+    const unavailable = vi.fn(async (): Promise<MetadataSearchResult> => {
+      throw new Error('Metadata search is unavailable');
+    });
+    const empty = await refresh(1, ['a.ts'], 0, raw({}), unavailable);
+    expect(empty.metadata.attributes).toBe(bundledGitAttributes);
+
+    const failing = vi.fn<Raw>(async () => {
       throw new Error('Raw file request failed with 429');
     });
-
-    await expect(
-      readPullMetadata(
-        review,
-        { codeowners: '', attributes: bundledGitAttributes },
-        request,
-        async () => sha,
-      ),
-    ).rejects.toThrow('Repository metadata request failed');
-    expect(attempts).toBe(1);
-    expect(await readPullCache(review)).toBeNull();
-
-    await expect(refreshDefaultMetadata(repository, request)).resolves.toEqual({
-      metadata: {
-        codeowners: '',
-        attributes: bundledGitAttributes,
-      },
-      changed: false,
-    });
+    await expect(refresh(1, ['a.ts'], 0, failing)).rejects.toThrow('429');
     expect(await readCache(repository)).toBeNull();
-  });
-
-  it('probes CODEOWNERS in GitHub order on HEAD', async () => {
-    const request = vi.fn(async (input: RawFileRequest) => {
-      if (input.path === 'CODEOWNERS') return found('*.ts @root');
-      if (input.path === '.gitattributes') return found('*.ts group=fresh');
-      return missing;
-    });
-
-    const result = await refreshDefaultMetadata(repository, request);
-
-    expect(result.metadata.codeownersPath).toBe('CODEOWNERS');
-    expect(codeownersRequested(request)).toEqual([
-      '.github/CODEOWNERS',
-      'CODEOWNERS',
-    ]);
   });
 });
 
-const missing = { status: 'missing' } as const;
+describe('warm and hot reads', () => {
+  it('make no metadata request at all, however the diff streams in', async () => {
+    const paths = ['apps/web/main.ts'];
+    await commit(await refresh(1, paths, 0, raw()));
 
-function found(text: string): Extract<RawFileResult, { status: 'found' }> {
-  return {
-    status: 'found',
-    text,
-    contentType: 'text/plain',
-    url: '',
-  };
-}
+    const request = raw();
+    const search = searching();
+    expect(await readImmediateMetadata(repository)).toMatchObject({ codeowners: '* @github' });
+    for (const [pull, streamed] of [[1, paths], [1, [...paths, 'apps/web/more.ts', 'x/y.ts']], [2, paths]] as const) {
+      const result = await refresh(pull, [...streamed], day - 1, request, search);
+      expect(result.metadata.nestedAttributes).toMatchObject({ 'apps/web': '*.json linguist-generated=false' });
+      await commit(result);
+    }
+    expect(search).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
 
-function codeownersRequested(
-  request: ReturnType<
-    typeof vi.fn<(input: RawFileRequest) => Promise<RawFileResult>>
-  >,
-): string[] {
-  return request.mock.calls
-    .map(([input]) => input.path)
-    .filter((path) => path.endsWith('CODEOWNERS'));
-}
+  it('read only a newly relevant ancestor known from the cached search', async () => {
+    await commit(await refresh(1, ['apps/web/main.ts'], 0, raw()));
+
+    const request = raw();
+    const search = searching();
+    const result = await refresh(1, ['apps/web/main.ts', 'tools/run.js'], 1, request, search);
+
+    expect(requested(request)).toEqual(['tools/.gitattributes']);
+    expect(search).not.toHaveBeenCalled();
+    expect(result.metadata.nestedAttributes).toMatchObject({ tools: '*.js group=Tools' });
+    expect(result.cache.refreshedAt).toBe(0);
+    expect(result.changed).toBe(true);
+
+    await commit(result);
+    request.mockClear();
+    expect((await refresh(1, ['tools/run.js', 'apps/x.ts'], 2, request, search)).changed).toBe(false);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('ignore a cache from the previous version and search once', async () => {
+    await fakeBrowser.storage.local.set({
+      'diffseek:metadata:owner/repo': { version: 2, codeowners: '* @old', attributes: '' },
+    });
+    expect(await readImmediateMetadata(repository)).toMatchObject({ codeowners: '' });
+    const search = searching();
+
+    await refresh(1, ['a.ts'], 0, raw(), search);
+    expect(search).toHaveBeenCalledOnce();
+  });
+
+  it('start from bundled assumptions when storage is unavailable', async () => {
+    vi.spyOn(fakeBrowser.storage.local, 'get').mockRejectedValueOnce(new Error('unavailable'));
+    expect(await readImmediateMetadata(repository)).toEqual({
+      codeowners: '',
+      attributes: bundledGitAttributes,
+      nestedAttributes: {},
+    });
+  });
+});
+
+describe('refresh policy', () => {
+  const paths = ['apps/web/main.ts'];
+
+  it('refreshes once a day', async () => {
+    await commit(await refresh(1, paths, 1_000, raw()));
+
+    const early = searching();
+    await refresh(1, paths, 1_000 + day - 1, raw(), early);
+    expect(early).not.toHaveBeenCalled();
+
+    const due = searching();
+    const result = await refresh(1, paths, 1_000 + day, raw(), due);
+    expect(due).toHaveBeenCalledOnce();
+    expect(result.cache).toMatchObject({ refreshedAt: 1_000 + day, pulls: [1] });
+  });
+
+  it('refreshes on every 3rd distinct pull request, not on revisits', async () => {
+    await commit(await refresh(1, paths, 0, raw()));
+    for (const pull of [2, 3, 3, 1, 2]) {
+      const search = searching();
+      await commit(await refresh(pull, paths, 1, raw(), search));
+      expect(search).not.toHaveBeenCalled();
+    }
+    expect((await readCache(repository))?.pulls).toEqual([1, 2, 3]);
+
+    const search = searching();
+    const result = await commit(await refresh(4, paths, 2, raw(), search));
+    expect(search).toHaveBeenCalledOnce();
+    expect(result.cache.pulls).toEqual([4]);
+
+    const next = searching();
+    await commit(await refresh(5, paths, 3, raw(), next));
+    await commit(await refresh(6, paths, 4, raw(), next));
+    expect(next).not.toHaveBeenCalled();
+    await refresh(7, paths, 5, raw(), next);
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a cached listing and its refresh time when a due search fails', async () => {
+    await commit(await refresh(1, paths, 1_000, raw()));
+    const failing = vi.fn(async (): Promise<MetadataSearchResult> => {
+      throw new Error('Metadata search is unavailable');
+    });
+    const request = raw();
+
+    const result = await refresh(2, paths, 1_000 + day, request, failing);
+
+    expect(failing).toHaveBeenCalledOnce();
+    expect(request).not.toHaveBeenCalled();
+    expect(result.cache.refreshedAt).toBe(1_000);
+    expect(Object.keys(result.cache.files)).toHaveLength(indexed.length);
+    expect(result.metadata.nestedAttributes).toMatchObject({ 'apps/web': '*.json linguist-generated=false' });
+  });
+
+  it('keeps a cached none, without probing, when a due search fails', async () => {
+    await commit(await refresh(1, paths, 1_000, raw(), searching([])));
+    const failing = vi.fn(async (): Promise<MetadataSearchResult> => {
+      throw new Error('Metadata search is unavailable');
+    });
+    const request = raw();
+
+    const result = await refresh(2, paths, 1_000 + day, request, failing);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(result.cache).toMatchObject({ refreshedAt: 1_000, files: {} });
+  });
+
+  it('rereads only blobs that changed and drops files that disappeared', async () => {
+    await commit(await refresh(1, ['apps/web/main.ts', 'tools/a.js'], 0, raw()));
+
+    const request = raw({ ...texts, 'apps/.gitattributes': '*.json group=New' });
+    const search = searching(
+      indexed
+        .filter(({ path }) => path !== 'apps/web/.gitattributes')
+        .map((file) => (file.path === 'apps/.gitattributes' ? { ...file, blob: 'g1b' } : file)),
+    );
+    const result = await refresh(2, ['apps/web/main.ts', 'tools/a.js'], day, request, search);
+
+    expect(requested(request)).toEqual(['apps/.gitattributes']);
+    expect(result.metadata.nestedAttributes).toEqual({ apps: '*.json group=New', tools: '*.js group=Tools' });
+    expect(result.cache.files).not.toHaveProperty(['apps/web/.gitattributes']);
+    expect(result.cache.files['apps/.gitattributes']).toEqual({ blob: 'g1b', text: '*.json group=New' });
+  });
+});
+
+describe('pull request side', () => {
+  const diff = ['apps/web/main.ts', 'apps/.gitattributes', 'CODEOWNERS', 'tools/.gitattributes'];
+
+  it('makes no request when the diff holds no metadata file', async () => {
+    const base = await refresh(1, ['apps/web/main.ts'], 0, raw());
+    const request = raw();
+    const resolveHead = vi.fn(async () => head);
+
+    const result = await readPullMetadata({ ...repository, pull: 1, paths: ['apps/web/main.ts'] }, base, { request, resolveHead });
+
+    expect(result.metadata).toBe(base.metadata);
+    expect(result.changed).toBe(false);
+    expect(resolveHead).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('reads only the diff-included metadata files at the head and overrides the default', async () => {
+    const base = await refresh(1, diff, 0, raw());
+    expect(base.metadata.nestedAttributes).toMatchObject({ apps: '*.json linguist-generated=true' });
+    const request = raw({
+      'apps/.gitattributes': '*.json group=Changed',
+      CODEOWNERS: '* @changed',
+    });
+    const resolveHead = vi.fn(async () => head);
+
+    const result = await readPullMetadata({ ...repository, pull: 1, paths: diff }, base, { request, resolveHead });
+
+    expect(resolveHead).toHaveBeenCalledExactlyOnceWith({ repo: 'owner/repo', pull: 1 });
+    expect(request.mock.calls.map(([input]) => [input.ref, input.path])).toEqual([
+      [head, 'apps/.gitattributes'],
+      [head, 'CODEOWNERS'],
+      [head, 'tools/.gitattributes'],
+    ]);
+    expect(result.metadata.nestedAttributes).toEqual({
+      apps: '*.json group=Changed',
+      'apps/web': '*.json linguist-generated=false',
+    });
+    expect(result.metadata.codeowners).toBe('* @github');
+    expect(result.cache.overlays['1']).toEqual({
+      oid: head,
+      files: { 'apps/.gitattributes': '*.json group=Changed', CODEOWNERS: '* @changed', 'tools/.gitattributes': null },
+    });
+    expect(base.metadata.nestedAttributes).toMatchObject({ apps: '*.json linguist-generated=true' });
+  });
+
+  it('applies a CODEOWNERS added or a rule deleted by the pull request', async () => {
+    const base = await refresh(1, ['apps/web/main.ts'], 0, raw(), searching(indexed.slice(1)));
+    expect(base.metadata.codeowners).toBe('* @root');
+    const added = await readPullMetadata(
+      { ...repository, pull: 1, paths: ['.github/CODEOWNERS'] },
+      base,
+      { request: raw({ '.github/CODEOWNERS': '* @new' }), resolveHead: async () => head },
+    );
+    expect(added.metadata.codeowners).toBe('* @new');
+
+    const deleted = await readPullMetadata(
+      { ...repository, pull: 1, paths: ['apps/web/.gitattributes'] },
+      base,
+      { request: raw({}), resolveHead: async () => head },
+    );
+    expect(deleted.metadata.nestedAttributes).toEqual({ apps: '*.json linguist-generated=true' });
+  });
+
+  it('reads the next known CODEOWNERS from HEAD when the pull deletes the chosen one', async () => {
+    const base = await refresh(1, ['a.ts'], 0, raw());
+    expect(base.metadata.codeowners).toBe('* @github');
+    const request = raw({ CODEOWNERS: '* @root' });
+
+    const result = await readPullMetadata(
+      { ...repository, pull: 1, paths: ['.github/CODEOWNERS'] },
+      base,
+      { request, resolveHead: async () => head },
+    );
+
+    expect(request.mock.calls.map(([input]) => [input.ref, input.path])).toEqual([
+      [head, '.github/CODEOWNERS'],
+      ['HEAD', 'CODEOWNERS'],
+    ]);
+    expect(result.metadata.codeowners).toBe('* @root');
+    expect(result.cache.files.CODEOWNERS).toEqual({ blob: 'o2', text: '* @root' });
+  });
+
+  describe('on warm and hot loads', () => {
+    const paths = ['apps/web/main.ts', 'apps/.gitattributes', 'CODEOWNERS'];
+    const overlayTexts = { 'apps/.gitattributes': '*.json group=Changed', CODEOWNERS: '* @changed' };
+
+    async function load(pull: number, diffPaths: string[], now: number, deps: {
+      request: ReturnType<typeof raw>;
+      search: ReturnType<typeof searching>;
+      resolveHead: () => Promise<string>;
+    }) {
+      const base = await commit(await refresh(pull, diffPaths, now, deps.request, deps.search));
+      return commit(await readPullMetadata({ ...repository, pull, paths: diffPaths }, base, deps));
+    }
+
+    it('make no request of any kind once the overlay is stored', async () => {
+      const resolveHead = vi.fn(async () => head);
+      const cold = await load(1, paths, 0, { request: raw({ ...texts, ...overlayTexts }), search: searching(), resolveHead });
+      expect(resolveHead).toHaveBeenCalledOnce();
+      expect(cold.metadata.nestedAttributes).toMatchObject({ apps: '*.json group=Changed' });
+
+      resolveHead.mockClear();
+      const request = raw();
+      const search = searching();
+      for (const now of [1, 2]) {
+        const warm = await load(1, paths, now, { request, search, resolveHead });
+        expect(warm.metadata).toEqual(cold.metadata);
+        expect(warm.changed).toBe(false);
+      }
+      expect(resolveHead).not.toHaveBeenCalled();
+      expect(request).not.toHaveBeenCalled();
+      expect(search).not.toHaveBeenCalled();
+    });
+
+    it('read only a newly streamed metadata path at the stored head', async () => {
+      const resolveHead = vi.fn(async () => head);
+      await load(1, paths, 0, { request: raw({ ...texts, ...overlayTexts }), search: searching(), resolveHead });
+      resolveHead.mockClear();
+      const request = raw({ 'tools/.gitattributes': '*.js group=Changed' });
+
+      const streamed = await load(1, [...paths, 'tools/.gitattributes'], 1, { request, search: searching(), resolveHead });
+
+      expect(resolveHead).not.toHaveBeenCalled();
+      expect(request.mock.calls.filter(([input]) => input.ref === head).map(([input]) => input.path)).toEqual([
+        'tools/.gitattributes',
+      ]);
+      expect(streamed.cache.overlays['1']?.files).toMatchObject({ 'tools/.gitattributes': '*.js group=Changed' });
+    });
+
+    it('resolve the head again only when the default branch refreshes', async () => {
+      const resolveHead = vi.fn(async () => head);
+      await load(1, paths, 0, { request: raw({ ...texts, ...overlayTexts }), search: searching(), resolveHead });
+      resolveHead.mockClear();
+
+      await load(1, paths, day, { request: raw({ ...texts, ...overlayTexts }), search: searching(), resolveHead });
+      expect(resolveHead).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('fails the read and stores nothing when the head cannot be read', async () => {
+    const base = await commit(await refresh(1, diff, 0, raw()));
+    const stored = await readCache(repository);
+
+    await expect(
+      readPullMetadata({ ...repository, pull: 1, paths: diff }, base, {
+        request: raw(),
+        resolveHead: async () => {
+          throw new Error('offline');
+        },
+      }),
+    ).rejects.toThrow('offline');
+    expect(await readCache(repository)).toEqual(stored);
+  });
+});

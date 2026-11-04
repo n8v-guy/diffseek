@@ -1,132 +1,80 @@
 import { browser } from 'wxt/browser';
 
 import type {
-  RepositoryMetadata,
+  MetadataFiles,
   RepositoryRef,
 } from '@diffseek/repository-metadata';
 
 import { isRecord } from './record';
 
-export type { RepositoryMetadata, RepositoryRef };
+export type { RepositoryRef };
 
-type CacheEntry = RepositoryMetadata & {
-  version: 2;
+/**
+ * Default-branch metadata files and when and for which pulls they were
+ * refreshed. `overlays` holds, per pull number, the head oid and the pull's own
+ * version of the metadata files in its diff (null: deleted by the pull).
+ */
+export type RepositoryCache = {
+  files: MetadataFiles;
+  refreshedAt: number;
+  pulls: number[];
+  overlays: Record<string, { oid: string; files: Record<string, string | null> }>;
 };
 
-type PullCacheEntry = RepositoryMetadata & {
-  owner: string;
-  pull: number;
-  repo: string;
-  sha: string;
-};
+const cacheVersion = 3;
 
-const pullCacheKey = 'diffseek:metadata:prs';
-const pullCacheLimit = 10;
+type CacheEntry = Partial<RepositoryCache> &
+  Omit<RepositoryCache, 'overlays'> & { version: typeof cacheVersion };
+
+const legacyPullCacheKey = 'diffseek:metadata:prs';
 
 export async function readCache(
   repository: RepositoryRef,
-): Promise<RepositoryMetadata | null> {
+): Promise<RepositoryCache | null> {
   const key = cacheKey(repository);
   const value = (await browser.storage.local.get(key))[key];
-  return isCacheEntry(value) ? metadataFrom(value) : null;
+  if (!isCacheEntry(value)) return null;
+  const { files, refreshedAt, pulls, overlays = {} } = value;
+  return { files, refreshedAt, pulls, overlays };
 }
 
 export async function writeCache(
   repository: RepositoryRef,
-  metadata: RepositoryMetadata,
+  cache: RepositoryCache,
 ): Promise<void> {
-  const entry: CacheEntry = { version: 2, ...metadata };
+  const entry: CacheEntry = { version: cacheVersion, ...cache };
   await browser.storage.local.set({ [cacheKey(repository)]: entry });
+  await browser.storage.local.remove(legacyPullCacheKey);
 }
 
-export async function readPullCache(
-  review: RepositoryRef & { pull: number },
-): Promise<(RepositoryMetadata & { sha: string }) | null> {
-  const entry = (await readPullEntries()).find((item) =>
-    samePull(item, review),
+function isOverlay(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.oid === 'string' &&
+    isRecord(value.files) &&
+    Object.values(value.files).every(
+      (text) => text === null || typeof text === 'string',
+    )
   );
-  return entry == null
-    ? null
-    : { ...metadataFrom(entry), sha: entry.sha };
-}
-
-export async function writePullCache(
-  review: RepositoryRef & { pull: number },
-  sha: string,
-  metadata: RepositoryMetadata,
-): Promise<void> {
-  const next: PullCacheEntry = {
-    owner: review.owner,
-    repo: review.repo,
-    pull: review.pull,
-    sha,
-    ...metadata,
-  };
-  await browser.storage.local.set({
-    [pullCacheKey]: [
-      next,
-      ...(await readPullEntries()).filter((item) => !samePull(item, review)),
-    ].slice(0, pullCacheLimit),
-  });
-}
-
-async function readPullEntries(): Promise<PullCacheEntry[]> {
-  const value = (await browser.storage.local.get(pullCacheKey))[pullCacheKey];
-  return Array.isArray(value) ? value.filter(isPullCacheEntry) : [];
 }
 
 function isCacheEntry(value: unknown): value is CacheEntry {
   return (
     isRecord(value) &&
-    value.version === 2 &&
-    typeof value.codeowners === 'string' &&
-    typeof value.attributes === 'string' &&
-    validNestedAttributes(value.nestedAttributes)
-  );
-}
-
-function isPullCacheEntry(value: unknown): value is PullCacheEntry {
-  return (
-    isRecord(value) &&
-    typeof value.owner === 'string' &&
-    typeof value.repo === 'string' &&
-    typeof value.pull === 'number' &&
-    typeof value.sha === 'string' &&
-    typeof value.codeowners === 'string' &&
-    typeof value.attributes === 'string' &&
-    validNestedAttributes(value.nestedAttributes)
-  );
-}
-
-function metadataFrom(
-  value: RepositoryMetadata,
-): RepositoryMetadata {
-  return {
-    codeowners: value.codeowners,
-    attributes: value.attributes,
-    ...(value.nestedAttributes != null
-      ? { nestedAttributes: value.nestedAttributes }
-      : {}),
-    ...(value.codeownersPath != null
-      ? { codeownersPath: value.codeownersPath }
-      : {}),
-  };
-}
-
-function validNestedAttributes(value: unknown): boolean {
-  return value === undefined || (
-    isRecord(value) && Object.values(value).every((text) => typeof text === 'string')
-  );
-}
-
-function samePull(
-  entry: PullCacheEntry,
-  review: RepositoryRef & { pull: number },
-): boolean {
-  return (
-    entry.owner === review.owner &&
-    entry.repo === review.repo &&
-    entry.pull === review.pull
+    value.version === cacheVersion &&
+    (value.overlays === undefined ||
+      (isRecord(value.overlays) &&
+        Object.values(value.overlays).every(isOverlay))) &&
+    typeof value.refreshedAt === 'number' &&
+    Array.isArray(value.pulls) &&
+    value.pulls.every((pull) => typeof pull === 'number') &&
+    isRecord(value.files) &&
+    Object.values(value.files).every(
+      (file) =>
+        isRecord(file) &&
+        typeof file.blob === 'string' &&
+        (file.text === undefined || typeof file.text === 'string'),
+    )
   );
 }
 
