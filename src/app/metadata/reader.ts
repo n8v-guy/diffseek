@@ -145,7 +145,7 @@ function refreshDue(cache: RepositoryCache, pull: number, now: number): boolean 
   );
 }
 
-/** A failed search keeps a cached listing; only an empty cache probes. */
+/** A failed search keeps any cached listing, even an empty one; only no cache probes. */
 async function refreshListing(
   review: Review,
   cached: RepositoryCache | null,
@@ -170,9 +170,7 @@ async function refreshListing(
     }
     return listed(index);
   } catch {
-    return cached != null && Object.keys(cached.files).length > 0
-      ? cached
-      : listed(await probe(review, request));
+    return cached ?? listed(await probe(review, request));
   }
 }
 

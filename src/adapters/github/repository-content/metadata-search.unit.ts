@@ -13,6 +13,7 @@ const route = (
       page_count: 1,
       page: 1,
       errors: [],
+      logged_in: true,
       ...extra,
     },
   },
@@ -71,13 +72,19 @@ describe('metadata search', () => {
     ['a non-JSON response', () => new Response('<html>Sign in</html>', { headers: { 'content-type': 'text/html' } })],
     ['an unexpected shape', () => json({ payload: {} })],
     ['search errors', () => json(route([{ path: '.gitattributes', blob_sha: 'a' }], { errors: [{ message: 'bad' }] }))],
-    ['no results (unindexed)', () => json(route([]))],
+    ['a signed-out response', () => json(route([], { logged_in: false }))],
     ['a result without a blob', () => json(route([{ path: '.gitattributes' } as never]))],
     ['too many pages', () => json(route([{ path: '.gitattributes', blob_sha: 'a' }], { page_count: 11 }))],
   ])('is unusable on %s', async (_name, response) => {
     await expect(
       fetchMetadataSearch(input, vi.fn<typeof fetch>(async () => response())),
     ).rejects.toThrow();
+  });
+
+  it('treats a signed-in empty result as a valid answer', async () => {
+    const request = vi.fn<typeof fetch>(async () => json(route([])));
+    await expect(fetchMetadataSearch(input, request)).resolves.toEqual([]);
+    expect(request).toHaveBeenCalledOnce();
   });
 
   it('refuses a request that does not name a repository', async () => {

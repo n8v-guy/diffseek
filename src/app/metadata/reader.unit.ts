@@ -84,6 +84,21 @@ describe('cold read', () => {
     expect(result.changed).toBe(true);
   });
 
+  it('caches an empty search as none, then makes no request until the next refresh', async () => {
+    const request = raw();
+    const none = await commit(await refresh(1, ['a.ts'], 0, request, searching([])));
+
+    expect(request).not.toHaveBeenCalled();
+    expect(none.metadata).toEqual({ codeowners: '', attributes: bundledGitAttributes, nestedAttributes: {} });
+    expect(none.cache.files).toEqual({});
+
+    const search = searching();
+    const warm = await refresh(1, ['a.ts', 'b/c.ts'], day - 1, request, search);
+    expect(search).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+    expect(warm.metadata).toEqual(none.metadata);
+  });
+
   it('picks CODEOWNERS from the search results by precedence', async () => {
     const request = raw();
     const results = indexed.filter(({ path }) => path.endsWith('CODEOWNERS') && path !== '.github/CODEOWNERS');
@@ -127,7 +142,10 @@ describe('cold read', () => {
   });
 
   it('serves bundled assumptions for an empty fallback and never stores a failed read', async () => {
-    const empty = await refresh(1, ['a.ts'], 0, raw({}), searching([]));
+    const unavailable = vi.fn(async (): Promise<MetadataSearchResult> => {
+      throw new Error('Metadata search is unavailable');
+    });
+    const empty = await refresh(1, ['a.ts'], 0, raw({}), unavailable);
     expect(empty.metadata.attributes).toBe(bundledGitAttributes);
 
     const failing = vi.fn<Raw>(async () => {
@@ -247,6 +265,19 @@ describe('refresh policy', () => {
     expect(result.cache.refreshedAt).toBe(1_000);
     expect(Object.keys(result.cache.files)).toHaveLength(indexed.length);
     expect(result.metadata.nestedAttributes).toMatchObject({ 'apps/web': '*.json linguist-generated=false' });
+  });
+
+  it('keeps a cached none, without probing, when a due search fails', async () => {
+    await commit(await refresh(1, paths, 1_000, raw(), searching([])));
+    const failing = vi.fn(async (): Promise<MetadataSearchResult> => {
+      throw new Error('Metadata search is unavailable');
+    });
+    const request = raw();
+
+    const result = await refresh(2, paths, 1_000 + day, request, failing);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(result.cache).toMatchObject({ refreshedAt: 1_000, files: {} });
   });
 
   it('rereads only blobs that changed and drops files that disappeared', async () => {

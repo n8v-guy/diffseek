@@ -23,6 +23,7 @@ describe('metadata search messaging', () => {
                 blackbirdSearchRoute: {
                   results: [{ path: 'CODEOWNERS', blob_sha: 'a' }],
                   errors: [],
+                  logged_in: true,
                 },
               },
             }),

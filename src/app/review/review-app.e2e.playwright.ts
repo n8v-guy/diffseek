@@ -43,7 +43,7 @@ function searchResponse(paths: string[]) {
     contentType: 'application/json',
     body: JSON.stringify({
       payload: {
-        blackbirdSearchRoute: { results, result_count: results.length, page_count: 1, page: 1, errors: [] },
+        blackbirdSearchRoute: { results, result_count: results.length, page_count: 1, page: 1, errors: [], logged_in: true },
       },
     }),
   };

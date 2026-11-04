@@ -17,7 +17,7 @@ export function isMetadataSearchRequest(
   return isRecord(value) && typeof value.repo === 'string';
 }
 
-/** Throws when search cannot be trusted: errors, signed out, unindexed, or odd data. */
+/** Throws when search cannot be trusted: errors, signed out, or odd data. A signed-in empty result is a valid answer. */
 export async function fetchMetadataSearch(
   input: MetadataSearchRequest,
   request: typeof fetch = fetch,
@@ -40,7 +40,6 @@ export async function fetchMetadataSearch(
     pages = typeof route.page_count === 'number' ? route.page_count : 1;
     if (pages > maxSearchPages) throw new Error(unusable);
   }
-  if (files.length === 0) throw new Error(unusable);
   return files;
 }
 
@@ -64,9 +63,9 @@ async function fetchRoute(
 }
 
 function resultsOf(route: Record<string, unknown>): MetadataSearchResult {
-  const { results, errors } = route;
+  const { results, errors, logged_in: loggedIn } = route;
   const clean = errors == null || (Array.isArray(errors) && errors.length === 0);
-  if (!clean || !Array.isArray(results)) throw new Error(unusable);
+  if (!clean || loggedIn !== true || !Array.isArray(results)) throw new Error(unusable);
   return results.map((result: unknown) => {
     if (
       !isRecord(result) ||
