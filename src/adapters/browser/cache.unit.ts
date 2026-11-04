@@ -12,6 +12,7 @@ const cache: RepositoryCache = {
   },
   refreshedAt: 1_000,
   pulls: [4, 7],
+  overlays: { '7': { oid: 'c'.repeat(40), files: { 'apps/.gitattributes': 'x', CODEOWNERS: null } } },
 };
 
 describe('metadata cache', () => {
@@ -23,6 +24,13 @@ describe('metadata cache', () => {
     expect((await fakeBrowser.storage.local.get(key))[key]).toMatchObject({
       version: 3,
     });
+  });
+
+  it('reads a version 3 entry written before overlays existed', async () => {
+    const { overlays, ...legacy } = cache;
+    await fakeBrowser.storage.local.set({ [key]: { version: 3, ...legacy } });
+    await expect(readCache(repository)).resolves.toEqual({ ...legacy, overlays: {} });
+    expect(overlays).not.toEqual({});
   });
 
   it('ignores entries from an older version until they are replaced', async () => {
@@ -41,6 +49,8 @@ describe('metadata cache', () => {
       { ...cache, version: 3, files: { CODEOWNERS: { blob: 'a', text: false } } },
       { ...cache, version: 3, refreshedAt: 'today' },
       { ...cache, version: 3, pulls: ['4'] },
+      { ...cache, version: 3, overlays: { '7': { oid: 1, files: {} } } },
+      { ...cache, version: 3, overlays: { '7': { oid: 'a', files: { CODEOWNERS: 5 } } } },
     ]) {
       await fakeBrowser.storage.local.set({ [key]: entry });
       await expect(readCache(repository)).resolves.toBeNull();

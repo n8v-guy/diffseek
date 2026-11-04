@@ -9,7 +9,7 @@ import type { RepositoryMetadata } from '@diffseek/repository-metadata';
 import type { DefaultMetadata } from '../metadata/reader';
 
 type MetadataRead = {
-  readPull: (base: DefaultMetadata) => Promise<RepositoryMetadata>;
+  readPull: (base: DefaultMetadata) => Promise<DefaultMetadata>;
   refreshDefault: () => Promise<DefaultMetadata>;
   commit: (cache: RepositoryCache) => Promise<boolean>;
   aborted: () => boolean;
@@ -73,7 +73,8 @@ async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
     if (base.changed) await options.commit(base.cache).catch(() => false);
     const pulled = await options.readPull(base);
     if (options.aborted()) return false;
-    options.apply(pulled);
+    options.apply(pulled.metadata);
+    if (pulled.changed) await options.commit(pulled.cache).catch(() => false);
     return true;
   } catch (error) {
     reportReadFailure(error);

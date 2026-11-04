@@ -10,7 +10,7 @@ afterEach(() => {
 
 const base: DefaultMetadata = {
   metadata: { codeowners: '', attributes: 'src/** group=Code' },
-  cache: { files: {}, refreshedAt: 0, pulls: [1] },
+  cache: { files: {}, refreshedAt: 0, pulls: [1], overlays: {} },
   changed: true,
 };
 
@@ -55,10 +55,12 @@ describe('metadata refresh', () => {
     expect(commit).toHaveBeenCalledExactlyOnceWith(base.cache);
     expect(state.settled).toBe(false);
 
-    readPull.mockResolvedValueOnce({ codeowners: '', attributes: 'pull' });
+    const pulled = { ...base, metadata: { codeowners: '', attributes: 'pull' } };
+    readPull.mockResolvedValueOnce(pulled);
     loadReviewMetadata(state, options);
     await state.flight;
-    expect(apply).toHaveBeenLastCalledWith({ codeowners: '', attributes: 'pull' });
+    expect(apply).toHaveBeenLastCalledWith(pulled.metadata);
+    expect(commit).toHaveBeenLastCalledWith(pulled.cache);
     expect(state.settled).toBe(true);
   });
 
@@ -68,7 +70,7 @@ describe('metadata refresh', () => {
     const onSettled = vi.fn();
     const state = metadataRefreshState();
     const options = {
-      readPull: (result: DefaultMetadata) => Promise.resolve(result.metadata),
+      readPull: (result: DefaultMetadata) => Promise.resolve({ ...result, changed: false }),
       refreshDefault,
       commit,
       aborted: () => false,

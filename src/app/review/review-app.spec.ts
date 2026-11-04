@@ -21,7 +21,7 @@ function loadedDefault(
   changed = false,
   files: MetadataFiles = {},
 ): DefaultMetadata {
-  return { metadata, cache: { files, refreshedAt: 0, pulls: [] }, changed };
+  return { metadata, cache: { files, refreshedAt: 0, pulls: [], overlays: {} }, changed };
 }
 
 const changesPath = '/octo/repo/pull/1/changes';
@@ -34,18 +34,27 @@ function metadataSource(attributes: string) {
   };
 }
 
+type AppOptions = NonNullable<Parameters<typeof startReviewApp>[0]>;
+type Overrides = Omit<AppOptions, 'readPull'> & {
+  readPull?: (
+    review: Parameters<NonNullable<AppOptions['readPull']>>[0],
+    base: DefaultMetadata,
+  ) => Promise<RepositoryMetadata>;
+};
+
 function reviewApp(
-  extra: Partial<Parameters<typeof startReviewApp>[0]> = {},
+  extra: Overrides = {},
   pathname: () => string = () => changesPath,
 ) {
   const readImmediate = extra.readImmediate ?? (async () => emptyMetadata);
+  const { readPull = async (_review, base) => base.metadata, ...rest } = extra;
   return startReviewApp({
     readImmediate,
     refreshDefault: async () => loadedDefault(await readImmediate({ owner: 'octo', repo: 'repo' })),
-    readPull: async (_review, base) => base.metadata,
     root: document,
     pathname,
-    ...extra,
+    ...rest,
+    readPull: async (review, base) => loadedDefault(await readPull(review, base)),
   });
 }
 

@@ -25,10 +25,10 @@ describe('review session stream batching', () => {
       readImmediate: async () => emptyMetadata,
       refreshDefault: async () => ({
         metadata: emptyMetadata,
-        cache: { files: {}, refreshedAt: 0, pulls: [] },
+        cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
         changed: false,
       }),
-      readPull: async (_review, base) => base.metadata,
+      readPull: async (_review, base) => ({ ...base, changed: false }),
     });
     let reconciles = 0;
     document.addEventListener('diffseek-reconciled', () => {
@@ -90,10 +90,10 @@ describe('redraw budget', () => {
       readImmediate: async () => emptyMetadata,
       refreshDefault: async () => ({
         metadata: emptyMetadata,
-        cache: { files: {}, refreshedAt: 0, pulls: [] },
+        cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
         changed: false,
       }),
-      readPull: async (_review, base) => base.metadata,
+      readPull: async (_review, base) => ({ ...base, changed: false }),
     });
     await flush();
     const loaded = counts.snapshot();

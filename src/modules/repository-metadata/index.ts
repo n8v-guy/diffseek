@@ -12,6 +12,7 @@ export {
   type GitAttributeRule,
 } from './gitattributes';
 export {
+  chooseCodeowners,
   codeownersLocations,
   isMetadataPath,
   metadataFromFiles,

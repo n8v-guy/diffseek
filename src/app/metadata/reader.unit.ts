@@ -233,6 +233,22 @@ describe('refresh policy', () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
+  it('keeps a cached listing and its refresh time when a due search fails', async () => {
+    await commit(await refresh(1, paths, 1_000, raw()));
+    const failing = vi.fn(async (): Promise<MetadataSearchResult> => {
+      throw new Error('Metadata search is unavailable');
+    });
+    const request = raw();
+
+    const result = await refresh(2, paths, 1_000 + day, request, failing);
+
+    expect(failing).toHaveBeenCalledOnce();
+    expect(request).not.toHaveBeenCalled();
+    expect(result.cache.refreshedAt).toBe(1_000);
+    expect(Object.keys(result.cache.files)).toHaveLength(indexed.length);
+    expect(result.metadata.nestedAttributes).toMatchObject({ 'apps/web': '*.json linguist-generated=false' });
+  });
+
   it('rereads only blobs that changed and drops files that disappeared', async () => {
     await commit(await refresh(1, ['apps/web/main.ts', 'tools/a.js'], 0, raw()));
 
@@ -261,7 +277,8 @@ describe('pull request side', () => {
 
     const result = await readPullMetadata({ ...repository, pull: 1, paths: ['apps/web/main.ts'] }, base, { request, resolveHead });
 
-    expect(result).toBe(base.metadata);
+    expect(result.metadata).toBe(base.metadata);
+    expect(result.changed).toBe(false);
     expect(resolveHead).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
   });
@@ -283,11 +300,15 @@ describe('pull request side', () => {
       [head, 'CODEOWNERS'],
       [head, 'tools/.gitattributes'],
     ]);
-    expect(result.nestedAttributes).toEqual({
+    expect(result.metadata.nestedAttributes).toEqual({
       apps: '*.json group=Changed',
       'apps/web': '*.json linguist-generated=false',
     });
-    expect(result.codeowners).toBe('* @github');
+    expect(result.metadata.codeowners).toBe('* @github');
+    expect(result.cache.overlays['1']).toEqual({
+      oid: head,
+      files: { 'apps/.gitattributes': '*.json group=Changed', CODEOWNERS: '* @changed', 'tools/.gitattributes': null },
+    });
     expect(base.metadata.nestedAttributes).toMatchObject({ apps: '*.json linguist-generated=true' });
   });
 
@@ -299,14 +320,90 @@ describe('pull request side', () => {
       base,
       { request: raw({ '.github/CODEOWNERS': '* @new' }), resolveHead: async () => head },
     );
-    expect(added.codeowners).toBe('* @new');
+    expect(added.metadata.codeowners).toBe('* @new');
 
     const deleted = await readPullMetadata(
       { ...repository, pull: 1, paths: ['apps/web/.gitattributes'] },
       base,
       { request: raw({}), resolveHead: async () => head },
     );
-    expect(deleted.nestedAttributes).toEqual({ apps: '*.json linguist-generated=true' });
+    expect(deleted.metadata.nestedAttributes).toEqual({ apps: '*.json linguist-generated=true' });
+  });
+
+  it('reads the next known CODEOWNERS from HEAD when the pull deletes the chosen one', async () => {
+    const base = await refresh(1, ['a.ts'], 0, raw());
+    expect(base.metadata.codeowners).toBe('* @github');
+    const request = raw({ CODEOWNERS: '* @root' });
+
+    const result = await readPullMetadata(
+      { ...repository, pull: 1, paths: ['.github/CODEOWNERS'] },
+      base,
+      { request, resolveHead: async () => head },
+    );
+
+    expect(request.mock.calls.map(([input]) => [input.ref, input.path])).toEqual([
+      [head, '.github/CODEOWNERS'],
+      ['HEAD', 'CODEOWNERS'],
+    ]);
+    expect(result.metadata.codeowners).toBe('* @root');
+    expect(result.cache.files.CODEOWNERS).toEqual({ blob: 'o2', text: '* @root' });
+  });
+
+  describe('on warm and hot loads', () => {
+    const paths = ['apps/web/main.ts', 'apps/.gitattributes', 'CODEOWNERS'];
+    const overlayTexts = { 'apps/.gitattributes': '*.json group=Changed', CODEOWNERS: '* @changed' };
+
+    async function load(pull: number, diffPaths: string[], now: number, deps: {
+      request: ReturnType<typeof raw>;
+      search: ReturnType<typeof searching>;
+      resolveHead: () => Promise<string>;
+    }) {
+      const base = await commit(await refresh(pull, diffPaths, now, deps.request, deps.search));
+      return commit(await readPullMetadata({ ...repository, pull, paths: diffPaths }, base, deps));
+    }
+
+    it('make no request of any kind once the overlay is stored', async () => {
+      const resolveHead = vi.fn(async () => head);
+      const cold = await load(1, paths, 0, { request: raw({ ...texts, ...overlayTexts }), search: searching(), resolveHead });
+      expect(resolveHead).toHaveBeenCalledOnce();
+      expect(cold.metadata.nestedAttributes).toMatchObject({ apps: '*.json group=Changed' });
+
+      resolveHead.mockClear();
+      const request = raw();
+      const search = searching();
+      for (const now of [1, 2]) {
+        const warm = await load(1, paths, now, { request, search, resolveHead });
+        expect(warm.metadata).toEqual(cold.metadata);
+        expect(warm.changed).toBe(false);
+      }
+      expect(resolveHead).not.toHaveBeenCalled();
+      expect(request).not.toHaveBeenCalled();
+      expect(search).not.toHaveBeenCalled();
+    });
+
+    it('read only a newly streamed metadata path at the stored head', async () => {
+      const resolveHead = vi.fn(async () => head);
+      await load(1, paths, 0, { request: raw({ ...texts, ...overlayTexts }), search: searching(), resolveHead });
+      resolveHead.mockClear();
+      const request = raw({ 'tools/.gitattributes': '*.js group=Changed' });
+
+      const streamed = await load(1, [...paths, 'tools/.gitattributes'], 1, { request, search: searching(), resolveHead });
+
+      expect(resolveHead).not.toHaveBeenCalled();
+      expect(request.mock.calls.filter(([input]) => input.ref === head).map(([input]) => input.path)).toEqual([
+        'tools/.gitattributes',
+      ]);
+      expect(streamed.cache.overlays['1']?.files).toMatchObject({ 'tools/.gitattributes': '*.js group=Changed' });
+    });
+
+    it('resolve the head again only when the default branch refreshes', async () => {
+      const resolveHead = vi.fn(async () => head);
+      await load(1, paths, 0, { request: raw({ ...texts, ...overlayTexts }), search: searching(), resolveHead });
+      resolveHead.mockClear();
+
+      await load(1, paths, day, { request: raw({ ...texts, ...overlayTexts }), search: searching(), resolveHead });
+      expect(resolveHead).toHaveBeenCalledOnce();
+    });
   });
 
   it('fails the read and stores nothing when the head cannot be read', async () => {

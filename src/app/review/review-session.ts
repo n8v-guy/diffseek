@@ -87,7 +87,7 @@ export type ReviewSessionOptions = {
   readPull: (
     review: ReviewRef & { paths: string[] },
     base: DefaultMetadata,
-  ) => Promise<RepositoryMetadata>;
+  ) => Promise<DefaultMetadata>;
   markFiles: typeof markViewed;
   filterDefaults: FilterDefaults;
   writeFilterDefaults: (defaults: FilterDefaults) => Promise<void>;

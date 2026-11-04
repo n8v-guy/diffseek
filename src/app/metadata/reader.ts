@@ -9,6 +9,7 @@ import {
   type RawFileResult,
 } from '@diffseek/github';
 import {
+  chooseCodeowners,
   codeownersLocations,
   isMetadataPath,
   metadataFromFiles,
@@ -61,21 +62,22 @@ export async function refreshDefaultMetadata(
   const cached = await readCache(review).catch(() => null);
   const timestamp = now();
   const current =
-    cached != null && !refreshDue(cached, review.pull, timestamp) ? cached : null;
-  const index =
-    current?.files ?? (await discover(review, cached?.files ?? {}, request, search));
+    cached != null && !refreshDue(cached, review.pull, timestamp)
+      ? cached
+      : await refreshListing(review, cached, timestamp, request, search);
   const files = await readInto(
-    index,
-    unloadedMetadataPaths(index, review.paths),
+    current.files,
+    unloadedMetadataPaths(current.files, review.paths),
     defaultBranch,
     review,
     request,
   );
-  const pulls = current?.pulls ?? [];
   const cache = {
+    ...current,
     files,
-    refreshedAt: current?.refreshedAt ?? timestamp,
-    pulls: pulls.includes(review.pull) ? pulls : [...pulls, review.pull],
+    pulls: current.pulls.includes(review.pull)
+      ? current.pulls
+      : [...current.pulls, review.pull],
   };
   return {
     metadata: metadataFromFiles(files),
@@ -84,22 +86,56 @@ export async function refreshDefaultMetadata(
   };
 }
 
-/** The pull request's own version of metadata files that the diff touches. */
+/**
+ * The pull request's own version of the metadata files its diff touches. It is
+ * resolved once per pull and kept until the default branch refreshes.
+ */
 export async function readPullMetadata(
   review: Review,
   base: DefaultMetadata,
   dependencies: Partial<Dependencies> = {},
-): Promise<RepositoryMetadata> {
+): Promise<DefaultMetadata> {
   const { request = readRawFile, resolveHead = resolvePullHead } = dependencies;
   const paths = pullMetadataPaths(review.paths);
-  if (paths.length === 0) return base.metadata;
-  const ref = await resolveHead({
-    repo: `${review.owner}/${review.repo}`,
-    pull: review.pull,
-  });
-  return metadataFromFiles(
-    await readInto(base.cache.files, paths, ref, review, request),
+  if (paths.length === 0) return { ...base, changed: false };
+  const key = String(review.pull);
+  const saved = base.cache.overlays[key];
+  const missing = paths.filter((path) => saved?.files[path] === undefined);
+  const oid =
+    saved?.oid ??
+    (await resolveHead({ repo: `${review.owner}/${review.repo}`, pull: review.pull }));
+  const read = await readInto({}, missing, oid, review, request);
+  const overlay = {
+    oid,
+    files: {
+      ...saved?.files,
+      ...Object.fromEntries(missing.map((path) => [path, read[path]?.text ?? null])),
+    },
+  };
+  let files = base.cache.files;
+  let merged = overlaid(files, overlay.files);
+  const codeowners = chooseCodeowners(Object.keys(merged));
+  if (codeowners !== undefined && merged[codeowners]?.text === undefined) {
+    files = await readInto(files, [codeowners], defaultBranch, review, request);
+    merged = overlaid(files, overlay.files);
+  }
+  const cache = { ...base.cache, files, overlays: { ...base.cache.overlays, [key]: overlay } };
+  return {
+    metadata: metadataFromFiles(merged),
+    cache,
+    changed: JSON.stringify(cache) !== JSON.stringify(base.cache),
+  };
+}
+
+function overlaid(
+  files: MetadataFiles,
+  overlay: Record<string, string | null>,
+): MetadataFiles {
+  const kept = Object.entries(files).filter(([path]) => overlay[path] === undefined);
+  const replaced = Object.entries(overlay).flatMap(([path, text]) =>
+    text === null ? [] : [[path, { blob: files[path]?.blob ?? '', text }] as const],
   );
+  return Object.fromEntries([...kept, ...replaced]);
 }
 
 function refreshDue(cache: RepositoryCache, pull: number, now: number): boolean {
@@ -109,24 +145,34 @@ function refreshDue(cache: RepositoryCache, pull: number, now: number): boolean 
   );
 }
 
-async function discover(
+/** A failed search keeps a cached listing; only an empty cache probes. */
+async function refreshListing(
   review: Review,
-  cached: MetadataFiles,
+  cached: RepositoryCache | null,
+  timestamp: number,
   request: Dependencies['request'],
   search: Dependencies['search'],
-): Promise<MetadataFiles> {
+): Promise<RepositoryCache> {
+  const listed = (files: MetadataFiles): RepositoryCache => ({
+    files,
+    refreshedAt: timestamp,
+    pulls: [],
+    overlays: {},
+  });
   try {
     const found = await search({ repo: `${review.owner}/${review.repo}` });
     const index: MetadataFiles = {};
     for (const { path, blob } of found) {
-      const known = cached[path];
+      const known = cached?.files[path];
       if (isMetadataPath(path)) {
         index[path] = known?.blob === blob ? known : { blob };
       }
     }
-    return index;
+    return listed(index);
   } catch {
-    return probe(review, request);
+    return cached != null && Object.keys(cached.files).length > 0
+      ? cached
+      : listed(await probe(review, request));
   }
 }
 
