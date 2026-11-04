@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   actionFailures,
   defaultLivePerfBudgets,
+  emptyGithubRequestCounts,
   generatedCategorizedPattern,
   generatedIndexedText,
   isExtensionMetadataRequest,
@@ -13,6 +14,7 @@ import {
   hotLossFailures,
   medianBudgetFailures,
   medianSample,
+  noteGithubRequest,
   parseInlineStorageState,
   parseStorageCookies,
   rebuildFailures,
@@ -20,6 +22,29 @@ import {
 } from './live-perf.support';
 
 describe('live-perf helpers', () => {
+  it('counts github.com search, raw metadata, and other requests', () => {
+    const counts = emptyGithubRequestCounts();
+    noteGithubRequest(counts, 'https://github.com/search?type=code&q=repo%3Aa%2Fb');
+    noteGithubRequest(
+      counts,
+      'https://github.com/sha-tm/diffseek-test-data/raw/HEAD/.gitattributes',
+    );
+    noteGithubRequest(
+      counts,
+      'https://github.com/sha-tm/diffseek-test-data/blob/HEAD/docs/CODEOWNERS',
+    );
+    noteGithubRequest(
+      counts,
+      'https://raw.githubusercontent.com/sha-tm/diffseek-test-data/HEAD/.github/CODEOWNERS',
+    );
+    noteGithubRequest(
+      counts,
+      'https://github.com/sha-tm/diffseek-test-data/pull/1/commits',
+    );
+    noteGithubRequest(counts, 'https://example.test/raw/HEAD/.gitattributes');
+    expect(counts).toEqual({ total: 5, search: 1, metadata: 3, other: 1 });
+  });
+
   it('recognizes extension metadata fetches only', () => {
     expect(
       isExtensionMetadataRequest(
@@ -70,6 +95,7 @@ describe('live-perf helpers', () => {
       panelsReadded: 0,
       treeNetLoss: 0,
       panelNetLoss: 0,
+      requests: { total: 9, search: 1, metadata: 4, other: 4 },
     };
     const fast: LivePerfSample = {
       ...slow,
@@ -80,8 +106,11 @@ describe('live-perf helpers', () => {
       domMutations: 400,
       treeRebuilds: 0,
       treeRowsRemoved: 0,
+      requests: { total: 3, search: 0, metadata: 0, other: 3 },
     };
-    expect(medianSample([slow, fast, fast]).firstRenderSeconds).toBe(4);
+    const middle = medianSample([slow, fast, fast]);
+    expect(middle.firstRenderSeconds).toBe(4);
+    expect(middle.requests).toEqual({ total: 3, search: 0, metadata: 0, other: 3 });
     expect(rebuildFailures(slow, defaultLivePerfBudgets({}))).toEqual([]);
     expect(
       rebuildFailures({ ...slow, panelRebuilds: 1 }, defaultLivePerfBudgets({})),
@@ -112,9 +141,14 @@ describe('live-perf helpers', () => {
       'cold reconciles 800 > 500',
       'cold domMutations 20000 > 12000',
     ]);
-    expect(livePerfSummary({ prUrl: 'https://example.test', cold: [fast], warm: [fast], hot: [fast] })).toContain(
-      'tree rebuilds',
-    );
+    const summary = livePerfSummary({
+      prUrl: 'https://example.test',
+      cold: [fast],
+      warm: [fast],
+      hot: [fast],
+    });
+    expect(summary).toContain('tree rebuilds');
+    expect(summary).toContain('| cold | 3 | 0 | 0 | 3 |');
   });
 
   it('parses storageState cookies and inline JSON secrets', () => {

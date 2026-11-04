@@ -22,6 +22,15 @@ export type LivePerfSample = RedrawCounts & {
   firstRenderSeconds: number;
   menuOpenSeconds: number;
   panelsSeconds: number;
+  requests: GithubRequestCounts;
+};
+
+/** github.com requests during one sample. `metadata` is a raw or blob read of a metadata file. */
+export type GithubRequestCounts = {
+  total: number;
+  search: number;
+  metadata: number;
+  other: number;
 };
 
 export type LivePerfBudgets = {
@@ -85,6 +94,18 @@ export function liveSampleCount(env: NodeJS.ProcessEnv = process.env): number {
   return Math.max(1, Math.floor(numberEnv(env.DIFFSEEK_LIVE_SAMPLES, 3)));
 }
 
+export function emptyGithubRequestCounts(): GithubRequestCounts {
+  return { total: 0, search: 0, metadata: 0, other: 0 };
+}
+
+/** Counts one github.com request. raw.githubusercontent.com counts only for metadata reads. */
+export function noteGithubRequest(counts: GithubRequestCounts, url: string): void {
+  const kind = githubRequestKind(url);
+  if (kind == null) return;
+  counts.total += 1;
+  counts[kind] += 1;
+}
+
 export function isExtensionMetadataRequest(url: string): boolean {
   let parsed: URL;
   try {
@@ -138,6 +159,10 @@ export function median(values: number[]): number {
 
 export function medianSample(samples: readonly LivePerfSample[]): LivePerfSample {
   const scenario = samples[0]?.scenario ?? 'cold';
+  const requests = emptyGithubRequestCounts();
+  for (const key of Object.keys(requests) as (keyof GithubRequestCounts)[]) {
+    requests[key] = median(samples.map((sample) => sample.requests[key]));
+  }
   return {
     scenario,
     firstRenderSeconds: median(samples.map((sample) => sample.firstRenderSeconds)),
@@ -153,6 +178,7 @@ export function medianSample(samples: readonly LivePerfSample[]): LivePerfSample
     panelsReadded: median(samples.map((sample) => sample.panelsReadded)),
     treeNetLoss: median(samples.map((sample) => sample.treeNetLoss)),
     panelNetLoss: median(samples.map((sample) => sample.panelNetLoss)),
+    requests,
   };
 }
 
@@ -162,7 +188,14 @@ export function actionFailures(
   budgets: LivePerfBudgets,
 ): string[] {
   const failures = rebuildFailures(
-    { ...counts, scenario: 'hot', firstRenderSeconds: 0, menuOpenSeconds: 0, panelsSeconds: 0 },
+    {
+      ...counts,
+      scenario: 'hot',
+      firstRenderSeconds: 0,
+      menuOpenSeconds: 0,
+      panelsSeconds: 0,
+      requests: emptyGithubRequestCounts(),
+    },
     budgets,
   ).map((failure) => failure.replace('hot ', `${action} `));
   if (counts.reconciles > budgets.actionReconciles) {
@@ -274,7 +307,11 @@ export function livePerfSummary(report: {
 }): string {
   const rows = (['cold', 'warm', 'hot'] as const).map((scenario) => {
     const medianRow = medianSample(report[scenario]);
-    return `| ${scenario} | ${medianRow.firstRenderSeconds} | ${medianRow.menuOpenSeconds} | ${medianRow.panelsSeconds} | ${medianRow.reconciles} | ${medianRow.domMutations} | ${medianRow.treeRebuilds} | ${medianRow.panelRebuilds} | ${medianRow.treeRowsRemoved} | ${medianRow.treeRowsReadded} | ${medianRow.panelsRemoved} | ${medianRow.panelsReadded} | ${medianRow.treeNetLoss} | ${medianRow.panelNetLoss} |`;
+    const { requests } = medianRow;
+    return {
+      timing: `| ${scenario} | ${medianRow.firstRenderSeconds} | ${medianRow.menuOpenSeconds} | ${medianRow.panelsSeconds} | ${medianRow.reconciles} | ${medianRow.domMutations} | ${medianRow.treeRebuilds} | ${medianRow.panelRebuilds} | ${medianRow.treeRowsRemoved} | ${medianRow.treeRowsReadded} | ${medianRow.panelsRemoved} | ${medianRow.panelsReadded} | ${medianRow.treeNetLoss} | ${medianRow.panelNetLoss} |`,
+      requests: `| ${scenario} | ${requests.total} | ${requests.search} | ${requests.metadata} | ${requests.other} |`,
+    };
   });
   return [
     `### DiffSeek live performance`,
@@ -283,9 +320,14 @@ export function livePerfSummary(report: {
     '',
     '| scenario | first render s | menu s | panels s | reconciles | DOM mutations | tree rebuilds | panel rebuilds | tree removed | tree re-added | panels removed | panels re-added | tree net loss | panel net loss |',
     '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
-    ...rows,
+    ...rows.map((row) => row.timing),
     '',
-    'Durations are medians. Cold and warm tree rebuilds and diff-panel rebuilds must stay within their caps (a GitHub load redraw may be present or absent). Hot ignores mass removal and fails only when a row removed after the first DiffSeek control is still gone 500 ms later.',
+    '| scenario | github.com requests | /search | raw or blob metadata | other |',
+    '| --- | ---: | ---: | ---: | ---: |',
+    ...rows.map((row) => row.requests),
+    '',
+    'Durations and request counts are medians. The total counts github.com plus a raw.githubusercontent.com read of .gitattributes or CODEOWNERS. Metadata is a raw or blob fetch of those files. Other is the rest of the total.',
+    'Cold and warm tree rebuilds and diff-panel rebuilds must stay within their caps (a GitHub load redraw may be present or absent). Hot ignores mass removal and fails only when a row removed after the first DiffSeek control is still gone 500 ms later.',
     '',
   ].join('\n');
 }
@@ -337,6 +379,36 @@ function readCookie(cookie: unknown, index: number): CookieLike {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function githubRequestKind(url: string): 'search' | 'metadata' | 'other' | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const github = parsed.hostname === 'github.com';
+  const rawHost = parsed.hostname === 'raw.githubusercontent.com';
+  if (!github && !rawHost) return null;
+  if (github && (parsed.pathname === '/search' || parsed.pathname.startsWith('/search/'))) {
+    return 'search';
+  }
+  if (isRawOrBlobMetadata(parsed)) return 'metadata';
+  return github ? 'other' : null;
+}
+
+function isRawOrBlobMetadata(parsed: URL): boolean {
+  let path = parsed.pathname;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    path = parsed.pathname;
+  }
+  const metadataFile = path.endsWith('/.gitattributes') || path.endsWith('/CODEOWNERS');
+  if (!metadataFile) return false;
+  if (parsed.hostname === 'raw.githubusercontent.com') return true;
+  return path.includes('/raw/') || path.includes('/blob/');
 }
 
 function numberEnv(value: string | undefined, fallback: number): number {

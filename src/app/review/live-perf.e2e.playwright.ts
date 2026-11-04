@@ -8,12 +8,14 @@ import {
   test,
   type BrowserContext,
   type Page,
+  type Request,
 } from '@playwright/test';
 
 import {
   actionFailures,
   defaultLivePerfBudgets,
   defaultLivePrUrl,
+  emptyGithubRequestCounts,
   expectedGeneratedTotal,
   generatedCategorizedPattern,
   generatedIndexedText,
@@ -23,6 +25,7 @@ import {
   liveSampleCount,
   medianBudgetFailures,
   medianSample,
+  noteGithubRequest,
   parseInlineStorageState,
   parseStorageCookies,
   rebuildFailures,
@@ -206,44 +209,56 @@ async function measureReview(
   scenario: LivePerfScenario,
   navigate: () => Promise<void>,
 ): Promise<LivePerfSample> {
-  const started = Date.now();
-  await navigate();
-  await untilDom(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
-  const firstRenderSeconds = await renderSeconds(page, started);
-  // GitHub removes and restores panels on this navigation. Hot starts
-  // counting here and later fails on rows back after 500 ms or never back.
-  if (scenario === 'hot') await resetRedraws(page);
-  const menuOpenSeconds = await openFilterMenu(page);
-  await untilDom(
-    page,
-    { kind: 'text', selector: generatedCounter, pattern: generatedCategorizedPattern(expectedGeneratedTotal).source },
-    panelsTimeout,
-    'generated counter categorized',
-  );
-  const panelsSeconds = secondsBetween(started);
-  if (scenario === 'hot') {
-    // Wait for every removed row to return (event), not a fixed delay. The
-    // trace still timestamps returns: one back after 500 ms is a net loss.
-    // A row that never returns trips the guard and is then counted as lost.
-    await untilDom(page, { kind: 'trace-settled' }, stepTimeout, 'hot rows returned').catch(() => undefined);
-    await page.evaluate(() => {
-      document.dispatchEvent(new Event('diffseek-redraw-settle'));
-    });
-  }
-  const counts = await readRedraws(page);
-  const sample: LivePerfSample = {
-    scenario,
-    firstRenderSeconds,
-    menuOpenSeconds,
-    panelsSeconds,
-    ...counts,
+  const requests = emptyGithubRequestCounts();
+  // Metadata fetches run in the extension service worker, so the page misses them.
+  const onRequest = (request: Request) => {
+    noteGithubRequest(requests, request.url());
   };
-  test.info().annotations.push({
-    type: `live-perf:${scenario}`,
-    description: JSON.stringify(sample),
-  });
-  console.log(`diffseek live-perf:${scenario}`, sample);
-  return sample;
+  const browserContext = page.context();
+  browserContext.on('request', onRequest);
+  try {
+    const started = Date.now();
+    await navigate();
+    await untilDom(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
+    const firstRenderSeconds = await renderSeconds(page, started);
+    // GitHub removes and restores panels on this navigation. Hot starts
+    // counting here and later fails on rows back after 500 ms or never back.
+    if (scenario === 'hot') await resetRedraws(page);
+    const menuOpenSeconds = await openFilterMenu(page);
+    await untilDom(
+      page,
+      { kind: 'text', selector: generatedCounter, pattern: generatedCategorizedPattern(expectedGeneratedTotal).source },
+      panelsTimeout,
+      'generated counter categorized',
+    );
+    const panelsSeconds = secondsBetween(started);
+    if (scenario === 'hot') {
+      // Wait for every removed row to return (event), not a fixed delay. The
+      // trace still timestamps returns: one back after 500 ms is a net loss.
+      // A row that never returns trips the guard and is then counted as lost.
+      await untilDom(page, { kind: 'trace-settled' }, stepTimeout, 'hot rows returned').catch(() => undefined);
+      await page.evaluate(() => {
+        document.dispatchEvent(new Event('diffseek-redraw-settle'));
+      });
+    }
+    const counts = await readRedraws(page);
+    const sample: LivePerfSample = {
+      scenario,
+      firstRenderSeconds,
+      menuOpenSeconds,
+      panelsSeconds,
+      requests,
+      ...counts,
+    };
+    test.info().annotations.push({
+      type: `live-perf:${scenario}`,
+      description: JSON.stringify(sample),
+    });
+    console.log(`diffseek live-perf:${scenario}`, sample);
+    return sample;
+  } finally {
+    browserContext.off('request', onRequest);
+  }
 }
 
 async function runToggle(page: Page): Promise<RedrawCounts> {
