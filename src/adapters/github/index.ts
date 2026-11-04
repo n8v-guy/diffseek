@@ -1,3 +1,8 @@
+export { handleMetadataSearchMessage } from './repository-content/metadata-search-background';
+export {
+  searchMetadataFiles,
+  type MetadataSearchResult,
+} from './repository-content/metadata-search-client';
 export { handlePullHeadMessage } from './repository-content/pull-head-background';
 export { resolvePullHead } from './repository-content/pull-head-client';
 export type { PullHeadRequest } from './repository-content/pull-head';
