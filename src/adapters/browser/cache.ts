@@ -80,7 +80,8 @@ function isCacheEntry(value: unknown): value is CacheEntry {
     isRecord(value) &&
     value.version === 2 &&
     typeof value.codeowners === 'string' &&
-    typeof value.attributes === 'string'
+    typeof value.attributes === 'string' &&
+    validNestedAttributes(value.nestedAttributes)
   );
 }
 
@@ -92,7 +93,8 @@ function isPullCacheEntry(value: unknown): value is PullCacheEntry {
     typeof value.pull === 'number' &&
     typeof value.sha === 'string' &&
     typeof value.codeowners === 'string' &&
-    typeof value.attributes === 'string'
+    typeof value.attributes === 'string' &&
+    validNestedAttributes(value.nestedAttributes)
   );
 }
 
@@ -102,10 +104,19 @@ function metadataFrom(
   return {
     codeowners: value.codeowners,
     attributes: value.attributes,
+    ...(value.nestedAttributes != null
+      ? { nestedAttributes: value.nestedAttributes }
+      : {}),
     ...(value.codeownersPath != null
       ? { codeownersPath: value.codeownersPath }
       : {}),
   };
+}
+
+function validNestedAttributes(value: unknown): boolean {
+  return value === undefined || (
+    isRecord(value) && Object.values(value).every((text) => typeof text === 'string')
+  );
 }
 
 function samePull(

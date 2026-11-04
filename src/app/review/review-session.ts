@@ -80,7 +80,7 @@ export type ReviewSessionOptions = {
     repository: RepositoryRef,
   ) => Promise<{ metadata: RepositoryMetadata; changed: boolean }>;
   readPull: (
-    review: ReviewRef,
+    review: ReviewRef & { paths: string[] },
     fallback: RepositoryMetadata,
   ) => Promise<RepositoryMetadata>;
   markFiles: typeof markViewed;
@@ -174,7 +174,7 @@ export class ReviewSession {
     this.refreshObservationRoots();
   }
 
-  start(): void { this.reconcile(); this.refreshMetadata(); }
+  start(): void { this.reconcile(); }
 
   reconcile(): void {
     if (this.lifecycle.signal.aborted || this.reconciling) {
@@ -209,7 +209,8 @@ export class ReviewSession {
   }
 
   private reconcileOnce(): void {
-    if (consumeMetadataOpportunity(this.metadataWatch, this.options.root)) this.refreshMetadata();
+    const firstObservation = !this.metadataWatch.ready;
+    const metadataOpportunity = consumeMetadataOpportunity(this.metadataWatch, this.options.root);
     // Disconnect while writing so our own hidden/dataset toggles do not
     // immediately re-schedule another full reconcile during panel storms.
     this.observer.disconnect();
@@ -237,6 +238,9 @@ export class ReviewSession {
     this.treeNode = tree;
     this.regionNodes = regions;
     if (!next.supported) {
+      if (firstObservation || metadataOpportunity) {
+        this.refreshMetadata();
+      }
       this.projectionFingerprint = '';
       this.treeKey = null;
       this.regionKey = '';
@@ -261,9 +265,15 @@ export class ReviewSession {
       files: this.catalog.files(),
     };
     this.snapshot = catalogSnapshot;
+    const metadataKey = catalogSnapshot.files.map((file) => file.path).join('\n');
+    if (metadataOpportunity || metadataKey !== this.metadataRefresh.key) {
+      this.refreshMetadata(metadataKey);
+    }
     removeUnavailable(this.options.root);
     this.classifyIfNeeded(catalogSnapshot);
-    const defaultViewedPaths = pendingDefaultViewed(catalogSnapshot.files, this.options.filterDefaults, this.defaultViewedAttempts);
+    const defaultViewedPaths = this.metadataRefresh.settled
+      ? pendingDefaultViewed(catalogSnapshot.files, this.options.filterDefaults, this.defaultViewedAttempts)
+      : [];
     const generatedDefaultBusy =
       this.defaultViewedInFlight > 0 || defaultViewedPaths.length > 0;
     const menus = filterMenus(this.options.root);
@@ -398,17 +408,21 @@ export class ReviewSession {
     });
   }
 
-  private refreshMetadata(): void {
+  private refreshMetadata(key = this.metadataRefresh.key): void {
     loadReviewMetadata(this.metadataRefresh, {
-      readPull: () => this.options.readPull(this.options.review, this.metadata),
+      readPull: () => this.options.readPull({
+        ...this.options.review,
+        paths: this.catalog.files().map((file) => file.path),
+      }, this.metadata),
       refreshDefault: () => this.options.refreshDefault(this.options.review),
       commit: (metadata) => this.options.metadataCommits.commit(this.options.review, this.metadataRevision, metadata),
       aborted: () => this.lifecycle.signal.aborted,
+      onSettled: () => this.reconcile(),
       apply: (metadata) => {
         if (JSON.stringify(this.metadata) === JSON.stringify(metadata)) return;
         this.metadata = metadata; this.classifyKey = ''; this.reconcile();
       },
-    });
+    }, key);
   }
 
   private classifyIfNeeded(snapshot: SupportedSnapshot): void {

@@ -56,7 +56,7 @@ test.beforeAll(async () => {
   );
   await context.route('https://github.com/octo/repo/raw/**', async (route) => {
     const url = decodeURIComponent(route.request().url());
-    if (url.endsWith('/.gitattributes')) {
+    if (/\/raw\/[^/]+\/\.gitattributes$/.test(url)) {
       await route.fulfill({
         contentType: 'text/plain',
         body: attributesBody,
@@ -860,7 +860,7 @@ test('applies a late gitattributes fetch on a fresh store', async () => {
   const attributesReady = new Promise<void>((settle) => {
     releaseAttributes = settle;
   });
-  const attributesRoute = 'https://github.com/octo/repo/raw/**/.gitattributes';
+  const attributesRoute = 'https://github.com/octo/repo/raw/*/.gitattributes';
   await context.route(attributesRoute, async (route) => {
     await attributesReady;
     await route.fulfill({
@@ -890,6 +890,101 @@ test('applies a late gitattributes fetch on a fresh store', async () => {
     expect(await readStoredFilterDefaults()).toEqual({});
   } finally {
     releaseAttributes();
+    await context.unroute(attributesRoute);
+  }
+});
+
+test('hides nested generated files across streamed paths and cached revisits', async () => {
+  await writeFilterDefaults({ hidden: ['generated'], viewed: [] });
+  const directory = 'apps/contributor/shared/openapi';
+  const generatedPath = `${directory}/auth.json`;
+  const descendantPath = `${directory}/nested/noauth.json`;
+  const manualPath = `${directory}/manual/keep.json`;
+  const siblingPath = 'web-apps/packages/manual/spec.json';
+  const streamedPath =
+    'web-apps/packages/portal-contributor/openapi/contributorPortal/new.json';
+  const attributes = new Map([
+    [`${directory}/.gitattributes`, '*.json linguist-generated=true'],
+    [`${directory}/manual/.gitattributes`, '*.json linguist-generated=false'],
+    [
+      'web-apps/packages/portal-contributor/openapi/.gitattributes',
+      '*.json linguist-generated=true',
+    ],
+  ]);
+  const attributesRoute = 'https://github.com/octo/repo/raw/**/.gitattributes';
+  let requests = 0;
+  await context.route(attributesRoute, async (route) => {
+    requests += 1;
+    const path = new URL(route.request().url()).pathname
+      .split('/').slice(5).map(decodeURIComponent).join('/');
+    const body = attributes.get(path);
+    await route.fulfill({
+      status: body == null ? 404 : 200,
+      contentType: 'text/plain',
+      body: body ?? '',
+    });
+  });
+  try {
+    const page = await context.newPage();
+    const source = fixtureSource
+      .replaceAll('src/app.ts', generatedPath)
+      .replaceAll('src/new.ts', manualPath)
+      .replaceAll('src/generated.ts', descendantPath)
+      .replaceAll('docs/readme.md', siblingPath);
+    await page.route('https://github.com/octo/repo/pull/430/changes', async (route) => {
+      await route.fulfill({
+        contentType: 'text/html',
+        body: instrument(source),
+      });
+    });
+    await page.goto('https://github.com/octo/repo/pull/430/changes');
+    await page.getByLabel('Filter options').click();
+    const generatedCount = page.locator(
+      '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
+    );
+    await expect(generatedCount).toHaveText('0/2');
+    await expect(page.locator(`[role="treeitem"][id="${generatedPath}"]`))
+      .toHaveAttribute('hidden', '');
+    await expect(page.locator(`[role="treeitem"][id="${descendantPath}"]`))
+      .toHaveAttribute('hidden', '');
+    await expect(page.locator(`[role="treeitem"][id="${manualPath}"]`))
+      .toBeVisible();
+    await expect(page.locator(`[role="treeitem"][id="${siblingPath}"]`))
+      .toBeVisible();
+    await expect(page.locator('[role="treeitem"][id="config/app.json"]'))
+      .toBeVisible();
+
+    await page.evaluate((path) => {
+      document.querySelector('[role="tree"]')?.insertAdjacentHTML('beforeend', `
+        <li id="${path}" role="treeitem" aria-label="new.json">
+          <div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-added"></svg></div>
+          <a href="#diff-streamed">new.json</a>
+        </li>`);
+      document.body.insertAdjacentHTML('beforeend', `
+        <div id="diff-streamed" role="region">
+          <div data-diff-header-wrapper="true">
+            <button aria-label="Collapse file"></button>
+            <h3><code>${path}</code></h3>
+            <button aria-label="Not Viewed" aria-pressed="false">Viewed</button>
+          </div>
+        </div>`);
+    }, streamedPath);
+    await expect(generatedCount).toHaveText('0/3');
+    await expect(page.locator(`[role="treeitem"][id="${streamedPath}"]`))
+      .toHaveAttribute('hidden', '');
+    await expect(page.locator('#diff-streamed'))
+      .toHaveAttribute('data-diffseek-filtered-out', 'true');
+
+    const fetched = requests;
+    await page.reload();
+    await page.getByLabel('Filter options').click();
+    await expect(generatedCount).toHaveText('0/2');
+    await expect(page.locator(`[role="treeitem"][id="${generatedPath}"]`))
+      .toHaveAttribute('hidden', '');
+    await expect(page.locator(`[role="treeitem"][id="${manualPath}"]`))
+      .toBeVisible();
+    expect(requests).toBe(fetched);
+  } finally {
     await context.unroute(attributesRoute);
   }
 });

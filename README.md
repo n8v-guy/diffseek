@@ -32,7 +32,8 @@ Owners come from CODEOWNERS, read like GitHub does (.github/, root or docs/; las
 /db/migrations/   @acme/data
 ```
 
-Generated files are marked in the root .gitattributes and start hidden:
+Generated files are marked in .gitattributes files and start hidden. Rules apply
+relative to each file's directory; deeper files override matching parent rules:
 
 ```gitattributes
 dist/**           linguist-generated=true

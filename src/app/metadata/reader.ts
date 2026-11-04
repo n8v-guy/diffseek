@@ -21,6 +21,8 @@ const codeownersPaths = [
   'CODEOWNERS',
   'docs/CODEOWNERS',
 ];
+const attributeReadConcurrency = 4;
+const metadataReadFailure = 'Repository metadata request failed';
 
 type ReadRawFile = (request: RawFileRequest) => Promise<RawFileResult>;
 type ResolvePullHead = (request: PullHeadRequest) => Promise<string>;
@@ -40,6 +42,9 @@ export async function readImmediateMetadata(
           attributes: cachedPull.attributes,
           ...(cachedPull.codeownersPath !== undefined
             ? { codeownersPath: cachedPull.codeownersPath }
+            : {}),
+          ...(cachedPull.nestedAttributes !== undefined
+            ? { nestedAttributes: cachedPull.nestedAttributes }
             : {}),
         };
       }
@@ -67,7 +72,7 @@ export async function refreshDefaultMetadata(
 }
 
 export async function readPullMetadata(
-  review: RepositoryRef & { pull: number },
+  review: RepositoryRef & { pull: number; paths?: readonly string[] },
   fallback: RepositoryMetadata,
   request: ReadRawFile = readRawFile,
   resolveHead: ResolvePullHead = resolvePullHead,
@@ -79,6 +84,7 @@ export async function readPullMetadata(
   const cached = await readPullCache(review).catch(() => null);
   if (cached?.sha === ref) {
     const { sha, ...metadata } = cached;
+    await readNestedAttributes(review, ref, metadata, request);
     await writePullCache(review, sha, metadata).catch(() => undefined);
     return metadata;
   }
@@ -89,8 +95,39 @@ export async function readPullMetadata(
     request,
     (await readCache(review).catch(() => null))?.codeownersPath,
   );
+  await readNestedAttributes(review, ref, metadata, request);
   await writePullCache(review, ref, metadata).catch(() => undefined);
   return metadata;
+}
+
+async function readNestedAttributes(
+  review: RepositoryRef & { paths?: readonly string[] },
+  ref: string,
+  metadata: RepositoryMetadata,
+  request: ReadRawFile,
+): Promise<void> {
+  const directories = new Set<string>();
+  for (const path of review.paths ?? []) {
+    const parts = path.split('/');
+    for (let length = 1; length < parts.length; length += 1) {
+      directories.add(parts.slice(0, length).join('/'));
+    }
+  }
+  const nested = new Map(Object.entries(metadata.nestedAttributes ?? {}));
+  const pending = [...directories].filter((directory) => !nested.has(directory));
+  if (pending.length === 0) return;
+  // Large PRs share ancestors; probe each once with bounded concurrency.
+  const reads = await Promise.allSettled(Array.from({ length: Math.min(attributeReadConcurrency, pending.length) }, async () => {
+    for (let directory = pending.shift(); directory !== undefined; directory = pending.shift()) {
+      const result = await readText(review, ref, `${directory}/.gitattributes`, request);
+      if (result.status === 'failed') throw new Error(metadataReadFailure);
+      nested.set(directory, result.status === 'found' ? result.text : '');
+    }
+  }));
+  if (reads.some((result) => result.status === 'rejected')) {
+    throw new Error(metadataReadFailure);
+  }
+  metadata.nestedAttributes = Object.fromEntries(nested);
 }
 
 type TextRead =
@@ -117,7 +154,7 @@ async function readSettled(
     request,
     preferredPath,
   );
-  if (!read.settled) throw new Error('Repository metadata request failed');
+  if (!read.settled) throw new Error(metadataReadFailure);
   return read.metadata;
 }
 

@@ -28,6 +28,7 @@ export function classifyKeyFor(
   return [
     metadata.codeowners,
     metadata.attributes,
+    JSON.stringify(metadata.nestedAttributes),
     files
       .map((file) => `${file.path}\0${file.status}\0${file.owners.join(',')}`)
       .join('\n'),
@@ -39,7 +40,12 @@ export function classifySnapshot(
   metadata: RepositoryMetadata,
 ): void {
   labelFiles(snapshot.files, {
-    attributes: parseGitAttributes(metadata.attributes),
+    attributes: [
+      ...parseGitAttributes(metadata.attributes),
+      ...Object.entries(metadata.nestedAttributes ?? {})
+        .sort(([left], [right]) => left.split('/').length - right.split('/').length)
+        .flatMap(([directory, source]) => parseGitAttributes(source, directory)),
+    ],
     codeowners: metadata.codeowners
       ? parseCodeowners(metadata.codeowners)
       : [],
