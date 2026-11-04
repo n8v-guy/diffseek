@@ -1,17 +1,17 @@
-import type { RepositoryMetadata, RepositoryRef } from './metadata';
+import type { RepositoryRef } from './metadata';
 
-type WriteMetadata = (
+type WriteMetadata<T> = (
   repository: RepositoryRef,
-  metadata: RepositoryMetadata,
+  metadata: T,
 ) => Promise<void>;
 
-export class MetadataCommitGuard {
+export class MetadataCommitGuard<T> {
   private readonly revisions = new Map<string, number>();
   private readonly tails = new Map<string, Promise<unknown>>();
 
-  private readonly write: WriteMetadata;
+  private readonly write: WriteMetadata<T>;
 
-  constructor(write: WriteMetadata) {
+  constructor(write: WriteMetadata<T>) {
     this.write = write;
   }
 
@@ -29,7 +29,7 @@ export class MetadataCommitGuard {
   commit(
     repository: RepositoryRef,
     revision: number,
-    metadata: RepositoryMetadata,
+    metadata: T,
   ): Promise<boolean> {
     const key = repositoryKey(repository);
     const previous = this.tails.get(key) ?? Promise.resolve();

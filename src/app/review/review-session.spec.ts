@@ -23,8 +23,12 @@ describe('review session stream batching', () => {
       root: document,
       pathname: () => '/octo/repo/pull/1/changes',
       readImmediate: async () => emptyMetadata,
-      refreshDefault: async () => ({ metadata: emptyMetadata, changed: false }),
-      readPull: async (_review, fallback) => fallback,
+      refreshDefault: async () => ({
+        metadata: emptyMetadata,
+        cache: { files: {}, refreshedAt: 0, pulls: [] },
+        changed: false,
+      }),
+      readPull: async (_review, base) => base.metadata,
     });
     let reconciles = 0;
     document.addEventListener('diffseek-reconciled', () => {
@@ -84,8 +88,12 @@ describe('redraw budget', () => {
       root: document,
       pathname: () => '/octo/repo/pull/1/changes',
       readImmediate: async () => emptyMetadata,
-      refreshDefault: async () => ({ metadata: emptyMetadata, changed: false }),
-      readPull: async (_review, fallback) => fallback,
+      refreshDefault: async () => ({
+        metadata: emptyMetadata,
+        cache: { files: {}, refreshedAt: 0, pulls: [] },
+        changed: false,
+      }),
+      readPull: async (_review, base) => base.metadata,
     });
     await flush();
     const loaded = counts.snapshot();

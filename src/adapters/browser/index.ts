@@ -1,8 +1,7 @@
 export {
   readCache,
-  readPullCache,
   writeCache,
-  writePullCache,
+  type RepositoryCache,
 } from './cache';
 export {
   readFilterDefaults,

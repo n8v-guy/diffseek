@@ -3,6 +3,7 @@ import {
   writeCache,
   writeFilterDefaults,
   type FilterDefaults,
+  type RepositoryCache,
 } from '@diffseek/browser';
 import {
   changesPathFromClassic,
@@ -20,6 +21,7 @@ import {
   readImmediateMetadata,
   readPullMetadata,
   refreshDefaultMetadata,
+  type DefaultMetadata,
 } from '../metadata/reader';
 
 import { ReviewSession } from './review-session';
@@ -32,11 +34,11 @@ type ReviewAppOptions = {
   replace?: (url: string) => void;
   readImmediate?: (repository: RepositoryRef) => Promise<RepositoryMetadata>;
   refreshDefault?: (
-    repository: RepositoryRef,
-  ) => Promise<{ metadata: RepositoryMetadata; changed: boolean }>;
+    review: ReviewRef & { paths: string[] },
+  ) => Promise<DefaultMetadata>;
   readPull?: (
     review: ReviewRef & { paths: string[] },
-    fallback: RepositoryMetadata,
+    base: DefaultMetadata,
   ) => Promise<RepositoryMetadata>;
   markFiles?: typeof markViewed;
   readFilterDefaults?: () => Promise<FilterDefaults>;
@@ -71,7 +73,7 @@ export async function startReviewApp(
     writeFilterDefaults: options.writeFilterDefaults ?? writeFilterDefaults,
   };
   const filterDefaults = await dependencies.readFilterDefaults();
-  const metadataCommits = new MetadataCommitGuard(writeCache);
+  const metadataCommits = new MetadataCommitGuard<RepositoryCache>(writeCache);
   const lifecycle = new AbortController();
   let session: ReviewSession | null = null;
   let review: ReviewRef | null = null;

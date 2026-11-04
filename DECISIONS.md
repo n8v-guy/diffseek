@@ -19,22 +19,29 @@ selectors or keep references to page elements.
 **Why:** Knowledge of GitHub's markup and element lifetimes lives in one place.
 **Cost:** The adapter is a high-value seam and needs broad fixtures.
 
-## D003 — Metadata levels replace instead of merge
+## D003 — Metadata comes from the cached default branch
 
-**Decision:** Start from a cache of recent pull requests, else the cached
-default branch, else bundled assumptions; the uncached pull-request head then
-replaces that and is cached. A default-branch refresh only prefills an empty
-cache and never replaces a settled head result; if the head read fails, the
-review takes the default-branch result. Failures are not stored. A failed read
-is retried, one at a time, when the menu opens or the tree changes, never on a
-timer. A missing file keeps the previous level.
-On a pull-request head, CODEOWNERS is probed at the last default-branch location, then the others.
+**Decision:** Start from the cached default branch, else bundled assumptions.
+One github.com code search lists every .gitattributes and CODEOWNERS path with
+its blob. Exactly one CODEOWNERS is chosen from those paths (.github/, root,
+docs/) and only .gitattributes files in an ancestor-or-same directory of a diff
+path are read. The cache holds the listing and the texts per repository, keyed
+by blob, and refreshes with a new search once a day or on every third distinct
+pull request. Warm and hot reviews make no metadata request. Two exceptions:
+a known ancestor .gitattributes that a streamed path newly needs, and a
+metadata file in the diff, which is read on the pull-request head, replaces
+that one default file, and is never cached. Streamed paths never restart or
+reset a read. When search is unusable (error, signed out, unindexed, not JSON,
+too many pages), at most three CODEOWNERS spots and the root .gitattributes are
+read instead. Failures are not stored. A failed read is retried, one at a time,
+when the menu opens or the tree changes, never on a timer. Entries from the
+older per-pull cache are ignored and dropped.
 
-**Why:** Revisits skip reloading metadata files while unknown pull requests
-still start from their head, and a cold review still picks up rules on a later
-success. **Cost:** A head file in a location GitHub ranks higher than the one
-last found on the default branch is missed until that location disappears or
-the head changes. A hung read is abandoned after a guard time.
+**Why:** Probing each touched folder at the pull-request head made cold loads
+slower and redrew more. One listing finds every file, and a blob-keyed cache
+reads only what changed. **Cost:** Search covers the default branch only and
+can lag its index, so a new nested file waits for a later refresh, and the
+fallback ignores nested files. A hung read is abandoned after a guard time.
 
 ## D004 — Label sources compose through one interface
 

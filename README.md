@@ -25,6 +25,9 @@ Every row shows a live count. Hover a row and click "only" to focus.
 
 ## Setup (optional)
 
+CODEOWNERS and .gitattributes are read from the default branch, refreshed daily or every
+third pull request, except a file the pull request itself changes.
+
 Owners come from CODEOWNERS, read like GitHub does (.github/, root or docs/; last match wins):
 
 ```text

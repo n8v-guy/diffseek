@@ -1,232 +1,173 @@
-import {
-  readCache,
-  readPullCache,
-  writePullCache,
-} from '@diffseek/browser';
+import { readCache, type RepositoryCache } from '@diffseek/browser';
 import {
   readRawFile,
   resolvePullHead,
+  searchMetadataFiles,
+  type MetadataSearchResult,
   type PullHeadRequest,
   type RawFileRequest,
   type RawFileResult,
 } from '@diffseek/github';
 import {
-  bundledGitAttributes,
+  codeownersLocations,
+  isMetadataPath,
+  metadataFromFiles,
+  pullMetadataPaths,
+  unloadedMetadataPaths,
+  type MetadataFiles,
   type RepositoryMetadata,
   type RepositoryRef,
 } from '@diffseek/repository-metadata';
 
-const codeownersPaths = [
-  '.github/CODEOWNERS',
-  'CODEOWNERS',
-  'docs/CODEOWNERS',
-];
-const attributeReadConcurrency = 4;
-const metadataReadFailure = 'Repository metadata request failed';
+const refreshIntervalMs = 86_400_000;
+const pullsPerRefresh = 3;
+const defaultBranch = 'HEAD';
+const attributesPath = '.gitattributes';
 
-type ReadRawFile = (request: RawFileRequest) => Promise<RawFileResult>;
-type ResolvePullHead = (request: PullHeadRequest) => Promise<string>;
+type Review = RepositoryRef & { pull: number; paths: readonly string[] };
+type Dependencies = {
+  request: (request: RawFileRequest) => Promise<RawFileResult>;
+  search: (request: { repo: string }) => Promise<MetadataSearchResult>;
+  resolveHead: (request: PullHeadRequest) => Promise<string>;
+  now: () => number;
+};
+
+export type DefaultMetadata = {
+  metadata: RepositoryMetadata;
+  cache: RepositoryCache;
+  changed: boolean;
+};
 
 export async function readImmediateMetadata(
-  repository: RepositoryRef & { pull?: number },
-): Promise<RepositoryMetadata> {
-  try {
-    if (repository.pull != null) {
-      const cachedPull = await readPullCache({
-        ...repository,
-        pull: repository.pull,
-      });
-      if (cachedPull != null) {
-        return {
-          codeowners: cachedPull.codeowners,
-          attributes: cachedPull.attributes,
-          ...(cachedPull.codeownersPath !== undefined
-            ? { codeownersPath: cachedPull.codeownersPath }
-            : {}),
-          ...(cachedPull.nestedAttributes !== undefined
-            ? { nestedAttributes: cachedPull.nestedAttributes }
-            : {}),
-        };
-      }
-    }
-    return (await readCache(repository)) ?? bundledMetadata;
-  } catch {
-    return bundledMetadata;
-  }
-}
-
-export async function refreshDefaultMetadata(
   repository: RepositoryRef,
-  request: ReadRawFile = readRawFile,
-): Promise<{ metadata: RepositoryMetadata; changed: boolean }> {
-  const cached = await readCache(repository).catch(() => null);
-  if (cached != null) return { metadata: cached, changed: false };
+): Promise<RepositoryMetadata> {
   try {
-    return {
-      metadata: await readSettled(repository, 'HEAD', bundledMetadata, request),
-      changed: true,
-    };
+    return metadataFromFiles((await readCache(repository))?.files ?? {});
   } catch {
-    return { metadata: bundledMetadata, changed: false };
+    return metadataFromFiles({});
   }
 }
 
+/**
+ * Warm reads come from the cache alone. A cold or due cache costs one search
+ * and reads only the relevant files; a warm one reads only newly relevant ones.
+ */
+export async function refreshDefaultMetadata(
+  review: Review,
+  dependencies: Partial<Dependencies> = {},
+): Promise<DefaultMetadata> {
+  const { request = readRawFile, search = searchMetadataFiles, now = Date.now } =
+    dependencies;
+  const cached = await readCache(review).catch(() => null);
+  const timestamp = now();
+  const current =
+    cached != null && !refreshDue(cached, review.pull, timestamp) ? cached : null;
+  const index =
+    current?.files ?? (await discover(review, cached?.files ?? {}, request, search));
+  const files = await readInto(
+    index,
+    unloadedMetadataPaths(index, review.paths),
+    defaultBranch,
+    review,
+    request,
+  );
+  const pulls = current?.pulls ?? [];
+  const cache = {
+    files,
+    refreshedAt: current?.refreshedAt ?? timestamp,
+    pulls: pulls.includes(review.pull) ? pulls : [...pulls, review.pull],
+  };
+  return {
+    metadata: metadataFromFiles(files),
+    cache,
+    changed: JSON.stringify(cache) !== JSON.stringify(cached),
+  };
+}
+
+/** The pull request's own version of metadata files that the diff touches. */
 export async function readPullMetadata(
-  review: RepositoryRef & { pull: number; paths?: readonly string[] },
-  fallback: RepositoryMetadata,
-  request: ReadRawFile = readRawFile,
-  resolveHead: ResolvePullHead = resolvePullHead,
+  review: Review,
+  base: DefaultMetadata,
+  dependencies: Partial<Dependencies> = {},
 ): Promise<RepositoryMetadata> {
+  const { request = readRawFile, resolveHead = resolvePullHead } = dependencies;
+  const paths = pullMetadataPaths(review.paths);
+  if (paths.length === 0) return base.metadata;
   const ref = await resolveHead({
     repo: `${review.owner}/${review.repo}`,
     pull: review.pull,
   });
-  const cached = await readPullCache(review).catch(() => null);
-  if (cached?.sha === ref) {
-    const { sha, ...metadata } = cached;
-    await readNestedAttributes(review, ref, metadata, request);
-    await writePullCache(review, sha, metadata).catch(() => undefined);
-    return metadata;
-  }
-  const metadata = await readSettled(
-    review,
-    ref,
-    fallback,
-    request,
-    (await readCache(review).catch(() => null))?.codeownersPath,
+  return metadataFromFiles(
+    await readInto(base.cache.files, paths, ref, review, request),
   );
-  await readNestedAttributes(review, ref, metadata, request);
-  await writePullCache(review, ref, metadata).catch(() => undefined);
-  return metadata;
 }
 
-async function readNestedAttributes(
-  review: RepositoryRef & { paths?: readonly string[] },
-  ref: string,
-  metadata: RepositoryMetadata,
-  request: ReadRawFile,
-): Promise<void> {
-  const directories = new Set<string>();
-  for (const path of review.paths ?? []) {
-    const parts = path.split('/');
-    for (let length = 1; length < parts.length; length += 1) {
-      directories.add(parts.slice(0, length).join('/'));
-    }
-  }
-  const nested = new Map(Object.entries(metadata.nestedAttributes ?? {}));
-  const pending = [...directories].filter((directory) => !nested.has(directory));
-  if (pending.length === 0) return;
-  // Large PRs share ancestors; probe each once with bounded concurrency.
-  const reads = await Promise.allSettled(Array.from({ length: Math.min(attributeReadConcurrency, pending.length) }, async () => {
-    for (let directory = pending.shift(); directory !== undefined; directory = pending.shift()) {
-      const result = await readText(review, ref, `${directory}/.gitattributes`, request);
-      if (result.status === 'failed') throw new Error(metadataReadFailure);
-      nested.set(directory, result.status === 'found' ? result.text : '');
-    }
-  }));
-  if (reads.some((result) => result.status === 'rejected')) {
-    throw new Error(metadataReadFailure);
-  }
-  metadata.nestedAttributes = Object.fromEntries(nested);
-}
-
-type TextRead =
-  | { status: 'found'; text: string }
-  | { status: 'missing' }
-  | { status: 'failed' };
-
-type CodeownersRead =
-  | { status: 'found'; path: string; text: string }
-  | { status: 'missing' }
-  | { status: 'failed' };
-
-async function readSettled(
-  repository: RepositoryRef,
-  ref: string,
-  fallback: RepositoryMetadata,
-  request: ReadRawFile,
-  preferredPath?: string,
-): Promise<RepositoryMetadata> {
-  const read = await readMetadata(
-    repository,
-    ref,
-    fallback,
-    request,
-    preferredPath,
+function refreshDue(cache: RepositoryCache, pull: number, now: number): boolean {
+  return (
+    now - cache.refreshedAt >= refreshIntervalMs ||
+    (!cache.pulls.includes(pull) && cache.pulls.length >= pullsPerRefresh)
   );
-  if (!read.settled) throw new Error(metadataReadFailure);
-  return read.metadata;
 }
 
-async function readMetadata(
-  repository: RepositoryRef,
-  ref: string,
-  fallback: RepositoryMetadata,
-  request: ReadRawFile,
-  preferredPath?: string,
-): Promise<{ metadata: RepositoryMetadata; settled: boolean }> {
-  const paths =
-    preferredPath != null && codeownersPaths.includes(preferredPath)
-      ? [
-          preferredPath,
-          ...codeownersPaths.filter((path) => path !== preferredPath),
-        ]
-      : codeownersPaths;
-  const [codeowners, attributes] = await Promise.all([
-    readFirst(repository, ref, paths, request),
-    readText(repository, ref, '.gitattributes', request),
-  ]);
-  const codeownersPath =
-    codeowners.status === 'found' ? codeowners.path : fallback.codeownersPath;
-  return {
-    settled: codeowners.status !== 'failed' && attributes.status !== 'failed',
-    metadata: {
-      codeowners:
-        codeowners.status === 'found' ? codeowners.text : fallback.codeowners,
-      attributes:
-        attributes.status === 'found' ? attributes.text : fallback.attributes,
-      ...(codeownersPath !== undefined ? { codeownersPath } : {}),
-    },
-  };
-}
-
-async function readFirst(
-  repository: RepositoryRef,
-  ref: string,
-  paths: string[],
-  request: ReadRawFile,
-): Promise<CodeownersRead> {
-  for (const path of paths) {
-    const value = await readText(repository, ref, path, request);
-    if (value.status === 'found') {
-      return { status: 'found', path, text: value.text };
-    }
-    if (value.status === 'failed') return { status: 'failed' };
-  }
-  return { status: 'missing' };
-}
-
-async function readText(
-  repository: RepositoryRef,
-  ref: string,
-  path: string,
-  request: ReadRawFile,
-): Promise<TextRead> {
+async function discover(
+  review: Review,
+  cached: MetadataFiles,
+  request: Dependencies['request'],
+  search: Dependencies['search'],
+): Promise<MetadataFiles> {
   try {
-    const result = await request({
-      repo: `${repository.owner}/${repository.repo}`,
-      ref,
-      path,
-    });
-    return result.status === 'found'
-      ? { status: 'found', text: result.text }
-      : { status: 'missing' };
+    const found = await search({ repo: `${review.owner}/${review.repo}` });
+    const index: MetadataFiles = {};
+    for (const { path, blob } of found) {
+      const known = cached[path];
+      if (isMetadataPath(path)) {
+        index[path] = known?.blob === blob ? known : { blob };
+      }
+    }
+    return index;
   } catch {
-    return { status: 'failed' };
+    return probe(review, request);
   }
 }
 
-const bundledMetadata: RepositoryMetadata = {
-  codeowners: '',
-  attributes: bundledGitAttributes,
-};
+/** Without search: the root attributes and at most three CODEOWNERS spots. */
+async function probe(
+  review: Review,
+  request: Dependencies['request'],
+): Promise<MetadataFiles> {
+  let files = await readInto({}, [attributesPath], defaultBranch, review, request);
+  for (const location of codeownersLocations) {
+    files = await readInto(files, [location], defaultBranch, review, request);
+    if (files[location]) break;
+  }
+  return files;
+}
+
+/** Reads each path at `ref`; a missing file is dropped, a failed read throws. */
+async function readInto(
+  files: MetadataFiles,
+  paths: string[],
+  ref: string,
+  review: Review,
+  request: Dependencies['request'],
+): Promise<MetadataFiles> {
+  const next = { ...files };
+  const missing = new Set<string>();
+  await Promise.all(
+    paths.map(async (path) => {
+      const result = await request({
+        repo: `${review.owner}/${review.repo}`,
+        ref,
+        path,
+      });
+      if (result.status === 'found') {
+        next[path] = { blob: files[path]?.blob ?? '', text: result.text };
+      } else {
+        missing.add(path);
+      }
+    }),
+  );
+  return Object.fromEntries(
+    Object.entries(next).filter(([path]) => !missing.has(path)),
+  );
+}
