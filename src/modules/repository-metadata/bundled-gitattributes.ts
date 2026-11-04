@@ -7,8 +7,8 @@ import type { RepositoryMetadata } from './metadata';
 /**
  * Later lines win. Repository rules are parsed after this text, so a saved
  * .gitattributes overrides a built-in format or group without being rewritten.
- * Folder hints come first and extension rules then correct files that have a
- * real language suffix.
+ * Snapshot paths are cleared after the test rules: a `*.test.*` name inside a
+ * snapshot still matches the test pattern, and the snapshot is generated output.
  */
 
 const groupTests = 'group=Tests';
@@ -23,9 +23,9 @@ type FormatSpec = {
   extensions: readonly string[];
   paths?: readonly string[];
   companions?: readonly string[];
-  folders?: readonly string[];
   configs?: readonly string[];
   configOnly?: readonly string[];
+  locks?: readonly string[];
   tests?: readonly string[];
   generated?: readonly string[];
 };
@@ -35,17 +35,13 @@ const formats: readonly FormatSpec[] = [
     name: 'TypeScript',
     extensions: ['.ts', '.tsx', '.mts', '.cts'],
     configs: ['**/tsconfig*.json'],
+    generated: ['**/*.pb.ts', '**/*_pb.ts'],
   },
   {
     name: 'JavaScript',
     extensions: ['.js', '.jsx', '.mjs', '.cjs'],
-    configs: [
-      '**/package.json',
-      '**/jsconfig.json',
-      '**/package-lock.json',
-      '**/yarn.lock',
-      '**/pnpm-lock.yaml',
-    ],
+    configs: ['**/package.json', '**/jsconfig.json'],
+    locks: ['**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml'],
   },
   {
     name: 'Python',
@@ -58,29 +54,34 @@ const formats: readonly FormatSpec[] = [
       '**/mypy.ini',
       '**/requirements*.txt',
       '**/Pipfile',
-      '**/Pipfile.lock',
-      '**/poetry.lock',
     ],
     configOnly: ['**/setup.py'],
+    locks: ['**/Pipfile.lock', '**/poetry.lock'],
     tests: ['**/test_*.py', '**/*_test.py', '**/conftest.py'],
+    generated: ['**/*_pb2.py', '**/*_pb2.pyi', '**/*_pb2_grpc.py'],
   },
   {
     name: 'Java',
     extensions: ['.java'],
-    configs: ['**/pom.xml', '**/build.gradle', '**/settings.gradle'],
+    configs: ['**/pom.xml'],
     tests: ['**/*Test.java', '**/*Tests.java', '**/*IT.java', '**/*TestCase.java'],
   },
   {
     name: 'Kotlin',
     extensions: ['.kt', '.kts', '.ktm'],
-    configOnly: ['**/build.gradle.kts', '**/settings.gradle.kts'],
     tests: ['**/*Test.kt', '**/*Tests.kt', '**/*Test.kts'],
+  },
+  {
+    name: 'Gradle',
+    extensions: [],
+    configs: ['*.gradle', '*.gradle.kts'],
   },
   {
     name: 'C#',
     extensions: ['.cs', '.csx'],
     configs: ['**/*.csproj', '**/*.sln', '**/Directory.Build.props', '**/Directory.Build.targets'],
     tests: ['**/*Test.cs', '**/*Tests.cs', '**/*Test.csx'],
+    generated: ['**/*.Designer.cs', '**/*.designer.cs'],
   },
   {
     name: 'C/C++',
@@ -99,32 +100,35 @@ const formats: readonly FormatSpec[] = [
   {
     name: 'Go',
     extensions: ['.go', '.gohtml', '.gotmpl'],
-    configs: ['**/go.mod', '**/go.sum', '**/go.work'],
+    configs: ['**/go.mod', '**/go.work'],
+    locks: ['**/go.sum'],
     tests: ['**/*_test.go'],
-    generated: ['**/*.pb.go'],
+    generated: ['**/*.pb.go', '**/*.pb.gw.go', '**/zz_generated.*.go'],
   },
   {
     name: 'PHP',
     extensions: ['.php', '.php3', '.php4', '.php5', '.phps', '.phpt'],
     configs: [
       '**/composer.json',
-      '**/composer.lock',
       '**/phpunit.xml',
       '**/phpunit.xml.dist',
     ],
+    locks: ['**/composer.lock'],
     tests: ['**/*Test.php', '**/*TestCase.php', '**/*.phpt'],
   },
   {
     name: 'Ruby',
     extensions: ['.rb', '.rake', '.gemspec', '.ru', '.rbi'],
-    configs: ['**/Gemfile', '**/Gemfile.lock', '**/Rakefile'],
+    configs: ['**/Gemfile', '**/Rakefile'],
+    locks: ['**/Gemfile.lock'],
     configOnly: ['**/*.gemspec'],
     tests: ['**/*_spec.rb', '**/*_test.rb'],
   },
   {
     name: 'Rust',
     extensions: ['.rs'],
-    configs: ['**/Cargo.toml', '**/Cargo.lock'],
+    configs: ['**/Cargo.toml'],
+    locks: ['**/Cargo.lock'],
     tests: ['**/*_test.rs', '**/*_tests.rs'],
   },
   {
@@ -174,14 +178,26 @@ const formats: readonly FormatSpec[] = [
       '.jinja', '.jinja2', '.j2', '.pug', '.jade', '.liquid', '.njk', '.heex',
     ],
     paths: ['*.blade.php'],
-    folders: ['**/templates/**', '**/views/**'],
   },
   {
     name: 'Dart',
     extensions: ['.dart'],
-    configs: ['**/pubspec.yaml', '**/pubspec.lock'],
+    configs: ['**/pubspec.yaml'],
+    locks: ['**/pubspec.lock'],
     tests: ['**/*_test.dart'],
-    generated: ['**/*.g.dart', '**/*.freezed.dart'],
+    generated: ['**/*.g.dart', '**/*.freezed.dart', '**/*.pb.dart', '**/*.pbjson.dart'],
+  },
+  {
+    name: 'Astro',
+    extensions: ['.astro'],
+  },
+  {
+    name: 'Protobuf',
+    extensions: ['.proto'],
+  },
+  {
+    name: 'Terraform',
+    extensions: ['.tf', '.tfvars'],
   },
 ];
 
@@ -207,6 +223,8 @@ const genericConfig = [
   '.github/**',
 ];
 
+const snapshotPatterns = ['**/*.snap', '**/__snapshots__/**'];
+
 const generatedPatterns = [
   '**/vendor/**',
   '**/node_modules/**',
@@ -217,13 +235,21 @@ const generatedPatterns = [
   '**/coverage/**',
   '**/generated/**',
   '**/__generated__/**',
+  '**/gen/**',
+  '**/out/**',
+  '**/obj/**',
+  '**/target/**',
+  '**/bin/Debug/**',
+  '**/bin/Release/**',
   '**/.next/**',
   '**/.nuxt/**',
   '**/Pods/**',
   '**/Carthage/Build/**',
   '**/*.min.js',
   '**/*.min.css',
+  '**/*.min.mjs',
   '**/*.generated.*',
+  ...snapshotPatterns,
 ];
 
 const testPatterns = [
@@ -231,25 +257,28 @@ const testPatterns = [
   '**/*.spec.*',
   '**/*.e2e.*',
   '**/*-spec.*',
-  '**/*-comp.*',
   '**/*.cy.ts',
   '**/*.cy.tsx',
   '**/*.cy.js',
   '**/*.cy.jsx',
-  '**/*.snap',
   '**/test/**',
   '**/tests/**',
   '**/spec/**',
   '**/specs/**',
   '**/__tests__/**',
-  '**/__snapshots__/**',
   '**/__mocks__/**',
   '**/__fixtures__/**',
   '**/testdata/**',
   '**/e2e/**',
   '**/unittest/**',
   '**/unittests/**',
-  '**/*Test/**',
+  '**/Test/**',
+  '**/androidTest/**',
+  '**/commonTest/**',
+  '**/jvmTest/**',
+  '**/jsTest/**',
+  '**/iosTest/**',
+  '**/componentTest/**',
   '**/*Tests/**',
 ];
 
@@ -267,7 +296,6 @@ function pushLines(
 
 function renderBundledGitAttributes(specs: readonly FormatSpec[]): string {
   const lines: string[] = [];
-  for (const spec of specs) pushLines(lines, spec.folders, languageOf(spec.name));
   for (const spec of specs) {
     pushLines(lines, spec.extensions.map((ext) => `*${ext}`), languageOf(spec.name));
   }
@@ -283,8 +311,12 @@ function renderBundledGitAttributes(specs: readonly FormatSpec[]): string {
   pushLines(lines, genericConfig, groupConfig);
   pushLines(lines, generatedPatterns, generatedFlag);
   for (const spec of specs) pushLines(lines, spec.generated, generatedFlag);
+  for (const spec of specs) {
+    pushLines(lines, spec.locks, `${languageOf(spec.name)} ${generatedFlag}`);
+  }
   pushLines(lines, testPatterns, groupTests);
   for (const spec of specs) pushLines(lines, spec.tests, groupTests);
+  pushLines(lines, snapshotPatterns, '-group');
   return lines.join('\n');
 }
 
