@@ -181,65 +181,12 @@ streamed page can get one pass per frame instead of one per quiet period, and a 
 notification no longer disappears on its own while the reviewer only reads,
 and the minimum is a timer: it reads the same on every machine.
 
-## D014 — Built-in formats follow the common review slices
+## D014 — Defaults apply only when the repository has no guidance
 
-**Decision:** Formats are built in and applied before repository
-.gitattributes, which still win. The review set is the Octoverse 2025
-contributor leaders (TypeScript, Python, JavaScript, Java, C#) and the
-languages that complete that report's new-repository set and the Octoverse
-2024 top ten (C and C++ as one format, Go, PHP, Shell), plus Ruby, Rust,
-Kotlin, Swift, CSS, HTML, and Dart. Extensions come from Linguist
-`languages.yml`. Astro, Protobuf, Terraform, and Gradle are named as well,
-because those files show up beside the sixteen and had no format of their own.
-Cache version 3 still stores the repository files unchanged.
+**Decision:** Built-in formats and groups cover common extensions. They apply
+only when the repository defines no groups or languages of its own. A
+repository that does is used as written: the built-ins are not merged in
+and do not extend it.
 
-Linguist's CSS group is PostCSS only. SCSS, Sass, Less, Stylus, and SugarSS
-are separate Linguist languages. This project folds them into CSS, and folds
-`*.css.ts` (and the JS/JSX/TSX twins) in with them, because a style change
-lands in the stylesheet and the preprocessor or CSS module together.
-
-Linguist's HTML group is HTML+ECR, HTML+EEX, HTML+ERB, HTML+PHP, and
-HTML+Razor. Vue, Svelte, Jinja, Nunjucks, Handlebars, EJS, Twig, Blade, Pug,
-and Liquid are separate Linguist languages. This project labels them HTML
-because a page review touches the template and the markup together. Astro
-stays its own format: a `.astro` file is a page component with its own
-toolchain, not a snippet of HTML. `.proto` is Protobuf. `.tf` and `.tfvars`
-are Terraform. `*.gradle` and `*.gradle.kts` are Gradle config, not Java or
-Kotlin. A `templates/` or `views/` directory does not make an unrelated file
-HTML; only a template extension does.
-
-A manifest (package.json, Cargo.toml, go.mod, and the other package files)
-stays Config. The lockfile or checksum next to it (package-lock.json,
-yarn.lock, pnpm-lock.yaml, Pipfile.lock, poetry.lock, composer.lock,
-Gemfile.lock, Cargo.lock, go.sum, pubspec.lock) is generated, not Config, so
-a default review hides it. Snapshots (`*.snap`, `__snapshots__/`) are
-generated, not tests. The test source stays in Tests; the snapshot is runner
-output.
-
-`gen/`, `out/`, `obj/`, and `target/` are generated. `gen/` is the usual
-codegen root, `out/` is compiler output, `obj/` is .NET intermediate output,
-and `target/` is Maven and Cargo output. `build/` is not: Gradle keeps
-sources in `buildSrc`, and some repos keep hand-written scripts under
-`build/`. `bin/` is not, because Ruby and Node CLIs commit scripts there;
-only `bin/Debug/` and `bin/Release/` are generated. Codegen that is still
-source today is marked generated too: Python `*_pb2.py`, `*_pb2.pyi`, and
-`*_pb2_grpc.py`; C# `*.Designer.cs` and `*.designer.cs` (the matcher is
-case-sensitive, and Visual Studio emits both); Go `*.pb.gw.go` and
-`zz_generated.*.go`; Dart `*.pb.dart` and `*.pbjson.dart`; TypeScript
-`*.pb.ts` and `*_pb.ts`; and `*.min.mjs`.
-
-A path is a test only for a known segment (`test`, `tests`, `__tests__`,
-`spec`, `androidTest`, `commonTest`, `componentTest`, and the other listed
-source sets) or a name that ends in `Tests` (`App.Tests`). A directory that
-merely ends in `Test` (`SpeedTest`) is not a test, and `*-comp.*` is not a
-component test (`button-comp.tsx`). `latest`, `contest`, `attestation`,
-`specification`, and `testimonials` are not tests.
-
-**Why:** Reviewers slice a diff by language and by role, and those signals
-live in directories as much as in suffixes. Hiding generated output, including
-lockfiles and snapshots, is the noise a default review is for; the manifest
-and the test source stay visible. Merging defaults underneath the stored
-files keeps a customization without a cache rewrite. **Cost:** A wide
-repository `group` rule overrides the built-in Tests group on the paths it
-matches. JSON in a style folder counts as CSS. C and C++ share one format.
-A source directory named `gen`, `out`, `obj`, or `target` is marked generated.
+**Why:** Layering defaults under a repository's own groups and languages
+overrides and extends rules the repository did not ask for.

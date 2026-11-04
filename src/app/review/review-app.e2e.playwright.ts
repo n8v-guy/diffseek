@@ -405,7 +405,7 @@ test('clears native filters before taking over the menu', async () => {
   ).toBeVisible();
   await expect(
     page.locator(
-      '[data-filter-kind="groups"][data-filter-value="Config"]',
+      '[data-filter-kind="groups"][data-filter-value="No groups"]',
     ),
   ).toBeVisible();
   await expect(

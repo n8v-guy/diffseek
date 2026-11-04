@@ -1,4 +1,3 @@
-import { bundledGitAttributes } from './bundled-gitattributes';
 import type { RepositoryMetadata } from './metadata';
 
 /** A default-branch metadata file; `text` is absent until it is read. */
@@ -59,7 +58,7 @@ export function metadataFromFiles(files: MetadataFiles): RepositoryMetadata {
   }
   return {
     codeowners: (codeowners && files[codeowners]?.text) || '',
-    attributes: files[attributesName]?.text ?? bundledGitAttributes,
+    attributes: files[attributesName]?.text ?? '',
     nestedAttributes,
   };
 }

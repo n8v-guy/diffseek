@@ -179,4 +179,19 @@ generated/** linguist-generated
       generated: true, group: 'API', language: null,
     });
   });
+
+  it('matches a suffix or exact name, and not a longer suffix', () => {
+    const rules = parseGitAttributes(`
+*.c linguist-language=C
+**/package.json group=Config
+`);
+    expect(attributesForPath('src/main.c', rules).language).toBe('C');
+    expect(attributesForPath('src/main.cc', rules).language).toBeNull();
+    expect(attributesForPath('app/package.json', rules).group).toBe('Config');
+    expect(attributesForPath('app/package.json.bak', rules).group).toBeNull();
+
+    const rooted = parseGitAttributes('/*.c linguist-language=C');
+    expect(attributesForPath('main.c', rooted).language).toBe('C');
+    expect(attributesForPath('src/main.c', rooted).language).toBeNull();
+  });
 });

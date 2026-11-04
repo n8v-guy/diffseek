@@ -3,7 +3,6 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 import { readCache, writeCache } from '@diffseek/browser';
 import type { MetadataSearchResult, RawFileRequest, RawFileResult } from '@diffseek/github';
-import { bundledGitAttributes } from '@diffseek/repository-metadata';
 
 import {
   readImmediateMetadata,
@@ -89,7 +88,7 @@ describe('cold read', () => {
     const none = await commit(await refresh(1, ['a.ts'], 0, request, searching([])));
 
     expect(request).not.toHaveBeenCalled();
-    expect(none.metadata).toEqual({ codeowners: '', attributes: bundledGitAttributes, nestedAttributes: {} });
+    expect(none.metadata).toEqual({ codeowners: '', attributes: '', nestedAttributes: {} });
     expect(none.cache.files).toEqual({});
 
     const search = searching();
@@ -141,12 +140,12 @@ describe('cold read', () => {
     expect(none).toHaveBeenCalledTimes(4);
   });
 
-  it('serves bundled assumptions for an empty fallback and never stores a failed read', async () => {
+  it('keeps empty attributes for an empty fallback and never stores a failed read', async () => {
     const unavailable = vi.fn(async (): Promise<MetadataSearchResult> => {
       throw new Error('Metadata search is unavailable');
     });
     const empty = await refresh(1, ['a.ts'], 0, raw({}), unavailable);
-    expect(empty.metadata.attributes).toBe(bundledGitAttributes);
+    expect(empty.metadata.attributes).toBe('');
 
     const failing = vi.fn<Raw>(async () => {
       throw new Error('Raw file request failed with 429');
@@ -203,11 +202,11 @@ describe('warm and hot reads', () => {
     expect(search).toHaveBeenCalledOnce();
   });
 
-  it('start from bundled assumptions when storage is unavailable', async () => {
+  it('returns empty metadata when storage is unavailable', async () => {
     vi.spyOn(fakeBrowser.storage.local, 'get').mockRejectedValueOnce(new Error('unavailable'));
     expect(await readImmediateMetadata(repository)).toEqual({
       codeowners: '',
-      attributes: bundledGitAttributes,
+      attributes: '',
       nestedAttributes: {},
     });
   });
