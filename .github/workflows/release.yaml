@@ -113,11 +113,10 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           sha="$HEAD_SHA"
-          zips=(.output/*.zip)
           chrome=(.output/diffseek-*-chrome.zip)
-          if [ "${#zips[@]}" -ne 3 ] || [ "${#chrome[@]}" -ne 1 ]; then
-            echo "expected the Chrome, Firefox, and sources ZIPs in .output, found ${#zips[@]}" >&2
-            printf '%s\n' "${zips[@]}" >&2
+          if [ "${#chrome[@]}" -ne 1 ]; then
+            echo "expected exactly one Chrome ZIP, found ${#chrome[@]}" >&2
+            printf '%s\n' "${chrome[@]}" >&2
             exit 1
           fi
           zip="${chrome[0]}"
@@ -128,7 +127,6 @@ jobs:
           sources=".output/diffseek-${version}-sources.zip"
           if [ ! -f "$firefox" ] || [ ! -f "$sources" ]; then
             echo "missing Firefox ZIP or sources ZIP for ${version}" >&2
-            printf '%s\n' "${zips[@]}" >&2
             exit 1
           fi
           tag="v${version}"
