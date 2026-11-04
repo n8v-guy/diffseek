@@ -43,7 +43,7 @@ dist/**           linguist-generated=true
 api/client/**     linguist-generated=true
 ```
 
-Your own groups and format aliases go in the same file:
+Your own groups and languages replace the built-in ones:
 
 ```gitattributes
 db/migrations/**  group=Migrations

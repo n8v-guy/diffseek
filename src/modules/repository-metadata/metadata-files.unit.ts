@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { bundledGitAttributes } from './bundled-gitattributes';
 import {
   chooseCodeowners,
   isMetadataPath,
@@ -80,10 +79,10 @@ describe('metadata files', () => {
     expect(isMetadataPath('src/CODEOWNERS')).toBe(false);
   });
 
-  it('builds metadata with per-directory scoping and bundled fallback attributes', () => {
+  it('builds metadata with per-directory scoping and empty attributes when the repository has none', () => {
     expect(metadataFromFiles({})).toEqual({
       codeowners: '',
-      attributes: bundledGitAttributes,
+      attributes: '',
       nestedAttributes: {},
     });
     expect(

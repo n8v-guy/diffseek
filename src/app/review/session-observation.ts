@@ -9,7 +9,7 @@ import {
 } from '@diffseek/github';
 import {
   parseCodeowners,
-  parseGitAttributes,
+  rulesFromMetadata,
   type RepositoryMetadata,
 } from '@diffseek/repository-metadata';
 import {
@@ -40,12 +40,7 @@ export function classifySnapshot(
   metadata: RepositoryMetadata,
 ): void {
   labelFiles(snapshot.files, {
-    attributes: [
-      ...parseGitAttributes(metadata.attributes),
-      ...Object.entries(metadata.nestedAttributes ?? {})
-        .sort(([left], [right]) => left.split('/').length - right.split('/').length)
-        .flatMap(([directory, source]) => parseGitAttributes(source, directory)),
-    ],
+    attributes: rulesFromMetadata(metadata),
     codeowners: metadata.codeowners
       ? parseCodeowners(metadata.codeowners)
       : [],

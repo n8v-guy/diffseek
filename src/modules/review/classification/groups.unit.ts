@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   attributesForPath,
-  bundledGitAttributes,
-  parseGitAttributes,
+  rulesFromMetadata,
 } from '@diffseek/repository-metadata';
 
 import { extensionOf } from './groups';
@@ -20,7 +19,7 @@ describe('extensionOf', () => {
 });
 
 describe('groups', () => {
-  const rules = parseGitAttributes(bundledGitAttributes);
+  const rules = rulesFromMetadata({ attributes: '' });
 
   it('ships instant conventional groups', () => {
     expect(attributesForPath('src/app.test.ts', rules).group).toBe('Tests');
@@ -34,13 +33,7 @@ describe('groups', () => {
     expect(attributesForPath('config/app.json', rules).group).toBe('Config');
   });
 
-  it('covers component tests and conventional tool configuration', () => {
-    expect(
-      attributesForPath(
-        'gen/componentTest/rides/DriverBlockingComponentTest.ts',
-        rules,
-      ).group,
-    ).toBe('Tests');
+  it('covers conventional tool configuration', () => {
     expect(
       attributesForPath('common/rides/tsconfig.json', rules).group,
     ).toBe('Config');

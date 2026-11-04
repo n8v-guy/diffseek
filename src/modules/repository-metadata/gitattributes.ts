@@ -3,7 +3,7 @@ import { globSource } from './glob';
 type GitAttributeValue = true | false | string | null;
 
 export type GitAttributeRule = {
-  matcher: RegExp;
+  matcher: { test(path: string, name: string): boolean };
   assignments: Map<string, GitAttributeValue>;
 };
 
@@ -51,9 +51,10 @@ export function attributesForPath(
   path: string,
   rules: GitAttributeRule[],
 ): DiffSeekAttributes {
+  const baseName = basename(path);
   const values = new Map<string, GitAttributeValue>();
   for (const rule of rules) {
-    if (!rule.matcher.test(path)) continue;
+    if (!rule.matcher.test(path, baseName)) continue;
     for (const [name, value] of rule.assignments) values.set(name, value);
   }
 
@@ -105,11 +106,46 @@ function tokens(line: string): string[] {
   return result;
 }
 
-function compilePattern(source: string, directory: string): RegExp {
+const nestedGlob = '**/';
+const slash = '/';
+
+function compilePattern(
+  source: string,
+  directory: string,
+): { test(path: string, name: string): boolean } {
+  // Extension and exact-name rules are most of the built-in list. A suffix
+  // check skips compiling a regex and running it on every file.
+  const fast = directory === '' ? filenameMatcher(source) : null;
+  if (fast !== null) return fast;
   const pattern = source.replace(/^\//, '');
   const scope = directory
-    ? `${directory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`
+    ? `${directory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${slash}`
     : '';
-  const prefix = source.includes('/') ? '' : '(?:.*/)?';
-  return new RegExp(`^${scope}${prefix}${globSource(pattern)}$`);
+  const prefix = source.includes(slash) ? '' : '(?:.*/)?';
+  const expression = new RegExp(`^${scope}${prefix}${globSource(pattern)}$`);
+  return { test: (path) => expression.test(path) };
+}
+
+function filenameMatcher(
+  source: string,
+): { test(path: string, name: string): boolean } | null {
+  if (source.startsWith(slash)) return null;
+  let pattern = source;
+  if (pattern.startsWith(nestedGlob)) {
+    pattern = pattern.slice(nestedGlob.length);
+  }
+  if (pattern === '' || pattern.includes(slash) || pattern.includes('?')) {
+    return null;
+  }
+  const star = pattern.indexOf('*');
+  if (star === -1) return { test: (_path, name) => name === pattern };
+  if (star !== 0 || pattern.includes('*', 1)) return null;
+  const suffix = pattern.slice(1);
+  if (suffix === '') return null;
+  return { test: (_path, name) => name.endsWith(suffix) };
+}
+
+function basename(path: string): string {
+  const split = path.lastIndexOf(slash);
+  return split === -1 ? path : path.slice(split + 1);
 }
