@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
+import { ReviewPresenter } from '@diffseek/github';
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
+
+import type { DefaultMetadata } from '../metadata/reader';
 
 import { startReviewApp } from './review-app';
 
@@ -77,6 +80,122 @@ describe('review session stream batching', () => {
   });
 });
 
+describe('reconcile strategy', () => {
+  const attributes = (text: string) => ({ codeowners: '', attributes: text });
+  const loaded = (text: string): DefaultMetadata => ({
+    metadata: attributes(text),
+    cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
+    changed: false,
+  });
+  const cachedText = 'src/** group=Code';
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function deferred<T>() {
+    let resolve = (_value: T): void => undefined;
+    const promise = new Promise<T>((settle) => {
+      resolve = settle;
+    });
+    return { promise, resolve };
+  }
+
+  async function startWith(options: {
+    refreshDefault?: () => Promise<DefaultMetadata>;
+    readPull?: (base: DefaultMetadata) => Promise<DefaultMetadata>;
+  }) {
+    const reconciles = { count: 0 };
+    document.addEventListener('diffseek-reconciled', () => {
+      reconciles.count += 1;
+    });
+    const apply = vi.spyOn(ReviewPresenter.prototype, 'apply');
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<ul role="menu" aria-label="Filter options"></ul>',
+    );
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => attributes(cachedText),
+      refreshDefault: options.refreshDefault ?? (async () => loaded(cachedText)),
+      readPull: (_review, base) => options.readPull?.(base) ?? Promise.resolve(base),
+    });
+    await nextTask();
+    await nextFrame();
+    return { app, apply, reconciles };
+  }
+
+  it('skips a metadata change that leaves the computed view equal', async () => {
+    const pull = deferred<DefaultMetadata>();
+    const { app, apply, reconciles } = await startWith({
+      readPull: () => pull.promise,
+    });
+    const passes = reconciles.count;
+    const applies = apply.mock.calls.length;
+
+    pull.resolve(loaded(`${cachedText}\n# edited in this pull request`));
+    await nextTask();
+    await nextFrame();
+
+    expect(reconciles.count).toBe(passes);
+    expect(apply).toHaveBeenCalledTimes(applies);
+    app.stop();
+  });
+
+  it('mounts a new filter menu without applying the page again', async () => {
+    const { app, apply, reconciles } = await startWith({});
+    const passes = reconciles.count;
+    const applies = apply.mock.calls.length;
+
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<ul role="menu" aria-label="Filter options"><li role="menuitem">Native</li></ul>',
+    );
+    await nextTask();
+
+    expect(reconciles.count).toBe(passes + 1);
+    expect(apply).toHaveBeenCalledTimes(applies);
+    expect(document.querySelectorAll('[data-diffseek="filters"]')).toHaveLength(2);
+    app.stop();
+  });
+
+  it('batches filter changes made in one task into one pass', async () => {
+    const { app, reconciles } = await startWith({});
+    const passes = reconciles.count;
+
+    for (const kind of ['groups', 'statuses']) {
+      document
+        .querySelector<HTMLButtonElement>(`[data-filter-kind="${kind}"]`)
+        ?.click();
+    }
+    await nextTask();
+
+    expect(reconciles.count).toBe(passes + 1);
+    app.stop();
+  });
+
+  it('batches metadata levels that arrive together into one pass', async () => {
+    const defaultLevel = deferred<DefaultMetadata>();
+    const { app, reconciles } = await startWith({
+      refreshDefault: () => defaultLevel.promise,
+      readPull: async (base) => ({
+        ...base,
+        metadata: attributes('src/** group=Pull'),
+      }),
+    });
+    const passes = reconciles.count;
+
+    defaultLevel.resolve(loaded('src/** group=Default'));
+    await nextFrame();
+
+    expect(reconciles.count).toBe(passes + 1);
+    expect(document.querySelector('[data-filter-value="Pull"]')).not.toBeNull();
+    expect(document.querySelector('[data-filter-value="Default"]')).toBeNull();
+    app.stop();
+  });
+});
+
 describe('redraw budget', () => {
   beforeEach(() => {
     document.documentElement.innerHTML = pageHtml(80);
@@ -132,7 +251,7 @@ describe('redraw budget', () => {
     document
       .querySelector<HTMLButtonElement>('[data-filter-kind="viewed"]')
       ?.click();
-    await flush();
+    await nextTask();
     const toggled = counts.snapshot();
 
     const viewed = document.querySelector<HTMLButtonElement>(

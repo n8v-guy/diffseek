@@ -36,10 +36,13 @@ import {
   type RepositoryMetadata,
 } from '@diffseek/repository-metadata';
 import {
+  changedSurfaces,
   emptyFacetExclusions,
   excludedFacetCount,
   FileCatalog,
+  planView,
   ReviewIndex,
+  type ViewPlan,
 } from '@diffseek/review';
 
 import type { DefaultMetadata } from '../metadata/reader';
@@ -65,7 +68,6 @@ import {
   type PanelReconcileSchedule,
   type PanelScheduleOptions,
   pendingDefaultViewed,
-  projectionKeyFor,
   queuePanelReconcile,
   refreshViewedState,
   retainNativeOwners,
@@ -116,7 +118,7 @@ export class ReviewSession {
   private defaultViewedInFlight = 0;
   private readonly metadataWatch = metadataWatch();
   private readonly metadataRefresh = metadataRefreshState();
-  private projectionFingerprint = '';
+  private applied: ViewPlan | null = null;
   private treeKey: string | null = null;
   private regionKey = '';
   private treeNode: Element | null = null;
@@ -167,13 +169,13 @@ export class ReviewSession {
     delete options.root.documentElement.dataset.diffseekFirstRenderEpoch;
     this.observer = new MutationObserver((records) => {
       const mode = scheduleForMutations(records);
-      if (mode) this.schedule(mode);
+      if (mode) this.onPageMutation(mode);
     });
     this.discoveryObserver = new MutationObserver((records) => {
       const mode = scheduleForMutations(records);
       if (!mode) return;
       this.refreshObservationRoots();
-      this.schedule(mode);
+      this.onPageMutation(mode);
     });
     this.discoveryObserver.observe(options.root.body, {
       childList: true,
@@ -248,7 +250,7 @@ export class ReviewSession {
     this.regionNodes = regions;
     if (!next.supported) {
       if (metadataOpportunity) this.refreshMetadata();
-      this.projectionFingerprint = '';
+      this.applied = null;
       this.treeKey = null;
       this.regionKey = '';
       this.classifyKey = '';
@@ -275,24 +277,32 @@ export class ReviewSession {
     if (this.reopenStaleMetadata() || metadataOpportunity) this.refreshMetadata();
     removeUnavailable(this.options.root);
     this.classifyIfNeeded(catalogSnapshot);
+    this.presentView(catalogSnapshot, structureChanged);
+  }
+
+  /** Computes the desired view, then writes only what differs from the applied one. */
+  private presentView(
+    catalogSnapshot: SupportedSnapshot,
+    structureChanged: boolean,
+  ): void {
+    const root = this.options.root;
     const defaultViewedPaths = this.metadataRefresh.settled
       ? pendingDefaultViewed(catalogSnapshot.files, this.options.filterDefaults, this.defaultViewedAttempts)
       : [];
     const generatedDefaultBusy =
       this.defaultViewedInFlight > 0 || defaultViewedPaths.length > 0;
-    const menus = filterMenus(this.options.root);
-    const fingerprint = projectionKeyFor({
-      metadataRevision: this.metadataRevision,
-      metadata: this.metadata,
+    const menus = filterMenus(root);
+    const plan = planView({
+      files: catalogSnapshot.files,
       filters: this.filters,
       filterDefaults: this.options.filterDefaults,
       generatedDefaultBusy,
-      menuCount: menus.length,
-      files: catalogSnapshot.files,
     });
-    const projectionChanged = fingerprint !== this.projectionFingerprint;
-    const staleMenus = menus.filter(menuNeedsRemount);
-    if (!structureChanged && !projectionChanged && staleMenus.length === 0) {
+    const change = changedSurfaces(this.applied, plan);
+    this.applied = plan;
+    const pageStale = structureChanged || change.page;
+    const staleMenus = change.menu ? menus : menus.filter(menuNeedsRemount);
+    if (!pageStale && staleMenus.length === 0 && defaultViewedPaths.length === 0) {
       // GitHub expanding a filtered file changes neither key. Re-collapse it.
       if (filteredFileExpanded(root)) {
         this.presenter.apply(catalogSnapshot, this.filters);
@@ -301,28 +311,27 @@ export class ReviewSession {
       return;
     }
     trackDiffseekWrites(root, () => {
-      if (structureChanged || projectionChanged) {
-        const index = new ReviewIndex(catalogSnapshot.files);
-        this.presenter.apply(catalogSnapshot, this.filters, index);
-        mountViewedActions(
-          catalogSnapshot,
-          (target, viewed, paths) => this.batch(target, viewed, paths),
-          index,
-          this.filters,
-        );
+      if (pageStale) this.applyPage(catalogSnapshot);
+      if (defaultViewedPaths.length > 0) {
+        this.enqueueDefaultViewed(defaultViewedPaths);
       }
-      if (projectionChanged) {
-        this.projectionFingerprint = fingerprint;
-        if (defaultViewedPaths.length > 0) {
-          this.enqueueDefaultViewed(defaultViewedPaths);
-        }
-      }
-      for (const menu of projectionChanged ? menus : staleMenus) {
+      for (const menu of staleMenus) {
         this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
       }
     });
     this.reattachObservers();
     this.emitReconciled();
+  }
+
+  private applyPage(snapshot: SupportedSnapshot): void {
+    const index = new ReviewIndex(snapshot.files);
+    this.presenter.apply(snapshot, this.filters, index);
+    mountViewedActions(
+      snapshot,
+      (target, viewed, paths) => this.batch(target, viewed, paths),
+      index,
+      this.filters,
+    );
   }
 
   private reattachObservers(): void {
@@ -333,8 +342,17 @@ export class ReviewSession {
     this.refreshObservationRoots();
   }
 
+  /** Page noise during an auto-view batch is ignored; the batch ends with a pass. */
+  private onPageMutation(options: PanelScheduleOptions): void {
+    if (this.defaultViewedInFlight === 0) this.schedule(options);
+  }
+
+  /**
+   * The only way to request a pass besides `start` and the app's own
+   * `reconcile`. Requests in the same task or frame share one pass.
+   */
   private schedule(options: PanelScheduleOptions = {}): void {
-    if (this.lifecycle.signal.aborted || this.defaultViewedInFlight > 0) return;
+    if (this.lifecycle.signal.aborted) return;
     if (this.reconciling) {
       this.dirty = true;
       return;
@@ -386,7 +404,7 @@ export class ReviewSession {
         if (this.lifecycle.signal.aborted) return;
         if (result) showBatchResult(this.options.root, 'auto-view', true, result, progress);
         else dismissSnackbar(progress);
-        this.reconcile();
+        this.schedule();
       });
   }
 
@@ -400,7 +418,7 @@ export class ReviewSession {
       filters: this.filters,
       filterDefaults: this.options.filterDefaults,
       generatedDefaultBusy,
-      onChange: () => this.reconcile(),
+      onChange: () => this.schedule(),
       onFilterDefaultChange: (_facet, state) =>
         this.rememberFilterDefault(state),
       onAlwaysReadChange: (enabled) => {
@@ -447,10 +465,10 @@ export class ReviewSession {
       },
       commit: (cache) => this.options.metadataCommits.commit(this.options.review, this.metadataRevision, cache),
       aborted: () => this.lifecycle.signal.aborted,
-      onSettled: () => this.reconcile(),
+      onSettled: () => this.schedule({ coalesce: true }),
       apply: (metadata) => {
         if (JSON.stringify(this.metadata) === JSON.stringify(metadata)) return;
-        this.metadata = metadata; this.classifyKey = ''; this.reconcile();
+        this.metadata = metadata; this.classifyKey = ''; this.schedule({ coalesce: true });
       },
     });
   }

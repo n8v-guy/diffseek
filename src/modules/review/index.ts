@@ -1,5 +1,5 @@
 export { extensionOf } from './classification/groups';
-export { labelFiles, type FileLabel, type LabelFacet } from './classification/labels';
+export { labelFiles, type LabelFacet } from './classification/labels';
 export { projectFacet } from './filtering/facet-projection';
 export {
   emptyFacetExclusions,
@@ -21,3 +21,8 @@ export {
 export type { ChangeStatus, FileRecord, FilterState } from './model/file';
 export { ReviewIndex } from './model/review-index';
 export { FileCatalog } from './session/file-catalog';
+export {
+  changedSurfaces,
+  planView,
+  type ViewPlan,
+} from './session/view-plan';

@@ -190,3 +190,21 @@ are not merged in and do not extend it.
 
 **Why:** Layering defaults under a repository's own groups and languages
 overrides and extends rules the repository did not ask for.
+
+## D015 — Reconcile from a pure plan through one queue
+
+**Decision:** The desired view is a pure function of immutable inputs: the
+file list with labels and viewed state, filters, remembered defaults, and the
+auto-view busy flag. It yields two comparable surfaces, the page (tree rows,
+diff panels, viewed circles) and the filter menu. Metadata matters only
+through the labels it produces. Every pass request (page mutations, metadata
+arrival, filter changes, a batch ending) goes through the one queue from D013:
+the next task for input, the next frame for streamed structure and metadata,
+and requests in the same task or frame share one pass. A pass reads the page,
+computes the plan, and writes only a surface whose plan differs from the
+applied one or whose nodes GitHub replaced. A pass with nothing to write is
+not a reconcile.
+
+**Why:** Passes happen only when something visible changed, and the triggers
+are the few calls to that queue. **Cost:** A filter click applies at the next
+task, not inside the click, and metadata lands up to one frame later.

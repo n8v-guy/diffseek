@@ -22,7 +22,7 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'DiffSeek for GitHub: cut the noise in big PRs',
     description:
-      'Filter one slice at a time, mark it viewed in one click and watch progress fill up. Generated files are hidden and auto-viewed.',
+      'Filter by owner, folder or type, mark it viewed in one click, see progress fill up. Generated files are hidden and auto-viewed.',
     version: manifestVersion(packageVersion, branchCommitCount),
     permissions: ['storage'],
     host_permissions: [
