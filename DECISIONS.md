@@ -33,9 +33,12 @@ metadata file in the diff, which is read once per pull on the head and
 replaces that one default file. Its head oid and texts stay in the cache entry
 until the default branch refreshes. A deleted chosen CODEOWNERS falls to the
 next known one on the default branch. Streamed paths never restart or reset a
-read. When search is unusable (error, signed out, unindexed, not JSON, too many
-pages), a cached listing is kept as is, and only an empty cache reads at most
-three CODEOWNERS spots and the root .gitattributes instead. Failures are not stored. A failed read is retried, one at a time,
+read. A signed-in search with no results is a valid answer: it is cached as a
+listing of none and never probed. Search is unusable on an HTTP error, a
+non-JSON response, an unexpected shape, search errors, `logged_in !== true`
+(signed out), or too many pages. Then any cached entry is kept as is, and only
+with no cache entry does it read at most three CODEOWNERS spots and the root
+.gitattributes instead. Failures are not stored. A failed read is retried, one at a time,
 when the menu opens or the tree changes, never on a timer. Entries from the
 older per-pull cache are ignored and dropped.
 
