@@ -1011,6 +1011,59 @@ test('hides nested generated files across streamed paths and cached revisits', a
   }
 });
 
+test('keeps reconcile passes within budget for cold, warm, and hot loads', async () => {
+  await writeFilterDefaults({ hidden: ['viewed', 'generated'], viewed: [] });
+  const generatedCount =
+    '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count';
+  const expectReconcilesWithin = async (
+    page: Page,
+    scenario: string,
+    budget: number,
+  ) => {
+    await expect(page.locator(generatedCount)).toHaveText('0/1');
+    await expect(page.locator('html')).toHaveAttribute(
+      'data-diffseek-reconciles',
+      /^[1-9]/,
+    );
+    const reconciles = Number(
+      await page.locator('html').getAttribute('data-diffseek-reconciles'),
+    );
+    test.info().annotations.push({
+      type: `fixture-perf:${scenario}`,
+      description: `reconciles=${reconciles}`,
+    });
+    console.log(`diffseek fixture-perf:${scenario} reconciles=${reconciles}`);
+    expect(reconciles).toBeLessThanOrEqual(budget);
+  };
+
+  const page = await openPull(12);
+  await page.getByLabel('Filter options').click();
+  await expectReconcilesWithin(page, 'cold', 3);
+
+  await page.reload();
+  await page.getByLabel('Filter options').click();
+  await expectReconcilesWithin(page, 'warm', 2);
+
+  // GitHub leaves for the conversation tab and puts the same tree and panels back.
+  await page.evaluate(async () => {
+    const parts = [
+      document.querySelector('[role="tree"]'),
+      ...document.querySelectorAll('[role="region"][id^="diff-"]'),
+    ].filter((part) => part != null);
+    const slots = parts.map((part) => [part.parentElement, part.nextSibling] as const);
+    const left = new Promise((settle) => {
+      document.addEventListener('diffseek-reconciled', settle, { once: true });
+    });
+    history.pushState({}, '', '/octo/repo/pull/12');
+    for (const part of parts) part.remove();
+    await left;
+    document.dispatchEvent(new Event('diffseek-redraw-reset'));
+    history.pushState({}, '', '/octo/repo/pull/12/changes');
+    parts.forEach((part, index) => slots[index]?.[0]?.insertBefore(part, slots[index][1]));
+  });
+  await expectReconcilesWithin(page, 'hot', 1);
+});
+
 async function openPull(pull: number, nativeFilter = false): Promise<Page> {
   const page = await context.newPage();
   await page.route(
