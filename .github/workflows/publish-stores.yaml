@@ -1,0 +1,30 @@
+name: Publish stores
+
+# Manual only (GitHub app → Actions → this workflow → Run workflow, branch: main).
+# Runs the Chrome Web Store and Firefox Add-ons publishes for this commit.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: store-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  chrome:
+    uses: ./.github/workflows/publish-chrome-web-store.yaml # zizmor: ignore[self-repository] actionlint 1.7.12 rejects $/
+    secrets:
+      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+
+  firefox:
+    uses: ./.github/workflows/publish-firefox-addons.yaml # zizmor: ignore[self-repository] actionlint 1.7.12 rejects $/
+    secrets:
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}

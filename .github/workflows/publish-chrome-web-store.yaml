@@ -1,8 +1,21 @@
 name: Publish Chrome Web Store
 
 # Manual only (GitHub app → Actions → this workflow → Run workflow, branch: main).
+# Publish stores calls this for the same commit.
 on:
   workflow_dispatch:
+  workflow_call:
+    secrets:
+      CHROME_EXTENSION_ID:
+        required: true
+      CHROME_CLIENT_ID:
+        required: true
+      CHROME_CLIENT_SECRET:
+        required: true
+      CHROME_REFRESH_TOKEN:
+        required: true
+      CHROME_PUBLISHER_ID:
+        required: true
 
 concurrency:
   group: chrome-web-store-publish

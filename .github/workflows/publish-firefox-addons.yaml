@@ -1,0 +1,189 @@
+name: Publish Firefox Add-ons
+
+# Manual only (GitHub app → Actions → this workflow → Run workflow, branch: main).
+# Publish stores calls this for the same commit.
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      AMO_JWT_ISSUER:
+        required: true
+      AMO_JWT_SECRET:
+        required: true
+
+concurrency:
+  group: firefox-addons-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main branch tip
+        id: meta
+        env:
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "Run this workflow from the main branch (got ${REF})." >&2
+            exit 1
+          fi
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Require prior stages green
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.meta.outputs.sha }}
+        run: |
+          require_workflow_success() {
+            local name="$1"
+            local run_json conclusion run_id
+            run_json="$(
+              gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&per_page=100" \
+                | jq -c --arg name "$name" '
+                  [.workflow_runs[]
+                    | select(.name == $name and .status == "completed")]
+                  | sort_by(.created_at)
+                  | reverse
+                  | .[0] // empty
+                '
+            )"
+            if [ -z "$run_json" ]; then
+              echo "Workflow \"${name}\" for ${SHA} has no completed run." >&2
+              exit 1
+            fi
+            conclusion="$(jq -r '.conclusion // empty' <<<"$run_json")"
+            run_id="$(jq -r '.id // empty' <<<"$run_json")"
+            if [ "$conclusion" != "success" ]; then
+              echo "Workflow \"${name}\" for ${SHA} is not success (got: ${conclusion:-none})." >&2
+              exit 1
+            fi
+            echo "OK: ${name} → success (run ${run_id})"
+          }
+
+          require_workflow_success "CI"
+          require_workflow_success "Live E2E"
+          require_workflow_success "Release Chrome Extension"
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve manifest version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(node --input-type=module -e '
+            import { execFileSync } from "node:child_process";
+            import { readFileSync } from "node:fs";
+            import { manifestVersion } from "./config/manifest-version.ts";
+            const packageVersion = JSON.parse(readFileSync("package.json", "utf8")).version;
+            const count = Number(
+              execFileSync("git", ["rev-list", "--count", "HEAD"], { encoding: "utf8" }).trim(),
+            );
+            process.stdout.write(manifestVersion(packageVersion, count));
+          ')"
+          if [ -z "$version" ]; then
+            echo "Could not resolve the manifest version." >&2
+            exit 1
+          fi
+          echo "Manifest version ${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Download Firefox release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.meta.outputs.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          target="$(gh release view "v${VERSION}" --repo "$REPO" --json targetCommitish --jq .targetCommitish)"
+          if [ "$target" != "$SHA" ]; then
+            echo "Release v${VERSION} targets ${target}, expected ${SHA}." >&2
+            exit 1
+          fi
+          mkdir -p .output
+          gh release download "v${VERSION}" --repo "$REPO" --dir .output \
+            --pattern "diffseek-${VERSION}-firefox.zip" \
+            --pattern "diffseek-${VERSION}-sources.zip"
+          shopt -s nullglob
+          firefox=(.output/diffseek-*-firefox.zip)
+          sources=(.output/diffseek-*-sources.zip)
+          if [ "${#firefox[@]}" -ne 1 ] || [ "${#sources[@]}" -ne 1 ]; then
+            echo "Expected one Firefox ZIP and one sources ZIP, found ${#firefox[@]} and ${#sources[@]}." >&2
+            printf '%s\n' "${firefox[@]}" "${sources[@]}" >&2
+            exit 1
+          fi
+          echo "Using ${firefox[0]} and ${sources[0]}"
+
+      - name: Require AMO secrets
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          missing=0
+          for name in AMO_JWT_ISSUER AMO_JWT_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "Missing repository secret ${name}." >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Publish to Firefox Add-ons
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Listed review can stay pending. A completed upload is success.
+          source_dir="$(mktemp -d)"
+          unzip -q ".output/diffseek-${VERSION}-firefox.zip" -d "$source_dir"
+          id="$(jq -r '.browser_specific_settings.gecko.id // empty' "$source_dir/manifest.json")"
+          manifest_version="$(jq -r '.version // empty' "$source_dir/manifest.json")"
+          if [ "$id" != "diffseek@n8v.me" ]; then
+            echo "Firefox package id is '${id}', expected diffseek@n8v.me." >&2
+            exit 1
+          fi
+          if [ "$manifest_version" != "$VERSION" ]; then
+            echo "Firefox package version is '${manifest_version}', expected ${VERSION}." >&2
+            exit 1
+          fi
+          log="$(mktemp)"
+          set +e
+          pnpm exec web-ext sign \
+            --source-dir "$source_dir" \
+            --channel=listed \
+            --upload-source-code ".output/diffseek-${VERSION}-sources.zip" \
+            --approval-timeout=0 \
+            >"$log" 2>&1
+          status=$?
+          set -e
+          cat "$log"
+          if [ "$status" -eq 0 ]; then
+            echo "Submitted ${VERSION} for diffseek@n8v.me (slug diffseek) on the listed channel."
+            exit 0
+          fi
+          if grep -Fq "Version ${VERSION} already exists" "$log"; then
+            echo "Version ${VERSION} already exists on AMO for diffseek@n8v.me (slug diffseek)."
+            exit 0
+          fi
+          exit "$status"
