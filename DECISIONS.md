@@ -183,10 +183,10 @@ and the minimum is a timer: it reads the same on every machine.
 
 ## D014 — Defaults apply only when the repository has no guidance
 
-**Decision:** Built-in formats and groups cover common extensions. They apply
-only when the repository defines no groups or languages of its own. A
-repository that does is used as written: the built-ins are not merged in
-and do not extend it.
+**Decision:** A built-in language joins two or more extensions. Those languages
+and the built-in groups apply only when the repository defines no groups or
+languages of its own. A repository that does is used as written: the built-ins
+are not merged in and do not extend it.
 
 **Why:** Layering defaults under a repository's own groups and languages
 overrides and extends rules the repository did not ask for.

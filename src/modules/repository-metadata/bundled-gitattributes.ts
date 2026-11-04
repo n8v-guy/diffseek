@@ -23,20 +23,10 @@ type Format = {
 const formats: readonly Format[] = [
   { name: 'TypeScript', extensions: ['.ts', '.tsx'] },
   { name: 'JavaScript', extensions: ['.js', '.jsx', '.mjs', '.cjs'] },
-  { name: 'Python', extensions: ['.py'] },
-  { name: 'Java', extensions: ['.java'] },
-  { name: 'C#', extensions: ['.cs'] },
   { name: 'C/C++', extensions: ['.c', '.cc', '.cpp', '.h', '.hpp'] },
-  { name: 'Go', extensions: ['.go'] },
-  { name: 'PHP', extensions: ['.php'] },
-  { name: 'Ruby', extensions: ['.rb'] },
-  { name: 'Rust', extensions: ['.rs'] },
   { name: 'Kotlin', extensions: ['.kt', '.kts'] },
-  { name: 'Swift', extensions: ['.swift'] },
-  { name: 'Shell', extensions: ['.sh'] },
   { name: 'CSS', extensions: ['.css', '.scss'] },
   { name: 'HTML', extensions: ['.html', '.vue', '.svelte'] },
-  { name: 'Dart', extensions: ['.dart'] },
 ];
 
 const docPatterns = ['docs/**', '**/*.md', '**/*.mdx'];
