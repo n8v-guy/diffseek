@@ -68,6 +68,17 @@ CI, live end-to-end, and the release to be green for that commit, and it
 uploads the release's package without rebuilding. It needs the store
 credentials as repository secrets, and the store listing must already exist.
 
+Publishing to Firefox Add-ons is manual and only from main. It requires the
+same green runs. It submits the GitHub release's Firefox package and sources
+for that commit's manifest version to the listed channel (add-on id
+diffseek@n8v.me, slug diffseek). web-ext packs the release package for upload
+and sends the release sources archive unchanged. The run succeeds when the
+upload is accepted, when that version is already on AMO, and when the
+submission is awaiting review. It needs the AMO JWT issuer and secret as
+repository secrets.
+
+Publish stores runs both publishes for that same main commit.
+
 ## Commit conventions
 
 Commit subjects are one imperative line, matching the history.
