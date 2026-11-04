@@ -169,13 +169,13 @@ export class ReviewSession {
     delete options.root.documentElement.dataset.diffseekFirstRenderEpoch;
     this.observer = new MutationObserver((records) => {
       const mode = scheduleForMutations(records);
-      if (mode) this.schedule(mode);
+      if (mode) this.onPageMutation(mode);
     });
     this.discoveryObserver = new MutationObserver((records) => {
       const mode = scheduleForMutations(records);
       if (!mode) return;
       this.refreshObservationRoots();
-      this.schedule(mode);
+      this.onPageMutation(mode);
     });
     this.discoveryObserver.observe(options.root.body, {
       childList: true,
@@ -342,8 +342,17 @@ export class ReviewSession {
     this.refreshObservationRoots();
   }
 
+  /** Page noise during an auto-view batch is ignored; the batch ends with a pass. */
+  private onPageMutation(options: PanelScheduleOptions): void {
+    if (this.defaultViewedInFlight === 0) this.schedule(options);
+  }
+
+  /**
+   * The only way to request a pass besides `start` and the app's own
+   * `reconcile`. Requests in the same task or frame share one pass.
+   */
   private schedule(options: PanelScheduleOptions = {}): void {
-    if (this.lifecycle.signal.aborted || this.defaultViewedInFlight > 0) return;
+    if (this.lifecycle.signal.aborted) return;
     if (this.reconciling) {
       this.dirty = true;
       return;
@@ -395,7 +404,7 @@ export class ReviewSession {
         if (this.lifecycle.signal.aborted) return;
         if (result) showBatchResult(this.options.root, 'auto-view', true, result, progress);
         else dismissSnackbar(progress);
-        this.reconcile();
+        this.schedule();
       });
   }
 
@@ -409,7 +418,7 @@ export class ReviewSession {
       filters: this.filters,
       filterDefaults: this.options.filterDefaults,
       generatedDefaultBusy,
-      onChange: () => this.reconcile(),
+      onChange: () => this.schedule(),
       onFilterDefaultChange: (_facet, state) =>
         this.rememberFilterDefault(state),
       onAlwaysReadChange: (enabled) => {
@@ -456,10 +465,10 @@ export class ReviewSession {
       },
       commit: (cache) => this.options.metadataCommits.commit(this.options.review, this.metadataRevision, cache),
       aborted: () => this.lifecycle.signal.aborted,
-      onSettled: () => this.reconcile(),
+      onSettled: () => this.schedule({ coalesce: true }),
       apply: (metadata) => {
         if (JSON.stringify(this.metadata) === JSON.stringify(metadata)) return;
-        this.metadata = metadata; this.classifyKey = ''; this.reconcile();
+        this.metadata = metadata; this.classifyKey = ''; this.schedule({ coalesce: true });
       },
     });
   }

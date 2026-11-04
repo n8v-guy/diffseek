@@ -159,6 +159,41 @@ describe('reconcile strategy', () => {
     expect(document.querySelectorAll('[data-diffseek="filters"]')).toHaveLength(2);
     app.stop();
   });
+
+  it('batches filter changes made in one task into one pass', async () => {
+    const { app, reconciles } = await startWith({});
+    const passes = reconciles.count;
+
+    for (const kind of ['groups', 'statuses']) {
+      document
+        .querySelector<HTMLButtonElement>(`[data-filter-kind="${kind}"]`)
+        ?.click();
+    }
+    await nextTask();
+
+    expect(reconciles.count).toBe(passes + 1);
+    app.stop();
+  });
+
+  it('batches metadata levels that arrive together into one pass', async () => {
+    const defaultLevel = deferred<DefaultMetadata>();
+    const { app, reconciles } = await startWith({
+      refreshDefault: () => defaultLevel.promise,
+      readPull: async (base) => ({
+        ...base,
+        metadata: attributes('src/** group=Pull'),
+      }),
+    });
+    const passes = reconciles.count;
+
+    defaultLevel.resolve(loaded('src/** group=Default'));
+    await nextFrame();
+
+    expect(reconciles.count).toBe(passes + 1);
+    expect(document.querySelector('[data-filter-value="Pull"]')).not.toBeNull();
+    expect(document.querySelector('[data-filter-value="Default"]')).toBeNull();
+    app.stop();
+  });
 });
 
 describe('redraw budget', () => {
@@ -216,7 +251,7 @@ describe('redraw budget', () => {
     document
       .querySelector<HTMLButtonElement>('[data-filter-kind="viewed"]')
       ?.click();
-    await flush();
+    await nextTask();
     const toggled = counts.snapshot();
 
     const viewed = document.querySelector<HTMLButtonElement>(

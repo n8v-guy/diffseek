@@ -276,8 +276,10 @@ describe('review app lifecycle', () => {
     resolveDefault(loadedDefault({ codeowners: '', attributes: 'src/** group=default' }, true, files));
     await until(() => expect(readPull).toHaveBeenCalledOnce());
     expect(readPull.mock.calls[0]?.[1].cache.files).toEqual(files);
-    expect(document.querySelector('[data-filter-value="default"]')).not.toBeNull();
-    expect(document.querySelector('[data-filter-value="cached"]')).toBeNull();
+    await until(() => {
+      expect(document.querySelector('[data-filter-value="default"]')).not.toBeNull();
+      expect(document.querySelector('[data-filter-value="cached"]')).toBeNull();
+    });
     resolvePull({ codeowners: '', attributes: 'src/** group=pull' });
     await until(() =>
       expect(document.querySelector('[data-filter-value="pull"]')).not.toBeNull(),
@@ -402,7 +404,7 @@ describe('review app lifecycle', () => {
       '[data-filter-kind="groups"][data-filter-value="Code"]',
     );
     codeFilter?.focus();
-    codeFilter?.click();
+    await nextReconcile(() => codeFilter?.click());
     expect(document.getElementById('src/app.ts')?.hidden).toBe(true);
     expect(document.activeElement).toMatchObject({
       dataset: {
@@ -1161,14 +1163,14 @@ describe('review app interactions', () => {
     expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
 
     viewed?.click();
-    await until(async () =>
+    await until(async () => {
       expect(
         await fakeBrowser.storage.local.get('diffseek:filter-defaults'),
       ).toEqual({
         'diffseek:filter-defaults': { hidden: [], viewed: [] },
-      }),
-    );
-    expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);
+      });
+      expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);
+    });
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
         ?.textContent,
@@ -1296,9 +1298,11 @@ describe('review app interactions', () => {
       pathname: () => path,
       ...metadataSource('src/** group=Code'),
     });
-    document
-      .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
-      ?.click();
+    await nextReconcile(() =>
+      document
+        .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
+        ?.click(),
+    );
     expect(document.getElementById('src/app.ts')?.hidden).toBe(true);
 
     await nextReconcile(() => {
@@ -1320,9 +1324,11 @@ describe('review app interactions', () => {
     const app = await reviewApp({
       ...metadataSource('src/** group=Code'),
     });
-    document
-      .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
-      ?.click();
+    await nextReconcile(() =>
+      document
+        .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
+        ?.click(),
+    );
     expect(
       document.getElementById('diff-app')?.dataset.diffseekFilteredOut,
     ).toBe('true');
@@ -1367,11 +1373,13 @@ describe('review app interactions', () => {
     const app = await reviewApp({
       ...metadataSource('src/generated.ts linguist-generated'),
     });
-    document
-      .querySelector<HTMLButtonElement>(
-        '[data-filter-kind="generated"][data-filter-value="true"]',
-      )
-      ?.click();
+    await nextReconcile(() =>
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-filter-kind="generated"][data-filter-value="true"]',
+        )
+        ?.click(),
+    );
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
 
     await nextReconcile(() => {
@@ -1397,16 +1405,15 @@ describe('review app interactions', () => {
     openMenu();
     const app = await reviewApp({
     });
-    document
-      .querySelector<HTMLButtonElement>(
-        '[data-filter-kind="owners"][data-filter-value="@owner"]',
-      )
-      ?.click();
-    document
-      .querySelector<HTMLButtonElement>(
-        '[data-filter-kind="owners"][data-filter-value="@org/team"]',
-      )
-      ?.click();
+    await nextReconcile(() => {
+      for (const owner of ['@owner', '@org/team']) {
+        document
+          .querySelector<HTMLButtonElement>(
+            `[data-filter-kind="owners"][data-filter-value="${owner}"]`,
+          )
+          ?.click();
+      }
+    });
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
 
     await nextReconcile(() => {
