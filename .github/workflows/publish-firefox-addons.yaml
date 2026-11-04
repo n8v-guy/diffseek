@@ -89,7 +89,7 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          version="$(node --experimental-strip-types --input-type=module -e '
+          version="$(node --input-type=module -e '
             import { execFileSync } from "node:child_process";
             import { readFileSync } from "node:fs";
             import { manifestVersion } from "./config/manifest-version.ts";
@@ -157,10 +157,6 @@ jobs:
           # Listed review can stay pending. A completed upload is success.
           source_dir="$(mktemp -d)"
           unzip -q ".output/diffseek-${VERSION}-firefox.zip" -d "$source_dir"
-          if [ ! -f "$source_dir/manifest.json" ]; then
-            echo "Firefox package has no manifest.json." >&2
-            exit 1
-          fi
           id="$(jq -r '.browser_specific_settings.gecko.id // empty' "$source_dir/manifest.json")"
           manifest_version="$(jq -r '.version // empty' "$source_dir/manifest.json")"
           if [ "$id" != "diffseek@n8v.me" ]; then
@@ -178,7 +174,6 @@ jobs:
             --channel=listed \
             --upload-source-code ".output/diffseek-${VERSION}-sources.zip" \
             --approval-timeout=0 \
-            --no-config-discovery \
             >"$log" 2>&1
           status=$?
           set -e
@@ -187,8 +182,7 @@ jobs:
             echo "Submitted ${VERSION} for diffseek@n8v.me (slug diffseek) on the listed channel."
             exit 0
           fi
-          if grep -F "Version ${VERSION} already exists" "$log" >/dev/null \
-            || grep -F "Version already exists" "$log" >/dev/null; then
+          if grep -Fq "Version ${VERSION} already exists" "$log"; then
             echo "Version ${VERSION} already exists on AMO for diffseek@n8v.me (slug diffseek)."
             exit 0
           fi
