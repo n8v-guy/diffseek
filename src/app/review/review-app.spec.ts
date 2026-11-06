@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
+import type { FilterDefaults } from '@diffseek/browser';
 import type { PageSnapshot } from '@diffseek/github';
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 import type {
@@ -10,6 +11,7 @@ import type {
 
 import type { DefaultMetadata } from '../metadata/reader';
 
+import type { QuietClock } from './quiet-revalidate';
 import { startReviewApp } from './review-app';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
@@ -286,7 +288,7 @@ describe('review app lifecycle', () => {
     );
     await until(async () => {
       const stored = await fakeBrowser.storage.local.get('diffseek:metadata:octo/repo');
-      expect(stored['diffseek:metadata:octo/repo']).toMatchObject({ version: 3, files });
+      expect(stored['diffseek:metadata:octo/repo']).toMatchObject({ version: 4, files });
     });
     expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
     expect(refreshDefault).toHaveBeenCalledOnce();
@@ -689,6 +691,158 @@ describe('metadata refresh', () => {
     await streamTreeItem('src/last.ts');
     expect(refreshDefault).toHaveBeenCalledTimes(2);
     expect(readPull).toHaveBeenCalledTimes(2);
+    app.stop();
+  });
+
+  it('stores metadata without a pass when nothing shown depends on it', async () => {
+    const shown: FilterDefaults = { hidden: new Set(), viewed: new Set() };
+    let resolveDefault = (_value: DefaultMetadata): void => undefined;
+    const refreshDefault = vi.fn(
+      () => new Promise<DefaultMetadata>((resolve) => {
+        resolveDefault = resolve;
+      }),
+    );
+    const readPull = vi.fn(async (_review: unknown, base: DefaultMetadata) => base.metadata);
+    const app = await reviewApp({
+      refreshDefault: signalled(refreshDefault),
+      readPull: signalled(readPull),
+      readFilterDefaults: async () => shown,
+    });
+    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
+    const entries = reconcileEntries();
+
+    resolveDefault(
+      loadedDefault({ codeowners: '', attributes: 'src/** group=Later' }, true),
+    );
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
+    await nextFrame();
+
+    expect(reconcileEntries()).toBe(entries);
+    expect(document.querySelector('[data-filter-value="Later"]')).toBeNull();
+    openMenu();
+    await until(() =>
+      expect(document.querySelector('[data-filter-value="Later"]')).not.toBeNull(),
+    );
+    app.stop();
+  });
+
+  it('reconciles when generated files are auto-viewed even if the metadata is unchanged', async () => {
+    const autoView: FilterDefaults = { hidden: new Set(), viewed: new Set(['generated']) };
+    let resolveDefault = (_value: DefaultMetadata): void => undefined;
+    const refreshDefault = vi.fn(
+      () => new Promise<DefaultMetadata>((resolve) => {
+        resolveDefault = resolve;
+      }),
+    );
+    const app = await reviewApp({
+      refreshDefault: signalled(refreshDefault),
+      readFilterDefaults: async () => autoView,
+      readImmediate: async () => emptyMetadata,
+    });
+    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
+    const entries = reconcileEntries();
+    resolveDefault(loadedDefault(emptyMetadata));
+    await until(() => expect(reconcileEntries()).toBeGreaterThan(entries));
+    app.stop();
+  });
+
+  it('rereads a due cache once after the page is quiet, then only after another change', async () => {
+    const clock = manualClock();
+    const refreshDefault = vi.fn<
+      (
+        review: { paths: string[] },
+        options?: { revalidate?: boolean },
+      ) => Promise<DefaultMetadata>
+    >(async () => ({
+      ...loadedDefault({ codeowners: '', attributes: 'src/** group=Cached' }),
+      due: true,
+    }));
+    const app = await reviewApp({
+      quietClock: clock.clock,
+      refreshDefault: signalled(refreshDefault),
+      readFilterDefaults: async () => ({ hidden: new Set(), viewed: new Set() }),
+    });
+    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
+    await nextTask();
+    expect(refreshDefault.mock.calls[0]?.[1]).toEqual({ revalidate: false });
+    expect(clock.armed()).toBe(true);
+
+    const own = document.createElement('div');
+    own.dataset.diffseek = 'snackbar';
+    document.body.append(own);
+    await nextTask();
+    expect(clock.armed()).toBe(true);
+    expect(refreshDefault).toHaveBeenCalledOnce();
+
+    clock.fire();
+    await until(() => expect(refreshDefault).toHaveBeenCalledTimes(2));
+    await nextTask();
+    expect(refreshDefault.mock.calls[1]?.[1]).toEqual({ revalidate: true });
+    expect(clock.armed()).toBe(false);
+    clock.fire();
+    expect(refreshDefault).toHaveBeenCalledTimes(2);
+
+    const item = document.createElement('li');
+    item.id = 'src/quiet.ts';
+    item.setAttribute('role', 'treeitem');
+    document.querySelector('[role="tree"]')?.append(item);
+    await until(() => expect(clock.armed()).toBe(true));
+    app.stop();
+    expect(clock.armed()).toBe(false);
+    clock.fire();
+    expect(refreshDefault).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not reread just because the review navigates to another pull request', async () => {
+    let path = changesPath;
+    const clock = manualClock();
+    const refreshDefault = vi.fn<
+      (
+        review: { paths: string[] },
+        options?: { revalidate?: boolean },
+      ) => Promise<DefaultMetadata>
+    >(async () => ({
+      ...loadedDefault(emptyMetadata),
+      due: true,
+    }));
+    const app = await reviewApp(
+      {
+        quietClock: clock.clock,
+        refreshDefault: signalled(refreshDefault),
+      },
+      () => path,
+    );
+    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
+    await nextReconcile(() => {
+      path = '/octo/repo/pull/2/changes';
+      document.body.append(document.createElement('span'));
+    });
+    await until(() => expect(refreshDefault).toHaveBeenCalledTimes(2));
+    expect(refreshDefault.mock.calls[1]?.[1]).toEqual({ revalidate: false });
+    app.stop();
+  });
+
+  it('reads a metadata path that arrives while the pull read is in flight', async () => {
+    let resolvePull = (_value: RepositoryMetadata): void => undefined;
+    const readPull = vi.fn<(review: { paths: string[] }) => Promise<RepositoryMetadata>>(
+      () => new Promise<RepositoryMetadata>((resolve) => {
+        resolvePull = resolve;
+      }),
+    );
+    const app = await reviewApp({
+      readPull: signalled(readPull),
+      readFilterDefaults: async () => ({ hidden: new Set(), viewed: new Set() }),
+    });
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
+    expect(readPull.mock.calls[0]?.[0].paths ?? []).not.toContain('kitana/.gitattributes');
+
+    await streamTreeItem('kitana/.gitattributes');
+    expect(readPull).toHaveBeenCalledOnce();
+
+    resolvePull(emptyMetadata);
+    await until(() => expect(readPull).toHaveBeenCalledTimes(2));
+    expect(readPull.mock.calls[1]?.[0].paths ?? []).toContain('kitana/.gitattributes');
+    resolvePull(emptyMetadata);
     app.stop();
   });
 
@@ -1427,3 +1581,44 @@ describe('review app interactions', () => {
     app.stop();
   });
 });
+
+function reconcileEntries(): number {
+  return Number(document.documentElement.dataset.diffseekReconcileEntries ?? 0);
+}
+
+function manualClock(): { clock: QuietClock; fire: () => void; armed: () => boolean } {
+  let run: (() => void) | undefined;
+  return {
+    clock: {
+      arm(next) {
+        run = next;
+      },
+      cancel() {
+        run = undefined;
+      },
+    },
+    fire() {
+      const current = run;
+      run = undefined;
+      current?.();
+    },
+    armed: () => run !== undefined,
+  };
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}

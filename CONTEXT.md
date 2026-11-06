@@ -25,8 +25,9 @@ request reviews. GitHub remains the review system and visual authority.
 - **Review index** — immutable descendant and ancestor lookup built from one page
   observation.
 - **Metadata level** — cached default branch or bundled assumptions, plus the
-  pull request's own version of any metadata file its diff touches. The cache
-  refreshes once a day or on every third distinct pull request.
+  pull request's own version of any metadata file its diff touches. The
+  default-branch cache is kept for 7 days and those pull-request files for 2
+  days; a due copy is reread after the page has been quiet.
 - **Native action** — a click on a current GitHub control followed by observable
   confirmation on the page.
 

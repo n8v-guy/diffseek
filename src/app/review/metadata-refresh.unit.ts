@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DefaultMetadata } from '../metadata/reader';
 
-import { loadReviewMetadata, metadataRefreshState } from './metadata-refresh';
+import {
+  loadReviewMetadata,
+  metadataRefreshState,
+  streamedMetadataStale,
+  trackedMetadata,
+} from './metadata-refresh';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -84,5 +89,52 @@ describe('metadata refresh', () => {
     expect(commit).not.toHaveBeenCalled();
     expect(refreshDefault).toHaveBeenCalledOnce();
     expect(onSettled).toHaveBeenCalledOnce();
+  });
+
+  it('reports an unfinished read and a settled one', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const onFinished = vi.fn();
+    const state = metadataRefreshState();
+    loadReviewMetadata(state, {
+      readPull: () => Promise.reject(new Error('offline')),
+      refreshDefault: () => Promise.resolve(base),
+      commit: () => Promise.resolve(true),
+      aborted: () => false,
+      apply: vi.fn(),
+      onFinished,
+    });
+    await state.flight;
+    expect(onFinished).toHaveBeenCalledExactlyOnceWith(false);
+
+    loadReviewMetadata(state, {
+      readPull: (result: DefaultMetadata) => Promise.resolve(result),
+      refreshDefault: () => Promise.resolve(base),
+      commit: () => Promise.resolve(true),
+      aborted: () => false,
+      apply: vi.fn(),
+      onFinished,
+    });
+    await state.flight;
+    expect(onFinished).toHaveBeenLastCalledWith(true);
+  });
+});
+
+describe('streamed metadata paths', () => {
+  it('reopens when a metadata path replaces another at the same tree size', () => {
+    const state = trackedMetadata();
+    state.seenPaths = ['a.ts', 'b.ts'].sort((left, right) => left.localeCompare(right)).join('\n');
+    expect(streamedMetadataStale(false, state, ['a.ts', '.gitattributes'])).toBeNull();
+    expect(
+      streamedMetadataStale(true, state, ['a.ts', '.gitattributes']),
+    ).toEqual({ stale: true });
+    expect(state.seenPaths).toBe(
+      ['a.ts', 'b.ts'].sort((left, right) => left.localeCompare(right)).join('\n'),
+    );
+  });
+
+  it('remembers a tree that needs nothing and ignores the same tree', () => {
+    const state = trackedMetadata();
+    expect(streamedMetadataStale(true, state, ['a.ts', 'b.ts'])).toEqual({ stale: false });
+    expect(streamedMetadataStale(true, state, ['b.ts', 'a.ts'])).toBeNull();
   });
 });
