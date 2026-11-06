@@ -36,6 +36,8 @@ export type MetadataRefresh = {
   settled: boolean;
   flight: Promise<void> | null;
   pending: boolean;
+  /** One follow-up after a failure. Mutations do not set this. */
+  failureRetry: boolean;
 };
 
 export function metadataWatch(): MetadataWatch {
@@ -43,7 +45,7 @@ export function metadataWatch(): MetadataWatch {
 }
 
 export function metadataRefreshState(): MetadataRefresh {
-  return { settled: false, flight: null, pending: false };
+  return { settled: false, flight: null, pending: false, failureRetry: false };
 }
 
 /** First observation records the baseline and does not count as a retry. */
@@ -144,9 +146,11 @@ function beginMetadataRefresh(
       state.flight = null;
       // A failure waits for the next quiet period. Chaining it here retries
       // on every mutation that arrived during the failed lookup.
+      const retry = state.failureRetry;
+      state.failureRetry = false;
       const restart = ok && state.pending && !state.settled;
       state.pending = false;
-      if (restart) beginMetadataRefresh(state, start, onSettled, onFinished);
+      if (restart || retry) beginMetadataRefresh(state, start, onSettled, onFinished);
     });
   state.flight = flight;
 }
@@ -160,6 +164,8 @@ export type TrackedMetadata = {
   pullFailed: boolean;
   /** A failed lookup ignores page changes until the quiet retry asks again. */
   held: boolean;
+  /** The failure already had its one immediate follow-up. */
+  retried: boolean;
   seenPaths: string;
   readPullPaths: Set<string>;
   files: MetadataFiles;
@@ -174,6 +180,7 @@ export function trackedMetadata(): TrackedMetadata {
     defaultFailed: false,
     pullFailed: false,
     held: false,
+    retried: false,
     seenPaths: '',
     readPullPaths: new Set(),
     files: {},
@@ -275,7 +282,11 @@ export function loadSessionMetadata(load: SessionMetadataLoad): void {
     },
     onFinished: () => {
       if (load.aborted()) return;
-      finishTrackedRead(load.tracked, load.quiet);
+      if (finishTrackedRead(load.tracked, load.quiet)) {
+        load.state.failureRetry = true;
+        load.state.settled = false;
+        return;
+      }
       if (load.reopen()) load.state.pending = true;
     },
     apply: (metadata) => {
@@ -290,21 +301,30 @@ export function loadSessionMetadata(load: SessionMetadataLoad): void {
 function finishTrackedRead(
   state: TrackedMetadata,
   quiet: QuietRevalidate,
-): void {
+): boolean {
   const revalidated = state.flight;
   state.flight = false;
   const failed = state.defaultFailed || state.pullFailed;
   state.defaultFailed = false;
   state.pullFailed = false;
   if (failed) {
+    if (!state.retried) {
+      state.retried = true;
+      state.held = false;
+      if (revalidated) state.requested = true;
+      quiet.cancel();
+      return true;
+    }
     state.held = true;
     if (revalidated) quiet.noteAttempt(true);
     else quiet.noteStale();
-    return;
+    return false;
   }
+  state.retried = false;
   const due = state.defaultDue || state.pullDue;
   if (revalidated) quiet.noteAttempt(due);
-  else if (state.requested) return;
+  else if (state.requested) return false;
   else if (due) quiet.noteStale();
   else quiet.noteFresh();
+  return false;
 }

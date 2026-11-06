@@ -225,8 +225,9 @@ pull head first; an unchanged head reuses the stored files and does not extend
 their time. A file already stored, including a deletion, stays until that copy
 is due. Listing bodies are read from the default branch, not the pull head. A
 failed default-branch read does not block those pull files and does not refresh
-the stored time. The next try waits until the page has been quiet, and one
-pull-head lookup is shared while it is in flight. A metadata message the
+the stored time. A failed lookup is tried once more, then waits until the
+page has been quiet. One pull-head lookup is shared while it is in flight. A
+metadata message the
 service worker never answers is abandoned after the same guard as the network
 read.
 
@@ -234,5 +235,5 @@ read.
 compete with files that are still streaming in. **Cost:** Until the page goes
 quiet, a listing can be 7 days old and a pull-request file 2 days old. A page
 that never goes quiet keeps serving that copy; newly arrived diff paths are
-still read. A failed lookup uses that same wait, and a path that arrived
-during the failure is part of the next try.
+still read. After one immediate retry, a second failure uses that same
+wait, and a path that arrived during the failure is part of the next try.

@@ -150,7 +150,7 @@ describe('metadata refresh', () => {
 });
 
 describe('failed metadata lookup', () => {
-  it('waits for quiet instead of reading again on the next call', async () => {
+  it('tries once more, then waits for quiet instead of reading on the next call', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const state = metadataRefreshState();
     const tracked = trackedMetadata();
@@ -175,10 +175,14 @@ describe('failed metadata lookup', () => {
       });
     };
     load();
+    state.pending = true;
     await state.flight;
-    load();
-    expect(readPull).toHaveBeenCalledOnce();
+    await state.flight;
+    expect(readPull).toHaveBeenCalledTimes(2);
     expect(tracked.held).toBe(true);
+    expect(state.pending).toBe(false);
+    load();
+    expect(readPull).toHaveBeenCalledTimes(2);
   });
 });
 
