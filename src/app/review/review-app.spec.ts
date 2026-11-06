@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
-import type { FilterDefaults } from '@diffseek/browser';
+import { writeCache, type FilterDefaults } from '@diffseek/browser';
 import type { PageSnapshot } from '@diffseek/github';
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 import type {
@@ -9,7 +9,12 @@ import type {
   RepositoryMetadata,
 } from '@diffseek/repository-metadata';
 
-import type { DefaultMetadata } from '../metadata/reader';
+import {
+  readImmediateMetadata,
+  readPullMetadata,
+  refreshDefaultMetadata,
+  type DefaultMetadata,
+} from '../metadata/reader';
 
 import type { QuietClock } from './quiet-revalidate';
 import { startReviewApp } from './review-app';
@@ -717,14 +722,13 @@ describe('metadata refresh', () => {
       loadedDefault({ codeowners: '', attributes: 'src/** group=Later' }, true),
     );
     await until(() => expect(readPull).toHaveBeenCalledOnce());
-    await nextFrame();
-
-    expect(reconcileEntries()).toBe(entries);
     expect(document.querySelector('[data-filter-value="Later"]')).toBeNull();
+
     openMenu();
     await until(() =>
       expect(document.querySelector('[data-filter-value="Later"]')).not.toBeNull(),
     );
+    expect(reconcileEntries()).toBe(entries + 1);
     app.stop();
   });
 
@@ -749,37 +753,39 @@ describe('metadata refresh', () => {
   });
 
   it('rereads a due cache once after the page is quiet, then only after another change', async () => {
+    openMenu();
     const clock = manualClock();
+    let reads = 0;
     const refreshDefault = vi.fn<
       (
         review: { paths: string[] },
         options?: { revalidate?: boolean },
       ) => Promise<DefaultMetadata>
-    >(async () => ({
-      ...loadedDefault({ codeowners: '', attributes: 'src/** group=Cached' }),
-      due: true,
-    }));
+    >(async () => {
+      reads += 1;
+      const attributes = reads === 1 ? 'src/** group=Cached' : 'src/** group=Reread';
+      return { ...loadedDefault({ codeowners: '', attributes }), due: true };
+    });
     const app = await reviewApp({
       quietClock: clock.clock,
       refreshDefault: signalled(refreshDefault),
       readFilterDefaults: async () => ({ hidden: new Set(), viewed: new Set() }),
     });
-    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
-    await nextTask();
+    await until(() =>
+      expect(document.querySelector('[data-filter-value="Cached"]')).not.toBeNull(),
+    );
     expect(refreshDefault.mock.calls[0]?.[1]).toEqual({ revalidate: false });
     expect(clock.armed()).toBe(true);
 
     const own = document.createElement('div');
     own.dataset.diffseek = 'snackbar';
     document.body.append(own);
-    await nextTask();
-    expect(clock.armed()).toBe(true);
-    expect(refreshDefault).toHaveBeenCalledOnce();
-
     clock.fire();
-    await until(() => expect(refreshDefault).toHaveBeenCalledTimes(2));
-    await nextTask();
+    await until(() =>
+      expect(document.querySelector('[data-filter-value="Reread"]')).not.toBeNull(),
+    );
     expect(refreshDefault.mock.calls[1]?.[1]).toEqual({ revalidate: true });
+    expect(refreshDefault).toHaveBeenCalledTimes(2);
     expect(clock.armed()).toBe(false);
     clock.fire();
     expect(refreshDefault).toHaveBeenCalledTimes(2);
@@ -881,6 +887,58 @@ describe('metadata refresh', () => {
     expect(readPull).toHaveBeenCalledOnce();
     app.reconcile();
     expect(readPull).toHaveBeenCalledOnce();
+    app.stop();
+  });
+
+  it('does not revive a stored deletion when the head lookup fails', async () => {
+    openMenu();
+    document.querySelector('[role="tree"]')?.insertAdjacentHTML(
+      'beforeend',
+      `<li id="CODEOWNERS" role="treeitem" aria-label="CODEOWNERS">
+        <div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-removed"></svg></div>
+        <a href="#diff-CODEOWNERS">CODEOWNERS</a>
+      </li>`,
+    );
+    await writeCache(
+      { owner: 'octo', repo: 'repo' },
+      {
+        files: { '.gitattributes': { blob: 'g', text: 'src/** group=Revived' } },
+        refreshedAt: Date.now(),
+        pulls: [1],
+        overlays: {
+          '1': {
+            oid: 'd'.repeat(40),
+            refreshedAt: Date.now(),
+            files: { '.gitattributes': null },
+          },
+        },
+      },
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let revived = false;
+    const note = (): void => {
+      if (document.querySelector('[data-filter-value="Revived"]')) revived = true;
+    };
+    document.addEventListener('diffseek-reconciled', note);
+    const resolveHead = vi.fn(async () => {
+      throw new Error('commits 500');
+    });
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => changesPath,
+      readImmediate: readImmediateMetadata,
+      refreshDefault: (review, read) =>
+        refreshDefaultMetadata(review, { ...read, resolveHead: signalled(resolveHead) }),
+      readPull: (review, base, read) =>
+        readPullMetadata(review, base, { ...read, resolveHead: signalled(resolveHead) }),
+    });
+    await until(() => expect(resolveHead).toHaveBeenCalledTimes(4));
+    await until(() =>
+      expect(document.querySelector('[data-diffseek="filters"]')).not.toBeNull(),
+    );
+    expect(document.querySelector('[data-filter-value="Revived"]')).toBeNull();
+    expect(revived).toBe(false);
+    document.removeEventListener('diffseek-reconciled', note);
     app.stop();
   });
 });
@@ -1606,21 +1664,4 @@ function manualClock(): { clock: QuietClock; fire: () => void; armed: () => bool
     },
     armed: () => run !== undefined,
   };
-}
-
-function nextFrame(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-}
-
-function nextTask(): Promise<void> {
-  return new Promise((resolve) => {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      channel.port1.close();
-      resolve();
-    };
-    channel.port2.postMessage(null);
-  });
 }

@@ -276,6 +276,8 @@ describe('refresh policy', () => {
 
     expect(failing).toHaveBeenCalledOnce();
     expect(request).not.toHaveBeenCalled();
+    expect(result.failed).toBe(true);
+    expect(result.changed).toBe(false);
     expect(result.due).toBe(true);
     expect(result.cache.refreshedAt).toBe(1_000);
     expect(Object.keys(result.cache.files)).toHaveLength(indexed.length);
@@ -292,6 +294,7 @@ describe('refresh policy', () => {
     const result = await refresh(2, paths, 1_000 + defaultMetadataTtlMs, request, failing, true);
 
     expect(request).not.toHaveBeenCalled();
+    expect(result.failed).toBe(true);
     expect(result.due).toBe(true);
     expect(result.cache).toMatchObject({ refreshedAt: 1_000, files: {} });
   });
@@ -659,6 +662,36 @@ describe('pull request side', () => {
       ['HEAD', '.gitattributes'],
     ]);
     expect(await readCache(repository)).toBeNull();
+  });
+
+  it('keeps a stored deletion when the head lookup fails', async () => {
+    const oid = 'd'.repeat(40);
+    await writeCache(repository, {
+      files: { '.gitattributes': { blob: 'g', text: 'src/** group=Revived' } },
+      refreshedAt: 1_000,
+      pulls: [1],
+      overlays: {
+        '1': { oid, refreshedAt: 1_000, files: { '.gitattributes': null } },
+      },
+    });
+    const review = { ...repository, pull: 1, paths: ['.gitattributes', 'CODEOWNERS'] };
+    const resolveHead = vi.fn(async () => {
+      throw new Error('commits 500');
+    });
+
+    expect(await readImmediateMetadata(review)).toMatchObject({ attributes: '' });
+    const base = await refreshDefaultMetadata(review, {
+      request: raw(),
+      search: searching(),
+      resolveHead,
+      now: () => 1_000,
+    });
+    expect(base.metadata.attributes).toBe('');
+    await expect(
+      readPullMetadata(review, base, { request: raw(), resolveHead, now: () => 1_000 }),
+    ).rejects.toThrow('commits 500');
+    expect(base.metadata.attributes).toBe('');
+    expect(resolveHead).toHaveBeenCalled();
   });
 
   it('does not look up a head when the diff has no metadata file', async () => {

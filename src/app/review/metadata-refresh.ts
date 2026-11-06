@@ -144,8 +144,8 @@ function beginMetadataRefresh(
     .then((ok) => {
       if (state.flight !== flight) return;
       state.flight = null;
-      // A failure waits for the next quiet period. Chaining it here retries
-      // on every mutation that arrived during the failed lookup.
+      // Restart for a path that arrived during a successful read, or for the
+      // one failure follow-up. A mutation only records pending.
       const retry = state.failureRetry;
       state.failureRetry = false;
       const restart = ok && state.pending && !state.settled;

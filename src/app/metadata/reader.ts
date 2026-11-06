@@ -51,15 +51,16 @@ export type DefaultMetadata = {
   pendingHead?: Promise<string>;
   /** A cached entry is past its TTL and this read left it unchanged. */
   due?: boolean;
-  /** A body or listing read failed. Not stored. The next try waits for quiet. */
+  /** A body or listing read failed. Not stored. Tried once more, then left until quiet. */
   failed?: boolean;
 };
 
 export async function readImmediateMetadata(
-  repository: RepositoryRef,
+  repository: RepositoryRef & { pull?: number },
 ): Promise<RepositoryMetadata> {
   try {
-    return metadataFromFiles((await readCache(repository))?.files ?? {});
+    const cache = await readCache(repository);
+    return displayed(cache?.files ?? {}, overlayFiles(cache, repository.pull));
   } catch {
     return metadataFromFiles({});
   }
@@ -102,7 +103,7 @@ export async function refreshDefaultMetadata(
       );
       const cache = withPull(current, files, review.pull);
       return {
-        metadata: metadataFromFiles(files),
+        metadata: displayed(files, overlayFiles(cache, review.pull)),
         cache,
         changed: JSON.stringify(cache) !== JSON.stringify(cached),
         ...(pendingHead ? { pendingHead } : {}),
@@ -110,10 +111,10 @@ export async function refreshDefaultMetadata(
       };
     } catch {
       // The bodies did not load. Keep the previous listing and its time.
-      return failedDefault(cached, pendingHead);
+      return failedDefault(cached, pendingHead, review.pull);
     }
   } catch {
-    return failedDefault(cached, pendingHead);
+    return failedDefault(cached, pendingHead, review.pull);
   }
 }
 
@@ -121,9 +122,10 @@ export async function refreshDefaultMetadata(
 function failedDefault(
   cached: RepositoryCache | null,
   pendingHead: Promise<string> | undefined,
+  pull: number,
 ): DefaultMetadata {
   return {
-    metadata: metadataFromFiles(cached?.files ?? {}),
+    metadata: displayed(cached?.files ?? {}, overlayFiles(cached, pull)),
     cache: cached ?? { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
     changed: false,
     ...(pendingHead ? { pendingHead } : {}),
@@ -132,13 +134,7 @@ function failedDefault(
   };
 }
 
-/**
- * The pull request's own metadata files, and only the ones in its diff.
- * A fresh copy is kept for two days. A due copy is served until the quiet
- * reread, which resolves the head again and reads those diff paths only.
- * A diff path missing from that copy resolves the head first: the same head
- * reuses what is stored, and a new head replaces the copy.
- */
+/** Diff metadata paths only. A stored file, including a deletion, is reused until that copy is reread. */
 export async function readPullMetadata(
   review: Review,
   base: DefaultMetadata,
@@ -348,6 +344,22 @@ function applicable(
   );
 }
 
+function overlayFiles(
+  cache: RepositoryCache | null,
+  pull: number | undefined,
+): Record<string, string | null> | undefined {
+  if (pull === undefined) return undefined;
+  return cache?.overlays[String(pull)]?.files;
+}
+
+/** Listing files with this pull's stored copy applied. A null entry stays deleted. */
+function displayed(
+  files: MetadataFiles,
+  overlay: Record<string, string | null> | undefined,
+): RepositoryMetadata {
+  return metadataFromFiles(overlay === undefined ? files : overlaid(files, overlay));
+}
+
 function overlaid(
   files: MetadataFiles,
   overlay: Record<string, string | null>,
@@ -384,7 +396,9 @@ async function refreshListing(
     }
     return listed(index);
   } catch {
-    return cached ?? listed(await probe(review, request));
+    // A cached listing stays as it is. The caller marks that read failed.
+    if (cached) throw new Error('Metadata search is unavailable');
+    return listed(await probe(review, request));
   }
 }
 

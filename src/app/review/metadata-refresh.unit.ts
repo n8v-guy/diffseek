@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 
-import type { DefaultMetadata } from '../metadata/reader';
+import { writeCache } from '@diffseek/browser';
+import type { MetadataSearchResult } from '@diffseek/github';
+
+import {
+  defaultMetadataTtlMs,
+  refreshDefaultMetadata,
+  type DefaultMetadata,
+} from '../metadata/reader';
 
 import {
   loadReviewMetadata,
@@ -183,6 +191,70 @@ describe('failed metadata lookup', () => {
     expect(state.pending).toBe(false);
     load();
     expect(readPull).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a due search failure once, then holds', async () => {
+    fakeBrowser.reset();
+    await writeCache(
+      { owner: 'owner', repo: 'repo' },
+      {
+        files: { '.gitattributes': { blob: 'g', text: '*.ts group=Code' } },
+        refreshedAt: 1_000,
+        pulls: [1],
+        overlays: {},
+      },
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const search = vi.fn(async (): Promise<MetadataSearchResult> => {
+      throw new Error('Metadata search is unavailable');
+    });
+    const state = metadataRefreshState();
+    const tracked = trackedMetadata();
+    const quiet = quietRevalidate({ arm() {}, cancel() {} }, () => undefined);
+    const readDefault = (revalidate: boolean) =>
+      refreshDefaultMetadata(
+        { owner: 'owner', repo: 'repo', pull: 1, paths: ['src/a.ts'] },
+        {
+          request: async () => {
+            throw new Error('raw should stay unused');
+          },
+          search,
+          now: () => 1_000 + defaultMetadataTtlMs,
+          revalidate,
+        },
+      );
+    const load = (): void => {
+      loadSessionMetadata({
+        state,
+        tracked,
+        quiet,
+        paths: () => ['src/a.ts'],
+        readDefault,
+        readPull: (result) => Promise.resolve({ ...result, changed: false }),
+        commit: () => Promise.resolve(true),
+        aborted: () => false,
+        autoView: false,
+        current: () => base.metadata,
+        needsPass: () => false,
+        schedule: () => undefined,
+        store: () => undefined,
+        reopen: () => false,
+      });
+    };
+
+    load();
+    await state.flight;
+    expect(search).not.toHaveBeenCalled();
+    state.settled = false;
+    tracked.requested = true;
+    load();
+    await state.flight;
+    await state.flight;
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(tracked.held).toBe(true);
+    tracked.requested = true;
+    load();
+    expect(search).toHaveBeenCalledTimes(2);
   });
 });
 
