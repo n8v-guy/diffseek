@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   installRedrawTrace,
   noteReconcile,
+  noteReconcileEntry,
+  noteReconcileNoop,
   readRedrawCounts,
   resetRedrawTrace,
   trackDiffseekWrites,
@@ -29,9 +31,13 @@ describe('redraw trace', () => {
       row.classList.add('diffseek-viewed-icon-anchor');
     });
     noteReconcile(document);
+    noteReconcileEntry(document);
+    noteReconcileNoop(document);
     await flush();
 
     expect(readRedrawCounts(document).reconciles).toBe(1);
+    expect(document.documentElement.dataset.diffseekReconcileEntries).toBe('1');
+    expect(document.documentElement.dataset.diffseekReconcileNoops).toBe('1');
     expect(readRedrawCounts(document).domMutations).toBeGreaterThan(0);
     expect(readRedrawCounts(document).treeRebuilds).toBe(0);
 

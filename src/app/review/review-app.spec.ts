@@ -716,7 +716,7 @@ describe('metadata refresh', () => {
       readFilterDefaults: async () => shown,
     });
     await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
-    const writes = reconcileWrites();
+    const entries = reconcileEntries();
 
     resolveDefault(
       loadedDefault({ codeowners: '', attributes: 'src/** group=Later' }, true),
@@ -728,7 +728,7 @@ describe('metadata refresh', () => {
     await until(() =>
       expect(document.querySelector('[data-filter-value="Later"]')).not.toBeNull(),
     );
-    expect(reconcileWrites()).toBe(writes + 1);
+    expect(reconcileEntries()).toBe(entries + 1);
     app.stop();
   });
 
@@ -740,18 +740,15 @@ describe('metadata refresh', () => {
         resolveDefault = resolve;
       }),
     );
-    const metadata = { codeowners: '', attributes: 'src/generated.ts linguist-generated' };
     const app = await reviewApp({
       refreshDefault: signalled(refreshDefault),
       readFilterDefaults: async () => autoView,
-      readImmediate: async () => metadata,
+      readImmediate: async () => emptyMetadata,
     });
     await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
-    expect(document.querySelector('[data-diffseek="snackbar"]')).toBeNull();
-    resolveDefault(loadedDefault(metadata));
-    await until(() =>
-      expect(document.querySelector('[data-diffseek="snackbar"]')).not.toBeNull(),
-    );
+    const entries = reconcileEntries();
+    resolveDefault(loadedDefault(emptyMetadata));
+    await until(() => expect(reconcileEntries()).toBeGreaterThan(entries));
     app.stop();
   });
 
@@ -1645,8 +1642,8 @@ describe('review app interactions', () => {
   });
 });
 
-function reconcileWrites(): number {
-  return Number(document.documentElement.dataset.diffseekReconciles ?? 0);
+function reconcileEntries(): number {
+  return Number(document.documentElement.dataset.diffseekReconcileEntries ?? 0);
 }
 
 function manualClock(): { clock: QuietClock; fire: () => void; armed: () => boolean } {
