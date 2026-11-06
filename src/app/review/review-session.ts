@@ -62,8 +62,6 @@ import {
 import {
   installRedrawTrace,
   noteReconcile,
-  noteReconcileEntry,
-  noteReconcileNoop,
   trackDiffseekWrites,
 } from './redraw-trace';
 import {
@@ -232,7 +230,6 @@ export class ReviewSession {
   }
 
   private reconcileOnce(): void {
-    noteReconcileEntry(this.options.root);
     const firstObservation = !this.metadataWatch.ready;
     const metadataOpportunity =
       consumeMetadataOpportunity(this.metadataWatch, this.options.root) || firstObservation;
@@ -321,7 +318,6 @@ export class ReviewSession {
       const expanded = filteredFileExpanded(root);
       if (expanded) this.presenter.apply(catalogSnapshot, this.filters);
       this.reattachObservers();
-      if (!expanded) noteReconcileNoop(root);
       return;
     }
     trackDiffseekWrites(root, () => {

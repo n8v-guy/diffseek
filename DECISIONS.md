@@ -215,25 +215,16 @@ task, not inside the click, and metadata lands up to one frame later.
 ## D016 — A due metadata copy waits for a quiet page
 
 **Decision:** The default-branch listing stays for 7 days. Each pull request's
-own metadata files stay for 2 days, separate from that listing. A review shows
-the cached copy immediately. When a copy is due, it is reread once the page
-has had no native changes for 3 seconds, and not again until the page changes.
-DiffSeek's own writes do not reset that wait. A failed reread keeps the cached
-text and its original time. Metadata is fetched from the pull request only for
-paths in the diff. A diff path the pull copy does not have yet confirms the
-pull head first; an unchanged head reuses the stored files and does not extend
-their time. A file already stored, including a deletion, stays until that copy
-is due. Listing bodies are read from the default branch, not the pull head. A
-failed default-branch read does not block those pull files and does not refresh
-the stored time. A failed lookup is tried once more, then waits until the
-page has been quiet. One pull-head lookup is shared while it is in flight. A
-metadata message the
-service worker never answers is abandoned after the same guard as the network
-read.
+metadata files stay for 2 days. Show the cached copy immediately, including a
+stored deletion. When a copy is due, reread it once after 3 seconds with no
+native page changes, and not again until the page changes. DiffSeek's own
+writes do not reset that wait. A failed reread keeps the cached text and its
+time, is tried once more, then waits for quiet. Pull metadata is only paths in
+the diff. Listing bodies stay on the default branch. A failed listing read does
+not block those pull files and does not refresh the stored time.
 
 **Why:** A fresh copy should survive navigation, and a due reread should not
 compete with files that are still streaming in. **Cost:** Until the page goes
 quiet, a listing can be 7 days old and a pull-request file 2 days old. A page
-that never goes quiet keeps serving that copy; newly arrived diff paths are
-still read. After one immediate retry, a second failure uses that same
-wait, and a path that arrived during the failure is part of the next try.
+that never goes quiet keeps serving that copy. A path that arrives during a
+failure is part of the retry.

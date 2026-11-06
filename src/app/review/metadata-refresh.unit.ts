@@ -258,6 +258,58 @@ describe('failed metadata lookup', () => {
   });
 });
 
+describe('a failure and a new metadata path', () => {
+  it('reads the new path on the one retry and does not start a third flight', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let paths = ['a.ts'];
+    const state = metadataRefreshState();
+    const tracked = trackedMetadata();
+    const quiet = quietRevalidate({ arm() {}, cancel() {} }, () => undefined);
+    const seen: string[][] = [];
+    const readPull = vi.fn(() => {
+      seen.push([...paths]);
+      if (seen.length === 1) {
+        paths = ['a.ts', '.gitattributes'];
+        return Promise.reject(new Error('offline'));
+      }
+      return Promise.resolve({ ...base, changed: false });
+    });
+    const load = (): void => {
+      loadSessionMetadata({
+        state,
+        tracked,
+        quiet,
+        paths: () => paths,
+        readDefault: () => Promise.resolve({ ...base, changed: false }),
+        readPull,
+        commit: () => Promise.resolve(true),
+        aborted: () => false,
+        autoView: false,
+        current: () => base.metadata,
+        needsPass: () => false,
+        schedule: () => undefined,
+        store: () => undefined,
+        reopen: () => {
+          const next = streamedMetadataStale(state.settled, tracked, paths);
+          if (!next?.stale) return false;
+          state.settled = false;
+          return true;
+        },
+      });
+    };
+
+    load();
+    await state.flight;
+    await state.flight;
+    expect(seen[1]).toEqual(['a.ts', '.gitattributes']);
+    expect(tracked.readPullPaths.has('.gitattributes')).toBe(true);
+    expect(readPull).toHaveBeenCalledTimes(2);
+    expect(tracked.held).toBe(false);
+    expect(state.flight).toBeNull();
+    expect(state.pending).toBe(false);
+  });
+});
+
 describe('streamed metadata paths', () => {
   it('reopens when a metadata path replaces another at the same tree size', () => {
     const state = trackedMetadata();

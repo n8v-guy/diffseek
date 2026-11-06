@@ -157,12 +157,13 @@ function beginMetadataRefresh(
 
 export type TrackedMetadata = {
   requested: boolean;
-  flight: boolean;
-  defaultDue: boolean;
-  pullDue: boolean;
-  defaultFailed: boolean;
-  pullFailed: boolean;
-  /** A failed lookup ignores page changes until the quiet retry asks again. */
+  /** This flight is the quiet reread. */
+  revalidate: boolean;
+  /** Either the listing or the pull copy is past its own time. */
+  due: boolean;
+  /** Either read failed. One flag, because the session retries the flight once. */
+  failed: boolean;
+  /** Blocks another load until the quiet retry asks. The clock has its own hold. */
   held: boolean;
   /** The failure already had its one immediate follow-up. */
   retried: boolean;
@@ -174,11 +175,9 @@ export type TrackedMetadata = {
 export function trackedMetadata(): TrackedMetadata {
   return {
     requested: false,
-    flight: false,
-    defaultDue: false,
-    pullDue: false,
-    defaultFailed: false,
-    pullFailed: false,
+    revalidate: false,
+    due: false,
+    failed: false,
     held: false,
     retried: false,
     seenPaths: '',
@@ -215,16 +214,18 @@ async function readTrackedDefault(
 ): Promise<DefaultMetadata> {
   const revalidate = state.requested;
   state.requested = false;
-  state.flight = revalidate;
+  state.revalidate = revalidate;
+  state.due = false;
+  state.failed = false;
   try {
     const result = await read(revalidate);
     state.files = result.cache.files;
-    state.defaultDue = result.due === true;
-    state.defaultFailed = result.failed === true;
+    state.due = result.due === true;
+    state.failed = result.failed === true;
     return result;
   } catch (error) {
-    state.defaultDue = true;
-    state.defaultFailed = true;
+    state.due = true;
+    state.failed = true;
     throw error;
   }
 }
@@ -238,12 +239,12 @@ async function readTrackedPull(
     const result = await read();
     for (const path of pullMetadataPaths(paths)) state.readPullPaths.add(path);
     state.seenPaths = pathKey(paths);
-    state.pullDue = result.due === true;
-    state.pullFailed = result.failed === true;
+    state.due = state.due || result.due === true;
+    state.failed = state.failed || result.failed === true;
     return result;
   } catch (error) {
-    state.pullDue = true;
-    state.pullFailed = true;
+    state.due = true;
+    state.failed = true;
     throw error;
   }
 }
@@ -273,7 +274,7 @@ export function loadSessionMetadata(load: SessionMetadataLoad): void {
     refreshDefault: () => readTrackedDefault(load.tracked, load.readDefault),
     readPull: (base) =>
       readTrackedPull(load.tracked, load.paths(), () =>
-        load.readPull(base, load.tracked.flight),
+        load.readPull(base, load.tracked.revalidate),
       ),
     commit: load.commit,
     aborted: load.aborted,
@@ -302,11 +303,10 @@ function finishTrackedRead(
   state: TrackedMetadata,
   quiet: QuietRevalidate,
 ): boolean {
-  const revalidated = state.flight;
-  state.flight = false;
-  const failed = state.defaultFailed || state.pullFailed;
-  state.defaultFailed = false;
-  state.pullFailed = false;
+  const revalidated = state.revalidate;
+  state.revalidate = false;
+  const failed = state.failed;
+  state.failed = false;
   if (failed) {
     if (!state.retried) {
       state.retried = true;
@@ -321,10 +321,9 @@ function finishTrackedRead(
     return false;
   }
   state.retried = false;
-  const due = state.defaultDue || state.pullDue;
-  if (revalidated) quiet.noteAttempt(due);
+  if (revalidated) quiet.noteAttempt(state.due);
   else if (state.requested) return false;
-  else if (due) quiet.noteStale();
+  else if (state.due) quiet.noteStale();
   else quiet.noteFresh();
   return false;
 }

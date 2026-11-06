@@ -93,27 +93,23 @@ export async function refreshDefaultMetadata(
       cached != null && !(listingDue(cached, timestamp) && revalidate)
         ? cached
         : await refreshListing(review, cached, timestamp, request, search);
-    try {
-      const files = await readInto(
-        current.files,
-        unloadedMetadataPaths(current.files, review.paths),
-        defaultBranch,
-        review,
-        request,
-      );
-      const cache = withPull(current, files, review.pull);
-      return {
-        metadata: displayed(files, overlayFiles(cache, review.pull)),
-        cache,
-        changed: JSON.stringify(cache) !== JSON.stringify(cached),
-        ...(pendingHead ? { pendingHead } : {}),
-        due: listingDue(cache, timestamp),
-      };
-    } catch {
-      // The bodies did not load. Keep the previous listing and its time.
-      return failedDefault(cached, pendingHead, review.pull);
-    }
+    const files = await readInto(
+      current.files,
+      unloadedMetadataPaths(current.files, review.paths),
+      defaultBranch,
+      review,
+      request,
+    );
+    const cache = withPull(current, files, review.pull);
+    return {
+      metadata: displayed(files, overlayFiles(cache, review.pull)),
+      cache,
+      changed: JSON.stringify(cache) !== JSON.stringify(cached),
+      ...(pendingHead ? { pendingHead } : {}),
+      due: listingDue(cache, timestamp),
+    };
   } catch {
+    // A listing or body failure keeps the previous copy and its time.
     return failedDefault(cached, pendingHead, review.pull);
   }
 }
@@ -150,7 +146,9 @@ export async function readPullMetadata(
   const key = String(review.pull);
   const saved = base.cache.overlays[key];
   const timestamp = now();
-  if (paths.length === 0) return unchanged(base);
+  if (paths.length === 0) {
+    return { metadata: base.metadata, cache: base.cache, changed: false, due: false };
+  }
   if (
     saved &&
     overlayDue(saved, timestamp) &&
@@ -170,10 +168,6 @@ export async function readPullMetadata(
     request,
     resolveHead,
   });
-}
-
-function unchanged(base: DefaultMetadata): DefaultMetadata {
-  return { metadata: base.metadata, cache: base.cache, changed: false, due: false };
 }
 
 function servePull(
