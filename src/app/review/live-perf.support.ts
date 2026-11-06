@@ -6,8 +6,8 @@ export type { RedrawCounts };
 export const defaultLivePrUrl =
   'https://github.com/sha-tm/diffseek-test-data/pull/1/changes?new_files_changed=true';
 
-/** Seed `185108` fixture tree marks exactly this many files generated. */
-export const expectedGeneratedTotal = 86;
+/** Deleted `neutral/.gitattributes` still matches tip `neutral/** linguist-generated`. */
+export const expectedGeneratedTotal = 87;
 
 /**
  * Cold is a first load with an empty extension cache. Warm is a reload.

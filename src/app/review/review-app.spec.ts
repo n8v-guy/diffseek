@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
+import { writeCache, type FilterDefaults } from '@diffseek/browser';
 import type { PageSnapshot } from '@diffseek/github';
 import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 import type {
@@ -8,8 +9,14 @@ import type {
   RepositoryMetadata,
 } from '@diffseek/repository-metadata';
 
-import type { DefaultMetadata } from '../metadata/reader';
+import {
+  readImmediateMetadata,
+  readPullMetadata,
+  refreshDefaultMetadata,
+  type DefaultMetadata,
+} from '../metadata/reader';
 
+import type { QuietClock } from './quiet-revalidate';
 import { startReviewApp } from './review-app';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
@@ -286,16 +293,20 @@ describe('review app lifecycle', () => {
     );
     await until(async () => {
       const stored = await fakeBrowser.storage.local.get('diffseek:metadata:octo/repo');
-      expect(stored['diffseek:metadata:octo/repo']).toMatchObject({ version: 3, files });
+      expect(stored['diffseek:metadata:octo/repo']).toMatchObject({ version: 4, files });
     });
     expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
     expect(refreshDefault).toHaveBeenCalledOnce();
     app.stop();
   });
 
-  it('keeps cached metadata and skips the PR side when the default read fails', async () => {
+  it('keeps cached metadata and still reads the pull when the default read fails', async () => {
     openMenu();
-    const readPull = vi.fn();
+    let pulls = 0;
+    const readPull = signalled(async () => {
+      pulls += 1;
+      throw new Error('pull unavailable');
+    });
     const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '',
@@ -307,10 +318,8 @@ describe('review app lifecycle', () => {
       readPull,
     });
 
-    await until(() =>
-      expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull(),
-    );
-    expect(readPull).not.toHaveBeenCalled();
+    await until(() => expect(pulls).toBe(1));
+    expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull();
     app.stop();
   });
 
@@ -692,6 +701,159 @@ describe('metadata refresh', () => {
     app.stop();
   });
 
+  it('stores metadata without a pass when nothing shown depends on it', async () => {
+    const shown: FilterDefaults = { hidden: new Set(), viewed: new Set() };
+    let resolveDefault = (_value: DefaultMetadata): void => undefined;
+    const refreshDefault = vi.fn(
+      () => new Promise<DefaultMetadata>((resolve) => {
+        resolveDefault = resolve;
+      }),
+    );
+    const readPull = vi.fn(async (_review: unknown, base: DefaultMetadata) => base.metadata);
+    const app = await reviewApp({
+      refreshDefault: signalled(refreshDefault),
+      readPull: signalled(readPull),
+      readFilterDefaults: async () => shown,
+    });
+    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
+    const entries = reconcileEntries();
+
+    resolveDefault(
+      loadedDefault({ codeowners: '', attributes: 'src/** group=Later' }, true),
+    );
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
+    expect(document.querySelector('[data-filter-value="Later"]')).toBeNull();
+
+    openMenu();
+    await until(() =>
+      expect(document.querySelector('[data-filter-value="Later"]')).not.toBeNull(),
+    );
+    expect(reconcileEntries()).toBe(entries + 1);
+    app.stop();
+  });
+
+  it('reconciles when generated files are auto-viewed even if the metadata is unchanged', async () => {
+    const autoView: FilterDefaults = { hidden: new Set(), viewed: new Set(['generated']) };
+    let resolveDefault = (_value: DefaultMetadata): void => undefined;
+    const refreshDefault = vi.fn(
+      () => new Promise<DefaultMetadata>((resolve) => {
+        resolveDefault = resolve;
+      }),
+    );
+    const app = await reviewApp({
+      refreshDefault: signalled(refreshDefault),
+      readFilterDefaults: async () => autoView,
+      readImmediate: async () => emptyMetadata,
+    });
+    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
+    const entries = reconcileEntries();
+    resolveDefault(loadedDefault(emptyMetadata));
+    await until(() => expect(reconcileEntries()).toBeGreaterThan(entries));
+    app.stop();
+  });
+
+  it('rereads a due cache once after the page is quiet, then only after another change', async () => {
+    openMenu();
+    const clock = manualClock();
+    let reads = 0;
+    const refreshDefault = vi.fn<
+      (
+        review: { paths: string[] },
+        options?: { revalidate?: boolean },
+      ) => Promise<DefaultMetadata>
+    >(async () => {
+      reads += 1;
+      const attributes = reads === 1 ? 'src/** group=Cached' : 'src/** group=Reread';
+      return { ...loadedDefault({ codeowners: '', attributes }), due: true };
+    });
+    const app = await reviewApp({
+      quietClock: clock.clock,
+      refreshDefault: signalled(refreshDefault),
+      readFilterDefaults: async () => ({ hidden: new Set(), viewed: new Set() }),
+    });
+    await until(() =>
+      expect(document.querySelector('[data-filter-value="Cached"]')).not.toBeNull(),
+    );
+    expect(refreshDefault.mock.calls[0]?.[1]).toEqual({ revalidate: false });
+    expect(clock.armed()).toBe(true);
+
+    const own = document.createElement('div');
+    own.dataset.diffseek = 'snackbar';
+    document.body.append(own);
+    clock.fire();
+    await until(() =>
+      expect(document.querySelector('[data-filter-value="Reread"]')).not.toBeNull(),
+    );
+    expect(refreshDefault.mock.calls[1]?.[1]).toEqual({ revalidate: true });
+    expect(refreshDefault).toHaveBeenCalledTimes(2);
+    expect(clock.armed()).toBe(false);
+    clock.fire();
+    expect(refreshDefault).toHaveBeenCalledTimes(2);
+
+    const item = document.createElement('li');
+    item.id = 'src/quiet.ts';
+    item.setAttribute('role', 'treeitem');
+    document.querySelector('[role="tree"]')?.append(item);
+    await until(() => expect(clock.armed()).toBe(true));
+    app.stop();
+    expect(clock.armed()).toBe(false);
+    clock.fire();
+    expect(refreshDefault).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not reread just because the review navigates to another pull request', async () => {
+    let path = changesPath;
+    const clock = manualClock();
+    const refreshDefault = vi.fn<
+      (
+        review: { paths: string[] },
+        options?: { revalidate?: boolean },
+      ) => Promise<DefaultMetadata>
+    >(async () => ({
+      ...loadedDefault(emptyMetadata),
+      due: true,
+    }));
+    const app = await reviewApp(
+      {
+        quietClock: clock.clock,
+        refreshDefault: signalled(refreshDefault),
+      },
+      () => path,
+    );
+    await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
+    await nextReconcile(() => {
+      path = '/octo/repo/pull/2/changes';
+      document.body.append(document.createElement('span'));
+    });
+    await until(() => expect(refreshDefault).toHaveBeenCalledTimes(2));
+    expect(refreshDefault.mock.calls[1]?.[1]).toEqual({ revalidate: false });
+    app.stop();
+  });
+
+  it('reads a metadata path that arrives while the pull read is in flight', async () => {
+    let resolvePull = (_value: RepositoryMetadata): void => undefined;
+    const readPull = vi.fn<(review: { paths: string[] }) => Promise<RepositoryMetadata>>(
+      () => new Promise<RepositoryMetadata>((resolve) => {
+        resolvePull = resolve;
+      }),
+    );
+    const app = await reviewApp({
+      readPull: signalled(readPull),
+      readFilterDefaults: async () => ({ hidden: new Set(), viewed: new Set() }),
+    });
+    await until(() => expect(readPull).toHaveBeenCalledOnce());
+    expect(readPull.mock.calls[0]?.[0].paths ?? []).not.toContain('kitana/.gitattributes');
+
+    await streamTreeItem('kitana/.gitattributes');
+    expect(readPull).toHaveBeenCalledOnce();
+
+    resolvePull(emptyMetadata);
+    await until(() => expect(readPull).toHaveBeenCalledTimes(2));
+    expect(readPull.mock.calls[1]?.[0].paths ?? []).toContain('kitana/.gitattributes');
+    resolvePull(emptyMetadata);
+    app.stop();
+  });
+
   it('reads the PR side again only when a streamed path is itself metadata', async () => {
     const refreshDefault = vi.fn().mockResolvedValue(loadedDefault(immediate));
     const readPull = vi.fn(async (_review: { paths: string[] }, base: DefaultMetadata) => base.metadata);
@@ -725,6 +887,58 @@ describe('metadata refresh', () => {
     expect(readPull).toHaveBeenCalledOnce();
     app.reconcile();
     expect(readPull).toHaveBeenCalledOnce();
+    app.stop();
+  });
+
+  it('does not revive a stored deletion when the head lookup fails', async () => {
+    openMenu();
+    document.querySelector('[role="tree"]')?.insertAdjacentHTML(
+      'beforeend',
+      `<li id="CODEOWNERS" role="treeitem" aria-label="CODEOWNERS">
+        <div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-removed"></svg></div>
+        <a href="#diff-CODEOWNERS">CODEOWNERS</a>
+      </li>`,
+    );
+    await writeCache(
+      { owner: 'octo', repo: 'repo' },
+      {
+        files: { '.gitattributes': { blob: 'g', text: 'src/** group=Revived' } },
+        refreshedAt: Date.now(),
+        pulls: [1],
+        overlays: {
+          '1': {
+            oid: 'd'.repeat(40),
+            refreshedAt: Date.now(),
+            files: { '.gitattributes': null },
+          },
+        },
+      },
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let revived = false;
+    const note = (): void => {
+      if (document.querySelector('[data-filter-value="Revived"]')) revived = true;
+    };
+    document.addEventListener('diffseek-reconciled', note);
+    const resolveHead = vi.fn(async () => {
+      throw new Error('commits 500');
+    });
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => changesPath,
+      readImmediate: readImmediateMetadata,
+      refreshDefault: (review, read) =>
+        refreshDefaultMetadata(review, { ...read, resolveHead: signalled(resolveHead) }),
+      readPull: (review, base, read) =>
+        readPullMetadata(review, base, { ...read, resolveHead: signalled(resolveHead) }),
+    });
+    await until(() => expect(resolveHead).toHaveBeenCalledTimes(4));
+    await until(() =>
+      expect(document.querySelector('[data-diffseek="filters"]')).not.toBeNull(),
+    );
+    expect(document.querySelector('[data-filter-value="Revived"]')).toBeNull();
+    expect(revived).toBe(false);
+    document.removeEventListener('diffseek-reconciled', note);
     app.stop();
   });
 });
@@ -1427,3 +1641,27 @@ describe('review app interactions', () => {
     app.stop();
   });
 });
+
+function reconcileEntries(): number {
+  return Number(document.documentElement.dataset.diffseekReconcileEntries ?? 0);
+}
+
+function manualClock(): { clock: QuietClock; fire: () => void; armed: () => boolean } {
+  let run: (() => void) | undefined;
+  return {
+    clock: {
+      arm(next) {
+        run = next;
+      },
+      cancel() {
+        run = undefined;
+      },
+    },
+    fire() {
+      const current = run;
+      run = undefined;
+      current?.();
+    },
+    armed: () => run !== undefined,
+  };
+}

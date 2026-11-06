@@ -4,9 +4,16 @@ import {
   filterMenus,
   treeStructureKey,
 } from '@diffseek/github';
-import type { RepositoryMetadata } from '@diffseek/repository-metadata';
+import {
+  pullMetadataPaths,
+  unloadedMetadataPaths,
+  type MetadataFiles,
+  type RepositoryMetadata,
+} from '@diffseek/repository-metadata';
 
 import type { DefaultMetadata } from '../metadata/reader';
+
+import type { QuietRevalidate } from './quiet-revalidate';
 
 type MetadataRead = {
   readPull: (base: DefaultMetadata) => Promise<DefaultMetadata>;
@@ -15,6 +22,7 @@ type MetadataRead = {
   aborted: () => boolean;
   apply: (metadata: RepositoryMetadata) => void;
   onSettled?: () => void;
+  onFinished?: (settled: boolean) => void;
 };
 
 export type MetadataWatch = {
@@ -28,6 +36,8 @@ export type MetadataRefresh = {
   settled: boolean;
   flight: Promise<void> | null;
   pending: boolean;
+  /** One follow-up after a failure. Mutations do not set this. */
+  failureRetry: boolean;
 };
 
 export function metadataWatch(): MetadataWatch {
@@ -35,7 +45,7 @@ export function metadataWatch(): MetadataWatch {
 }
 
 export function metadataRefreshState(): MetadataRefresh {
-  return { settled: false, flight: null, pending: false };
+  return { settled: false, flight: null, pending: false, failureRetry: false };
 }
 
 /** First observation records the baseline and does not count as a retry. */
@@ -62,16 +72,37 @@ export function loadReviewMetadata(
   state: MetadataRefresh,
   options: MetadataRead,
 ): void {
-  beginMetadataRefresh(state, () => replaceReviewMetadata(options), options.onSettled);
+  beginMetadataRefresh(
+    state,
+    () => replaceReviewMetadata(options),
+    options.onSettled,
+    options.onFinished,
+  );
 }
 
+const emptyDefault: DefaultMetadata = {
+  metadata: { codeowners: '', attributes: '' },
+  cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
+  changed: false,
+  due: true,
+  failed: true,
+};
+
 async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
+  if (options.aborted()) return false;
+  let base: DefaultMetadata | undefined;
   try {
-    const base = await options.refreshDefault();
-    if (options.aborted()) return false;
+    base = await options.refreshDefault();
+  } catch (error) {
+    reportReadFailure(error);
+  }
+  if (options.aborted()) return false;
+  if (base) {
     options.apply(base.metadata);
     if (base.changed) await options.commit(base.cache).catch(() => false);
-    const pulled = await options.readPull(base);
+  }
+  try {
+    const pulled = await options.readPull(base ?? emptyDefault);
     if (options.aborted()) return false;
     options.apply(pulled.metadata);
     if (pulled.changed) await options.commit(pulled.cache).catch(() => false);
@@ -91,6 +122,7 @@ function beginMetadataRefresh(
   state: MetadataRefresh,
   start: () => Promise<boolean>,
   onSettled?: () => void,
+  onFinished?: (settled: boolean) => void,
 ): void {
   if (state.settled) return;
   if (state.flight) {
@@ -101,17 +133,198 @@ function beginMetadataRefresh(
   const flight = start()
     .catch(() => false)
     .then((settled) => {
-      if (settled) {
+      const ok = settled;
+      if (ok) {
         state.settled = true;
         onSettled?.();
       }
+      onFinished?.(ok);
+      return ok;
     })
-    .finally(() => {
+    .then((ok) => {
       if (state.flight !== flight) return;
       state.flight = null;
-      if (!state.pending || state.settled) return;
+      // Restart for a path that arrived during a successful read, or for the
+      // one failure follow-up. A mutation only records pending.
+      const retry = state.failureRetry;
+      state.failureRetry = false;
+      const restart = ok && state.pending && !state.settled;
       state.pending = false;
-      beginMetadataRefresh(state, start, onSettled);
+      if (restart || retry) beginMetadataRefresh(state, start, onSettled, onFinished);
     });
   state.flight = flight;
+}
+
+export type TrackedMetadata = {
+  requested: boolean;
+  flight: boolean;
+  defaultDue: boolean;
+  pullDue: boolean;
+  defaultFailed: boolean;
+  pullFailed: boolean;
+  /** A failed lookup ignores page changes until the quiet retry asks again. */
+  held: boolean;
+  /** The failure already had its one immediate follow-up. */
+  retried: boolean;
+  seenPaths: string;
+  readPullPaths: Set<string>;
+  files: MetadataFiles;
+};
+
+export function trackedMetadata(): TrackedMetadata {
+  return {
+    requested: false,
+    flight: false,
+    defaultDue: false,
+    pullDue: false,
+    defaultFailed: false,
+    pullFailed: false,
+    held: false,
+    retried: false,
+    seenPaths: '',
+    readPullPaths: new Set(),
+    files: {},
+  };
+}
+
+function pathKey(paths: readonly string[]): string {
+  return [...paths]
+    .sort((left, right) => left.localeCompare(right))
+    .join('\n');
+}
+
+/** Null when this tree was already considered. `stale` reopens the read. */
+export function streamedMetadataStale(
+  settled: boolean,
+  state: TrackedMetadata,
+  paths: readonly string[],
+): { stale: boolean } | null {
+  const key = pathKey(paths);
+  if (!settled || key === state.seenPaths) return null;
+  const pullPaths = pullMetadataPaths(paths);
+  const stale =
+    unloadedMetadataPaths(state.files, paths).length > 0 ||
+    pullPaths.some((path) => !state.readPullPaths.has(path));
+  if (!stale) state.seenPaths = key;
+  return { stale };
+}
+
+async function readTrackedDefault(
+  state: TrackedMetadata,
+  read: (revalidate: boolean) => Promise<DefaultMetadata>,
+): Promise<DefaultMetadata> {
+  const revalidate = state.requested;
+  state.requested = false;
+  state.flight = revalidate;
+  try {
+    const result = await read(revalidate);
+    state.files = result.cache.files;
+    state.defaultDue = result.due === true;
+    state.defaultFailed = result.failed === true;
+    return result;
+  } catch (error) {
+    state.defaultDue = true;
+    state.defaultFailed = true;
+    throw error;
+  }
+}
+
+async function readTrackedPull(
+  state: TrackedMetadata,
+  paths: readonly string[],
+  read: () => Promise<DefaultMetadata>,
+): Promise<DefaultMetadata> {
+  try {
+    const result = await read();
+    for (const path of pullMetadataPaths(paths)) state.readPullPaths.add(path);
+    state.seenPaths = pathKey(paths);
+    state.pullDue = result.due === true;
+    state.pullFailed = result.failed === true;
+    return result;
+  } catch (error) {
+    state.pullDue = true;
+    state.pullFailed = true;
+    throw error;
+  }
+}
+
+type SessionMetadataLoad = {
+  state: MetadataRefresh;
+  tracked: TrackedMetadata;
+  quiet: QuietRevalidate;
+  paths: () => string[];
+  readDefault: (revalidate: boolean) => Promise<DefaultMetadata>;
+  readPull: (base: DefaultMetadata, revalidate: boolean) => Promise<DefaultMetadata>;
+  commit: (cache: RepositoryCache) => Promise<boolean>;
+  aborted: () => boolean;
+  autoView: boolean;
+  current: () => RepositoryMetadata;
+  needsPass: () => boolean;
+  schedule: () => void;
+  store: (metadata: RepositoryMetadata) => void;
+  /** A tree that arrived during this read still needs metadata. Clears settled. */
+  reopen: () => boolean;
+};
+
+export function loadSessionMetadata(load: SessionMetadataLoad): void {
+  if (load.tracked.held && !load.tracked.requested) return;
+  load.tracked.held = false;
+  loadReviewMetadata(load.state, {
+    refreshDefault: () => readTrackedDefault(load.tracked, load.readDefault),
+    readPull: (base) =>
+      readTrackedPull(load.tracked, load.paths(), () =>
+        load.readPull(base, load.tracked.flight),
+      ),
+    commit: load.commit,
+    aborted: load.aborted,
+    onSettled: () => {
+      if (load.autoView) load.schedule();
+    },
+    onFinished: () => {
+      if (load.aborted()) return;
+      if (finishTrackedRead(load.tracked, load.quiet)) {
+        load.state.failureRetry = true;
+        load.state.settled = false;
+        return;
+      }
+      if (load.reopen()) load.state.pending = true;
+    },
+    apply: (metadata) => {
+      if (JSON.stringify(load.current()) === JSON.stringify(metadata)) return;
+      load.store(metadata);
+      if (load.needsPass()) load.schedule();
+    },
+  });
+}
+
+/** A failed reread stays due until the page changes. A pending reread is left to restart. */
+function finishTrackedRead(
+  state: TrackedMetadata,
+  quiet: QuietRevalidate,
+): boolean {
+  const revalidated = state.flight;
+  state.flight = false;
+  const failed = state.defaultFailed || state.pullFailed;
+  state.defaultFailed = false;
+  state.pullFailed = false;
+  if (failed) {
+    if (!state.retried) {
+      state.retried = true;
+      state.held = false;
+      if (revalidated) state.requested = true;
+      quiet.cancel();
+      return true;
+    }
+    state.held = true;
+    if (revalidated) quiet.noteAttempt(true);
+    else quiet.noteStale();
+    return false;
+  }
+  state.retried = false;
+  const due = state.defaultDue || state.pullDue;
+  if (revalidated) quiet.noteAttempt(due);
+  else if (state.requested) return false;
+  else if (due) quiet.noteStale();
+  else quiet.noteFresh();
+  return false;
 }

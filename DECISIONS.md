@@ -26,21 +26,23 @@ One github.com code search lists every .gitattributes and CODEOWNERS path with
 its blob. Exactly one CODEOWNERS is chosen from those paths (.github/, root,
 docs/) and only .gitattributes files in an ancestor-or-same directory of a diff
 path are read. The cache holds the listing and the texts per repository, keyed
-by blob, and refreshes with a new search once a day or on every third distinct
-pull request. Warm and hot reviews make no metadata request. Two exceptions:
-a known ancestor .gitattributes that a streamed path newly needs, and a
-metadata file in the diff, which is read once per pull on the head and
-replaces that one default file. Its head oid and texts stay in the cache entry
-until the default branch refreshes. A deleted chosen CODEOWNERS falls to the
-next known one on the default branch. Streamed paths never restart or reset a
-read. A signed-in search with no results is a valid answer: it is cached as a
-listing of none and never probed. Search is unusable on an HTTP error, a
-non-JSON response, an unexpected shape, search errors, `logged_in !== true`
-(signed out), or too many pages. Then any cached entry is kept as is, and only
-with no cache entry does it read at most three CODEOWNERS spots and the root
-.gitattributes instead. Failures are not stored. A failed read is retried, one at a time,
-when the menu opens or the tree changes, never on a timer. Entries from the
-older per-pull cache are ignored and dropped.
+by blob. How long that cache lasts, and when a due copy is reread, is D016.
+Warm and hot reviews make no metadata request while those copies are fresh.
+Two reads do not wait for that reread: a known ancestor .gitattributes that a
+streamed path newly needs, and a metadata file in the diff that this pull has
+not cached. That file is read at the pull's head and replaces the one default
+file. Only paths in the diff are read from the pull. A deleted chosen
+CODEOWNERS falls to the next known one on the default branch. A late path is
+not missed because an earlier tree was shorter or the same size. A signed-in
+search with no results is a valid answer: it is cached as a listing of none
+and never probed. Search is unusable on an HTTP error, a non-JSON response, an
+unexpected shape, search errors, `logged_in !== true` (signed out), or too many
+pages. Then any cached entry is kept as is, and only with no cache entry does
+it read at most three CODEOWNERS spots and the root .gitattributes instead.
+Failures are not stored and do not refresh the entry's time. The next try
+waits for a quiet page (D016). A version 3 entry is kept; a pull overlay
+without its own time is as old as its listing. Entries from the older
+per-pull cache are ignored and dropped.
 
 **Why:** Probing each touched folder at the pull-request head made cold loads
 slower and redrew more. One listing finds every file, and a blob-keyed cache
@@ -179,7 +181,8 @@ count. A newer notification replaces it, and clicking it closes it at once.
 fast ones, and they hide what the code is actually waiting for. **Cost:** A
 streamed page can get one pass per frame instead of one per quiet period, and a background tab defers coalesced passes until it is shown. A
 notification no longer disappears on its own while the reviewer only reads,
-and the minimum is a timer: it reads the same on every machine.
+and the minimum is a timer: it reads the same on every machine. A due metadata
+reread waits until the page has been quiet (D016); that wait is the other timer.
 
 ## D014 — Defaults apply only when the repository has no guidance
 
@@ -208,3 +211,29 @@ not a reconcile.
 **Why:** Passes happen only when something visible changed, and the triggers
 are the few calls to that queue. **Cost:** A filter click applies at the next
 task, not inside the click, and metadata lands up to one frame later.
+
+## D016 — A due metadata copy waits for a quiet page
+
+**Decision:** The default-branch listing stays for 7 days. Each pull request's
+own metadata files stay for 2 days, separate from that listing. A review shows
+the cached copy immediately. When a copy is due, it is reread once the page
+has had no native changes for 3 seconds, and not again until the page changes.
+DiffSeek's own writes do not reset that wait. A failed reread keeps the cached
+text and its original time. Metadata is fetched from the pull request only for
+paths in the diff. A diff path the pull copy does not have yet confirms the
+pull head first; an unchanged head reuses the stored files and does not extend
+their time. A file already stored, including a deletion, stays until that copy
+is due. Listing bodies are read from the default branch, not the pull head. A
+failed default-branch read does not block those pull files and does not refresh
+the stored time. A failed lookup is tried once more, then waits until the
+page has been quiet. One pull-head lookup is shared while it is in flight. A
+metadata message the
+service worker never answers is abandoned after the same guard as the network
+read.
+
+**Why:** A fresh copy should survive navigation, and a due reread should not
+compete with files that are still streaming in. **Cost:** Until the page goes
+quiet, a listing can be 7 days old and a pull-request file 2 days old. A page
+that never goes quiet keeps serving that copy; newly arrived diff paths are
+still read. After one immediate retry, a second failure uses that same
+wait, and a path that arrived during the failure is part of the next try.
