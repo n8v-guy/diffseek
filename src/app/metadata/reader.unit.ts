@@ -625,6 +625,42 @@ describe('pull request side', () => {
     expect(stored?.overlays).toEqual({});
   });
 
+  it('does not read the pull tip when search, the HEAD probe, and the head lookup fail', async () => {
+    const request = vi.fn<Raw>(async ({ ref, path }) => {
+      throw new Error(`${ref} ${path}`);
+    });
+    const search = vi.fn(async () => {
+      throw new Error('search unavailable');
+    });
+    const resolveHead = vi.fn(async () => {
+      throw new Error('commits 500');
+    });
+    const review = {
+      ...repository,
+      pull: 1,
+      paths: ['.gitattributes', 'neutral/.gitattributes'],
+    };
+    const base = await refreshDefaultMetadata(review, {
+      request,
+      search,
+      resolveHead,
+      now: () => 0,
+    });
+
+    expect(base.failed).toBe(true);
+    expect(base.changed).toBe(false);
+    expect(base.metadata.attributes).toBe('');
+    await expect(
+      readPullMetadata(review, base, { request, resolveHead, now: () => 0 }),
+    ).rejects.toThrow('commits 500');
+    expect(search).toHaveBeenCalledOnce();
+    expect(resolveHead).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls.map(([input]) => [input.ref, input.path])).toEqual([
+      ['HEAD', '.gitattributes'],
+    ]);
+    expect(await readCache(repository)).toBeNull();
+  });
+
   it('does not look up a head when the diff has no metadata file', async () => {
     const resolveHead = vi.fn(async () => head);
     await refreshDefaultMetadata(
