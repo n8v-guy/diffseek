@@ -28,12 +28,9 @@ import {
   type ReviewRef,
   type ViewedTarget,
 } from '@diffseek/github';
-import {
-  pullMetadataPaths,
-  unloadedMetadataPaths,
-  type MetadataCommitGuard,
-  type MetadataFiles,
-  type RepositoryMetadata,
+import type {
+  MetadataCommitGuard,
+  RepositoryMetadata,
 } from '@diffseek/repository-metadata';
 import {
   changedSurfaces,
@@ -50,13 +47,23 @@ import type { DefaultMetadata } from '../metadata/reader';
 import { ViewedActionExecutor } from './action-executor';
 import {
   consumeMetadataOpportunity,
-  loadReviewMetadata,
+  loadSessionMetadata,
   metadataRefreshState,
   metadataWatch,
+  streamedMetadataStale,
+  trackedMetadata,
+  type TrackedMetadata,
 } from './metadata-refresh';
+import {
+  sessionQuiet,
+  type QuietClock,
+  type QuietRevalidate,
+} from './quiet-revalidate';
 import {
   installRedrawTrace,
   noteReconcile,
+  noteReconcileEntry,
+  noteReconcileNoop,
   trackDiffseekWrites,
 } from './redraw-trace';
 import {
@@ -85,11 +92,14 @@ export type ReviewSessionOptions = {
   metadataCommits: MetadataCommitGuard<RepositoryCache>;
   refreshDefault: (
     review: ReviewRef & { paths: string[] },
+    options?: { revalidate?: boolean },
   ) => Promise<DefaultMetadata>;
   readPull: (
     review: ReviewRef & { paths: string[] },
     base: DefaultMetadata,
+    options?: { revalidate?: boolean },
   ) => Promise<DefaultMetadata>;
+  quietClock?: QuietClock;
   markFiles: typeof markViewed;
   filterDefaults: FilterDefaults;
   writeFilterDefaults: (defaults: FilterDefaults) => Promise<void>;
@@ -126,9 +136,8 @@ export class ReviewSession {
   private classifyKey = '';
   private unavailable = new Map<string, string>();
   private metadata: RepositoryMetadata;
-  private metadataFiles: MetadataFiles = {};
-  private metadataPathCount = 0;
-  private pullPathCount = 0;
+  private readonly tracked: TrackedMetadata = trackedMetadata();
+  private readonly quiet: QuietRevalidate;
 
   private readonly options: ReviewSessionOptions;
 
@@ -165,6 +174,9 @@ export class ReviewSession {
       if (path) this.actionExecutor.invalidate(path);
     };
     options.root.addEventListener('click', this.onNativeClick, true);
+    this.quiet = sessionQuiet(options.root, options.quietClock, () =>
+      this.requestRevalidation(),
+    );
     installRedrawTrace(options.root);
     delete options.root.documentElement.dataset.diffseekFirstRenderEpoch;
     this.observer = new MutationObserver((records) => {
@@ -208,6 +220,7 @@ export class ReviewSession {
   stop(): void {
     if (this.lifecycle.signal.aborted) return;
     this.lifecycle.abort();
+    this.quiet.cancel();
     this.options.metadataCommits.invalidate(this.options.review);
     this.actionExecutor.cancel();
     this.options.root.removeEventListener('click', this.onNativeClick, true);
@@ -219,6 +232,7 @@ export class ReviewSession {
   }
 
   private reconcileOnce(): void {
+    noteReconcileEntry(this.options.root);
     const firstObservation = !this.metadataWatch.ready;
     const metadataOpportunity =
       consumeMetadataOpportunity(this.metadataWatch, this.options.root) || firstObservation;
@@ -304,10 +318,10 @@ export class ReviewSession {
     const staleMenus = change.menu ? menus : menus.filter(menuNeedsRemount);
     if (!pageStale && staleMenus.length === 0 && defaultViewedPaths.length === 0) {
       // GitHub expanding a filtered file changes neither key. Re-collapse it.
-      if (filteredFileExpanded(root)) {
-        this.presenter.apply(catalogSnapshot, this.filters);
-      }
+      const expanded = filteredFileExpanded(root);
+      if (expanded) this.presenter.apply(catalogSnapshot, this.filters);
       this.reattachObservers();
+      if (!expanded) noteReconcileNoop(root);
       return;
     }
     trackDiffseekWrites(root, () => {
@@ -344,6 +358,7 @@ export class ReviewSession {
 
   /** Page noise during an auto-view batch is ignored; the batch ends with a pass. */
   private onPageMutation(options: PanelScheduleOptions): void {
+    this.quiet.activity();
     if (this.defaultViewedInFlight === 0) this.schedule(options);
   }
 
@@ -430,46 +445,65 @@ export class ReviewSession {
     });
   }
 
-  /** Streamed paths only reopen a settled read for files not loaded yet. */
+  /** The path set, not its length: a same-sized tree can still gain a metadata file. */
   private reopenStaleMetadata(): boolean {
-    const paths = this.catalogPaths();
-    if (!this.metadataRefresh.settled || paths.length === this.metadataPathCount) {
-      return false;
-    }
-    this.metadataPathCount = paths.length;
-    const stale =
-      unloadedMetadataPaths(this.metadataFiles, paths).length > 0 ||
-      pullMetadataPaths(paths).length > this.pullPathCount;
-    if (stale) this.metadataRefresh.settled = false;
-    return stale;
+    const next = streamedMetadataStale(
+      this.metadataRefresh.settled,
+      this.tracked,
+      this.catalogPaths(),
+    );
+    if (!next?.stale) return false;
+    this.metadataRefresh.settled = false;
+    return true;
   }
 
   private catalogPaths(): string[] {
     return this.catalog.files().map((file) => file.path);
   }
 
+  private requestRevalidation(): void {
+    if (this.lifecycle.signal.aborted) return;
+    this.tracked.requested = true;
+    this.metadataRefresh.settled = false;
+    this.refreshMetadata();
+  }
+
   private refreshMetadata(): void {
-    loadReviewMetadata(this.metadataRefresh, {
-      refreshDefault: async () => {
-        const result = await this.options.refreshDefault({
-          ...this.options.review,
-          paths: this.catalogPaths(),
-        });
-        this.metadataFiles = result.cache.files;
-        return result;
-      },
-      readPull: (base) => {
-        const paths = this.catalogPaths();
-        this.pullPathCount = pullMetadataPaths(paths).length;
-        return this.options.readPull({ ...this.options.review, paths }, base);
-      },
-      commit: (cache) => this.options.metadataCommits.commit(this.options.review, this.metadataRevision, cache),
+    loadSessionMetadata({
+      state: this.metadataRefresh,
+      tracked: this.tracked,
+      quiet: this.quiet,
+      paths: () => this.catalogPaths(),
+      readDefault: (revalidate) =>
+        this.options.refreshDefault(
+          { ...this.options.review, paths: this.catalogPaths() },
+          { revalidate },
+        ),
+      readPull: (base, revalidate) =>
+        this.options.readPull(
+          { ...this.options.review, paths: this.catalogPaths() },
+          base,
+          { revalidate },
+        ),
+      commit: (cache) =>
+        this.options.metadataCommits.commit(
+          this.options.review,
+          this.metadataRevision,
+          cache,
+        ),
       aborted: () => this.lifecycle.signal.aborted,
-      onSettled: () => this.schedule({ coalesce: true }),
-      apply: (metadata) => {
-        if (JSON.stringify(this.metadata) === JSON.stringify(metadata)) return;
-        this.metadata = metadata; this.classifyKey = ''; this.schedule({ coalesce: true });
+      autoView: this.options.filterDefaults.viewed.has('generated'),
+      current: () => this.metadata,
+      needsPass: () =>
+        excludedFacetCount(this.filters) > 0 ||
+        this.options.filterDefaults.viewed.has('generated') ||
+        filterMenus(this.options.root).length > 0,
+      schedule: () => this.schedule({ coalesce: true }),
+      store: (metadata) => {
+        this.metadata = metadata;
+        this.classifyKey = '';
       },
+      reopen: () => this.reopenStaleMetadata(),
     });
   }
 

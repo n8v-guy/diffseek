@@ -1,5 +1,4 @@
-import { browser } from 'wxt/browser';
-
+import { sendExtensionMessage } from './extension-message';
 import type {
   MetadataSearchRequest,
   MetadataSearchResult,
@@ -19,10 +18,7 @@ export async function searchMetadataFiles(
     type: metadataSearchMessageType,
     request,
   };
-  const result = await browser.runtime.sendMessage<
-    MetadataSearchMessage,
-    MetadataSearchMessageResult
-  >(message);
+  const result = await sendExtensionMessage<MetadataSearchMessageResult>(message);
   if (result.status === 'error') throw new Error(result.message);
   return result.files;
 }

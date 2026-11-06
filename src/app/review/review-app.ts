@@ -8,6 +8,7 @@ import {
 import {
   changesPathFromClassic,
   markViewed,
+  resolvePullHead,
   reviewFromPath,
   type ReviewRef,
 } from '@diffseek/github';
@@ -24,6 +25,7 @@ import {
   type DefaultMetadata,
 } from '../metadata/reader';
 
+import type { QuietClock } from './quiet-revalidate';
 import { ReviewSession } from './review-session';
 
 type ReviewAppOptions = {
@@ -35,11 +37,14 @@ type ReviewAppOptions = {
   readImmediate?: (repository: RepositoryRef) => Promise<RepositoryMetadata>;
   refreshDefault?: (
     review: ReviewRef & { paths: string[] },
+    options?: { revalidate?: boolean },
   ) => Promise<DefaultMetadata>;
   readPull?: (
     review: ReviewRef & { paths: string[] },
     base: DefaultMetadata,
+    options?: { revalidate?: boolean },
   ) => Promise<DefaultMetadata>;
+  quietClock?: QuietClock;
   markFiles?: typeof markViewed;
   readFilterDefaults?: () => Promise<FilterDefaults>;
   writeFilterDefaults?: (defaults: FilterDefaults) => Promise<void>;
@@ -66,8 +71,13 @@ export async function startReviewApp(
   }
   const dependencies = {
     readImmediate: options.readImmediate ?? readImmediateMetadata,
-    refreshDefault: options.refreshDefault ?? refreshDefaultMetadata,
-    readPull: options.readPull ?? readPullMetadata,
+    refreshDefault:
+      options.refreshDefault ??
+      ((review, read) =>
+        refreshDefaultMetadata(review, { ...read, resolveHead: resolvePullHead })),
+    readPull:
+      options.readPull ??
+      ((review, base, read) => readPullMetadata(review, base, read)),
     markFiles: options.markFiles ?? markViewed,
     readFilterDefaults: options.readFilterDefaults ?? readFilterDefaults,
     writeFilterDefaults: options.writeFilterDefaults ?? writeFilterDefaults,
@@ -105,6 +115,7 @@ export async function startReviewApp(
       metadataCommits,
       refreshDefault: dependencies.refreshDefault,
       readPull: dependencies.readPull,
+      ...(options.quietClock ? { quietClock: options.quietClock } : {}),
       markFiles: dependencies.markFiles,
       filterDefaults,
       writeFilterDefaults: dependencies.writeFilterDefaults,
