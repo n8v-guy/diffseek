@@ -1,5 +1,4 @@
-import { browser } from 'wxt/browser';
-
+import { sendExtensionMessage } from './extension-message';
 import type { RawFileRequest, RawFileResult } from './raw-file';
 import {
   rawFileMessageType,
@@ -11,10 +10,7 @@ export async function readRawFile(
   request: RawFileRequest,
 ): Promise<RawFileResult> {
   const message: RawFileMessage = { type: rawFileMessageType, request };
-  const result = await browser.runtime.sendMessage<
-    RawFileMessage,
-    RawFileMessageResult
-  >(message);
+  const result = await sendExtensionMessage<RawFileMessageResult>(message);
   if (result.status === 'error') throw new Error(result.message);
   return result;
 }

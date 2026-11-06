@@ -51,6 +51,8 @@ export type DefaultMetadata = {
   pendingHead?: Promise<string>;
   /** A cached entry is past its TTL and this read left it unchanged. */
   due?: boolean;
+  /** A body or listing read failed. Not stored. The next try waits for quiet. */
+  failed?: boolean;
 };
 
 export async function readImmediateMetadata(
@@ -83,24 +85,50 @@ export async function refreshDefaultMetadata(
   const pendingHead = dependencies.resolveHead
     ? primeHead(review, cached, timestamp, revalidate, dependencies.resolveHead)
     : undefined;
-  const current =
-    cached != null && !(listingDue(cached, timestamp) && revalidate)
-      ? cached
-      : await refreshListing(review, cached, timestamp, request, search);
-  const files = await readInto(
-    current.files,
-    unloadedMetadataPaths(current.files, review.paths),
-    defaultBranch,
-    review,
-    request,
-  );
-  const cache = withPull(current, files, review.pull);
+  // Listing bodies stay on the default branch. A failure here must not block
+  // the pull request's own files, and must not be stored as a fresh listing.
+  try {
+    const current =
+      cached != null && !(listingDue(cached, timestamp) && revalidate)
+        ? cached
+        : await refreshListing(review, cached, timestamp, request, search);
+    try {
+      const files = await readInto(
+        current.files,
+        unloadedMetadataPaths(current.files, review.paths),
+        defaultBranch,
+        review,
+        request,
+      );
+      const cache = withPull(current, files, review.pull);
+      return {
+        metadata: metadataFromFiles(files),
+        cache,
+        changed: JSON.stringify(cache) !== JSON.stringify(cached),
+        ...(pendingHead ? { pendingHead } : {}),
+        due: listingDue(cache, timestamp),
+      };
+    } catch {
+      // The bodies did not load. Keep the previous listing and its time.
+      return failedDefault(cached, pendingHead);
+    }
+  } catch {
+    return failedDefault(cached, pendingHead);
+  }
+}
+
+/** A failed read is not a fresh listing. The pull can still use the head. */
+function failedDefault(
+  cached: RepositoryCache | null,
+  pendingHead: Promise<string> | undefined,
+): DefaultMetadata {
   return {
-    metadata: metadataFromFiles(files),
-    cache,
-    changed: JSON.stringify(cache) !== JSON.stringify(cached),
+    metadata: metadataFromFiles(cached?.files ?? {}),
+    cache: cached ?? { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
+    changed: false,
     ...(pendingHead ? { pendingHead } : {}),
-    due: listingDue(cache, timestamp),
+    due: true,
+    failed: true,
   };
 }
 
@@ -180,16 +208,11 @@ type PullLoad = {
 };
 
 async function loadPull(load: PullLoad): Promise<DefaultMetadata> {
-  const { review, base, paths, saved, key, timestamp, revalidate, request, resolveHead } =
-    load;
+  const { review, base, paths, saved, key, timestamp, revalidate, request } = load;
   const replacing = revalidate && saved != null && overlayDue(saved, timestamp);
   const covered =
     saved != null && paths.every((path) => saved.files[path] !== undefined);
-  const oid =
-    covered && !replacing
-      ? saved.oid
-      : await (base.pendingHead ??
-        resolveHead({ repo: `${review.owner}/${review.repo}`, pull: review.pull }));
+  const oid = await pullOid(load, covered, replacing);
   const previous = saved != null && saved.oid === oid ? saved.files : undefined;
   const missing = previous
     ? paths.filter((path) => previous[path] === undefined)
@@ -237,10 +260,31 @@ async function withFallback(
   let merged = overlaid(next, applicable(overlay, paths));
   const codeowners = chooseCodeowners(Object.keys(merged));
   if (codeowners !== undefined && merged[codeowners]?.text === undefined) {
-    next = await readInto(next, [codeowners], defaultBranch, review, request);
-    merged = overlaid(next, applicable(overlay, paths));
+    try {
+      next = await readInto(next, [codeowners], defaultBranch, review, request);
+      merged = overlaid(next, applicable(overlay, paths));
+    } catch {
+      // The pull texts already read stay usable when the default read fails.
+    }
   }
   return { files: next, merged };
+}
+
+/** One retry when the lookup started beside the listing has already failed. */
+async function pullOid(
+  load: PullLoad,
+  covered: boolean,
+  replacing: boolean,
+): Promise<string> {
+  const { review, base, saved, resolveHead } = load;
+  if (covered && !replacing && saved) return saved.oid;
+  const request = (): Promise<string> =>
+    resolveHead({ repo: `${review.owner}/${review.repo}`, pull: review.pull });
+  try {
+    return await (base.pendingHead ?? request());
+  } catch {
+    return request();
+  }
 }
 
 function primeHead(

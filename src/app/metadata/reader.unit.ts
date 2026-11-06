@@ -162,7 +162,10 @@ describe('cold read', () => {
     const failing = vi.fn<Raw>(async () => {
       throw new Error('Raw file request failed with 429');
     });
-    await expect(refresh(1, ['a.ts'], 0, failing)).rejects.toThrow('429');
+    const failed = await refresh(1, ['a.ts'], 0, failing);
+    expect(failed.failed).toBe(true);
+    expect(failed.changed).toBe(false);
+    expect(failed.cache.refreshedAt).toBe(0);
     expect(await readCache(repository)).toBeNull();
   });
 });
@@ -617,7 +620,7 @@ describe('pull request side', () => {
         now: () => 0,
       }),
     ).rejects.toThrow('offline');
-    expect(resolveHead).toHaveBeenCalledOnce();
+    expect(resolveHead).toHaveBeenCalledTimes(2);
     expect(await readCache(repository)).toEqual(stored);
     expect(stored?.overlays).toEqual({});
   });
@@ -629,6 +632,65 @@ describe('pull request side', () => {
       { request: raw(), search: searching(), resolveHead, now: () => 0 },
     );
     expect(resolveHead).not.toHaveBeenCalled();
+  });
+
+  it('reads listing bodies from HEAD while the pull head is resolved', async () => {
+    const request = raw();
+    const resolveHead = vi.fn(async () => 'a'.repeat(40));
+    await refreshDefaultMetadata(
+      { ...repository, pull: 1, paths: ['apps/.gitattributes'] },
+      { request, search: searching(), resolveHead, now: () => 0 },
+    );
+    expect(resolveHead).toHaveBeenCalledOnce();
+    expect(request.mock.calls.length).toBeGreaterThan(0);
+    expect(request.mock.calls.every(([input]) => input.ref === 'HEAD')).toBe(true);
+  });
+
+  it('keeps the stored listing time when a default-branch body read fails', async () => {
+    await commit(await refresh(1, ['src/a.ts'], 1_000, raw()));
+    const request = vi.fn<Raw>(async () => {
+      throw new Error('raw stalled');
+    });
+    const search = vi.fn(async () =>
+      indexed.map((file) => ({ ...file, blob: `${file.blob}-new` })),
+    );
+    const result = await refreshDefaultMetadata(
+      { ...repository, pull: 1, paths: ['src/a.ts'] },
+      { request, search, now: () => defaultMetadataTtlMs + 1_000, revalidate: true },
+    );
+    expect(result.failed).toBe(true);
+    expect(result.changed).toBe(false);
+    expect(result.cache.refreshedAt).toBe(1_000);
+    expect(result.metadata.attributes).toBe('*.ts group=Code');
+    expect(await readCache(repository)).toMatchObject({ refreshedAt: 1_000 });
+  });
+
+  it('keeps pull attributes when the default CODEOWNERS read fails', async () => {
+    const request = vi.fn<Raw>(async ({ ref }) => {
+      if (ref === 'HEAD') throw new Error('HEAD stalled');
+      return {
+        status: 'found',
+        text: '*.ts linguist-generated',
+        contentType: 'text/plain',
+        url: '',
+      };
+    });
+    const result = await readPullMetadata(
+      { ...repository, pull: 1, paths: ['.gitattributes'] },
+      {
+        metadata: { codeowners: '', attributes: '' },
+        cache: {
+          files: { CODEOWNERS: { blob: 'o2' } },
+          refreshedAt: 0,
+          pulls: [1],
+          overlays: {},
+        },
+        changed: false,
+      },
+      { request, resolveHead: async () => head, now: () => 1 },
+    );
+    expect(result.metadata.attributes).toBe('*.ts linguist-generated');
+    expect(result.failed).toBeUndefined();
   });
 
   it('looks up the head when a cached pull copy lacks a diff path', async () => {

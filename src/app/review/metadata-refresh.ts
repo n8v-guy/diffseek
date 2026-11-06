@@ -78,13 +78,29 @@ export function loadReviewMetadata(
   );
 }
 
+const emptyDefault: DefaultMetadata = {
+  metadata: { codeowners: '', attributes: '' },
+  cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
+  changed: false,
+  due: true,
+  failed: true,
+};
+
 async function replaceReviewMetadata(options: MetadataRead): Promise<boolean> {
+  if (options.aborted()) return false;
+  let base: DefaultMetadata | undefined;
   try {
-    const base = await options.refreshDefault();
-    if (options.aborted()) return false;
+    base = await options.refreshDefault();
+  } catch (error) {
+    reportReadFailure(error);
+  }
+  if (options.aborted()) return false;
+  if (base) {
     options.apply(base.metadata);
     if (base.changed) await options.commit(base.cache).catch(() => false);
-    const pulled = await options.readPull(base);
+  }
+  try {
+    const pulled = await options.readPull(base ?? emptyDefault);
     if (options.aborted()) return false;
     options.apply(pulled.metadata);
     if (pulled.changed) await options.commit(pulled.cache).catch(() => false);
@@ -121,13 +137,16 @@ function beginMetadataRefresh(
         onSettled?.();
       }
       onFinished?.(ok);
+      return ok;
     })
-    .finally(() => {
+    .then((ok) => {
       if (state.flight !== flight) return;
       state.flight = null;
-      if (!state.pending || state.settled) return;
+      // A failure waits for the next quiet period. Chaining it here retries
+      // on every mutation that arrived during the failed lookup.
+      const restart = ok && state.pending && !state.settled;
       state.pending = false;
-      beginMetadataRefresh(state, start, onSettled, onFinished);
+      if (restart) beginMetadataRefresh(state, start, onSettled, onFinished);
     });
   state.flight = flight;
 }
@@ -137,6 +156,10 @@ export type TrackedMetadata = {
   flight: boolean;
   defaultDue: boolean;
   pullDue: boolean;
+  defaultFailed: boolean;
+  pullFailed: boolean;
+  /** A failed lookup ignores page changes until the quiet retry asks again. */
+  held: boolean;
   seenPaths: string;
   readPullPaths: Set<string>;
   files: MetadataFiles;
@@ -148,6 +171,9 @@ export function trackedMetadata(): TrackedMetadata {
     flight: false,
     defaultDue: false,
     pullDue: false,
+    defaultFailed: false,
+    pullFailed: false,
+    held: false,
     seenPaths: '',
     readPullPaths: new Set(),
     files: {},
@@ -187,9 +213,11 @@ async function readTrackedDefault(
     const result = await read(revalidate);
     state.files = result.cache.files;
     state.defaultDue = result.due === true;
+    state.defaultFailed = result.failed === true;
     return result;
   } catch (error) {
-    if (revalidate) state.defaultDue = true;
+    state.defaultDue = true;
+    state.defaultFailed = true;
     throw error;
   }
 }
@@ -197,7 +225,6 @@ async function readTrackedDefault(
 async function readTrackedPull(
   state: TrackedMetadata,
   paths: readonly string[],
-  revalidate: boolean,
   read: () => Promise<DefaultMetadata>,
 ): Promise<DefaultMetadata> {
   try {
@@ -205,9 +232,11 @@ async function readTrackedPull(
     for (const path of pullMetadataPaths(paths)) state.readPullPaths.add(path);
     state.seenPaths = pathKey(paths);
     state.pullDue = result.due === true;
+    state.pullFailed = result.failed === true;
     return result;
   } catch (error) {
-    if (revalidate) state.pullDue = true;
+    state.pullDue = true;
+    state.pullFailed = true;
     throw error;
   }
 }
@@ -231,10 +260,12 @@ type SessionMetadataLoad = {
 };
 
 export function loadSessionMetadata(load: SessionMetadataLoad): void {
+  if (load.tracked.held && !load.tracked.requested) return;
+  load.tracked.held = false;
   loadReviewMetadata(load.state, {
     refreshDefault: () => readTrackedDefault(load.tracked, load.readDefault),
     readPull: (base) =>
-      readTrackedPull(load.tracked, load.paths(), load.tracked.flight, () =>
+      readTrackedPull(load.tracked, load.paths(), () =>
         load.readPull(base, load.tracked.flight),
       ),
     commit: load.commit,
@@ -243,6 +274,7 @@ export function loadSessionMetadata(load: SessionMetadataLoad): void {
       if (load.autoView) load.schedule();
     },
     onFinished: () => {
+      if (load.aborted()) return;
       finishTrackedRead(load.tracked, load.quiet);
       if (load.reopen()) load.state.pending = true;
     },
@@ -261,6 +293,15 @@ function finishTrackedRead(
 ): void {
   const revalidated = state.flight;
   state.flight = false;
+  const failed = state.defaultFailed || state.pullFailed;
+  state.defaultFailed = false;
+  state.pullFailed = false;
+  if (failed) {
+    state.held = true;
+    if (revalidated) quiet.noteAttempt(true);
+    else quiet.noteStale();
+    return;
+  }
   const due = state.defaultDue || state.pullDue;
   if (revalidated) quiet.noteAttempt(due);
   else if (state.requested) return;

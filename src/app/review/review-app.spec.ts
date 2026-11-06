@@ -295,9 +295,13 @@ describe('review app lifecycle', () => {
     app.stop();
   });
 
-  it('keeps cached metadata and skips the PR side when the default read fails', async () => {
+  it('keeps cached metadata and still reads the pull when the default read fails', async () => {
     openMenu();
-    const readPull = vi.fn();
+    let pulls = 0;
+    const readPull = signalled(async () => {
+      pulls += 1;
+      throw new Error('pull unavailable');
+    });
     const app = await reviewApp({
       readImmediate: async () => ({
         codeowners: '',
@@ -309,10 +313,8 @@ describe('review app lifecycle', () => {
       readPull,
     });
 
-    await until(() =>
-      expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull(),
-    );
-    expect(readPull).not.toHaveBeenCalled();
+    await until(() => expect(pulls).toBe(1));
+    expect(document.querySelector('[data-filter-value="cached"]')).not.toBeNull();
     app.stop();
   });
 

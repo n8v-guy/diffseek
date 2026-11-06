@@ -39,11 +39,10 @@ and never probed. Search is unusable on an HTTP error, a non-JSON response, an
 unexpected shape, search errors, `logged_in !== true` (signed out), or too many
 pages. Then any cached entry is kept as is, and only with no cache entry does
 it read at most three CODEOWNERS spots and the root .gitattributes instead.
-Failures are not stored and do not refresh the entry's time. A failed read of
-a file that is not cached yet is retried when the menu opens or the tree
-changes. A version 3 entry is kept; a pull overlay without its own time is as
-old as its listing. Entries from the older per-pull cache are ignored and
-dropped.
+Failures are not stored and do not refresh the entry's time. The next try
+waits for a quiet page (D016). A version 3 entry is kept; a pull overlay
+without its own time is as old as its listing. Entries from the older
+per-pull cache are ignored and dropped.
 
 **Why:** Probing each touched folder at the pull-request head made cold loads
 slower and redrew more. One listing finds every file, and a blob-keyed cache
@@ -224,10 +223,16 @@ text and its original time. Metadata is fetched from the pull request only for
 paths in the diff. A diff path the pull copy does not have yet confirms the
 pull head first; an unchanged head reuses the stored files and does not extend
 their time. A file already stored, including a deletion, stays until that copy
-is due.
+is due. Listing bodies are read from the default branch, not the pull head. A
+failed default-branch read does not block those pull files and does not refresh
+the stored time. The next try waits until the page has been quiet, and one
+pull-head lookup is shared while it is in flight. A metadata message the
+service worker never answers is abandoned after the same guard as the network
+read.
 
 **Why:** A fresh copy should survive navigation, and a due reread should not
 compete with files that are still streaming in. **Cost:** Until the page goes
 quiet, a listing can be 7 days old and a pull-request file 2 days old. A page
 that never goes quiet keeps serving that copy; newly arrived diff paths are
-still read.
+still read. A failed lookup uses that same wait, and a path that arrived
+during the failure is part of the next try.

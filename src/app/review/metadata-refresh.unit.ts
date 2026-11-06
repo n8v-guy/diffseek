@@ -4,10 +4,12 @@ import type { DefaultMetadata } from '../metadata/reader';
 
 import {
   loadReviewMetadata,
+  loadSessionMetadata,
   metadataRefreshState,
   streamedMetadataStale,
   trackedMetadata,
 } from './metadata-refresh';
+import { quietRevalidate } from './quiet-revalidate';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -20,10 +22,14 @@ const base: DefaultMetadata = {
 };
 
 describe('metadata refresh', () => {
-  it('reports a failed default read, skips the PR side and does not settle', async () => {
+  it('still reads the pull request when the default read fails', async () => {
     const failure = new Error('default offline');
     const reported = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const readPull = vi.fn();
+    const pulled = {
+      ...base,
+      metadata: { codeowners: '', attributes: '*.ts linguist-generated' },
+    };
+    const readPull = vi.fn(() => Promise.resolve(pulled));
     const apply = vi.fn();
     const state = metadataRefreshState();
     loadReviewMetadata(state, {
@@ -35,8 +41,32 @@ describe('metadata refresh', () => {
     });
     await state.flight;
     expect(reported).toHaveBeenCalledWith(failure);
-    expect(readPull).not.toHaveBeenCalled();
-    expect(apply).not.toHaveBeenCalled();
+    expect(readPull).toHaveBeenCalledOnce();
+    expect(apply).toHaveBeenCalledExactlyOnceWith(pulled.metadata);
+    expect(state.settled).toBe(true);
+  });
+
+  it('does not chain another lookup after a failure', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let rejectDefault = (_error: Error): void => undefined;
+    const refreshDefault = vi.fn(
+      () => new Promise<DefaultMetadata>((_resolve, reject) => {
+        rejectDefault = reject;
+      }),
+    );
+    const state = metadataRefreshState();
+    loadReviewMetadata(state, {
+      refreshDefault,
+      readPull: vi.fn(),
+      commit: () => Promise.resolve(true),
+      aborted: () => false,
+      apply: vi.fn(),
+    });
+    state.pending = true;
+    rejectDefault(new Error('offline'));
+    await state.flight;
+    expect(refreshDefault).toHaveBeenCalledOnce();
+    expect(state.pending).toBe(false);
     expect(state.settled).toBe(false);
   });
 
@@ -116,6 +146,39 @@ describe('metadata refresh', () => {
     });
     await state.flight;
     expect(onFinished).toHaveBeenLastCalledWith(true);
+  });
+});
+
+describe('failed metadata lookup', () => {
+  it('waits for quiet instead of reading again on the next call', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const state = metadataRefreshState();
+    const tracked = trackedMetadata();
+    const quiet = quietRevalidate({ arm() {}, cancel() {} }, () => undefined);
+    const readPull = vi.fn(() => Promise.reject(new Error('offline')));
+    const load = (): void => {
+      loadSessionMetadata({
+        state,
+        tracked,
+        quiet,
+        paths: () => ['.gitattributes'],
+        readDefault: () => Promise.resolve({ ...base, changed: false }),
+        readPull,
+        commit: () => Promise.resolve(true),
+        aborted: () => false,
+        autoView: false,
+        current: () => base.metadata,
+        needsPass: () => true,
+        schedule: () => undefined,
+        store: () => undefined,
+        reopen: () => false,
+      });
+    };
+    load();
+    await state.flight;
+    load();
+    expect(readPull).toHaveBeenCalledOnce();
+    expect(tracked.held).toBe(true);
   });
 });
 
