@@ -2,8 +2,15 @@ name: Publish Firefox Add-ons
 
 # Manual only (GitHub app → Actions → this workflow → Run workflow, branch: main).
 # Publish stores calls this for the same commit.
+# An optional release tag publishes that existing stable release's commit.
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing published stable release tag (for example v1.0.59). Empty publishes this main commit.
+        required: false
+        type: string
+        default: ""
   workflow_call:
     secrets:
       AMO_JWT_ISSUER:
@@ -26,14 +33,72 @@ jobs:
       - name: Require main branch tip
         id: meta
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           REF: ${{ github.ref }}
           SHA: ${{ github.sha }}
+          # Dispatch-only. workflow_call has no release input.
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
         run: |
-          if [ "$REF" != "refs/heads/main" ]; then
-            echo "Run this workflow from the main branch (got ${REF})." >&2
+          set -euo pipefail
+          die() {
+            echo "$*" >&2
             exit 1
+          }
+          if [ "$REF" != "refs/heads/main" ]; then
+            die "Run this workflow from the main branch (got ${REF})."
           fi
-          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+          # No tag publishes this main commit. A tag must name a published
+          # stable release; checks and assets then bind to that tag's commit.
+          release_tag="${RELEASE_TAG-}"
+          if [ -z "$release_tag" ]; then
+            echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            die "Release tag must be a published stable tag like v1.0.59."
+          fi
+
+          if ! ref_json="$(gh api "repos/${REPO}/git/ref/tags/${release_tag}")"; then
+            die "Release tag ${release_tag} was not found."
+          fi
+          obj_type="$(jq -r '.object.type // empty' <<<"$ref_json")"
+          obj_sha="$(jq -r '.object.sha // empty' <<<"$ref_json")"
+          if [ "$obj_type" = "tag" ]; then
+            if [[ ! "$obj_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              die "Release tag ${release_tag} does not resolve to a commit."
+            fi
+            if ! ref_json="$(gh api "repos/${REPO}/git/tags/${obj_sha}")"; then
+              die "Release tag ${release_tag} does not resolve to a commit."
+            fi
+            obj_type="$(jq -r '.object.type // empty' <<<"$ref_json")"
+            obj_sha="$(jq -r '.object.sha // empty' <<<"$ref_json")"
+          fi
+          if [ "$obj_type" != "commit" ] || [[ ! "$obj_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            die "Release tag ${release_tag} does not resolve to a commit."
+          fi
+
+          if ! release_json="$(
+            gh release view "$release_tag" --repo "$REPO" \
+              --json tagName,targetCommitish,isDraft,isPrerelease
+          )"; then
+            die "Release ${release_tag} is not a published release."
+          fi
+          if [ "$(jq -r '.tagName // empty' <<<"$release_json")" != "$release_tag" ]; then
+            die "Release ${release_tag} does not match the published tag."
+          fi
+          if [ "$(jq -r '.isDraft' <<<"$release_json")" != "false" ] \
+            || [ "$(jq -r '.isPrerelease' <<<"$release_json")" != "false" ]; then
+            die "Release ${release_tag} is not a published stable release."
+          fi
+          target="$(jq -r '.targetCommitish // empty' <<<"$release_json")"
+          if [ "$target" != "$obj_sha" ]; then
+            die "Release ${release_tag} targets ${target}, expected ${obj_sha}."
+          fi
+
+          echo "sha=${obj_sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${release_tag#v}" >> "$GITHUB_OUTPUT"
 
       - name: Require prior stages green
         env:
@@ -87,18 +152,28 @@ jobs:
 
       - name: Resolve manifest version
         id: version
+        env:
+          SELECTED_VERSION: ${{ steps.meta.outputs.version }}
         run: |
           set -euo pipefail
-          version="$(node --input-type=module -e '
-            import { execFileSync } from "node:child_process";
-            import { readFileSync } from "node:fs";
-            import { manifestVersion } from "./config/manifest-version.ts";
-            const packageVersion = JSON.parse(readFileSync("package.json", "utf8")).version;
-            const count = Number(
-              execFileSync("git", ["rev-list", "--count", "HEAD"], { encoding: "utf8" }).trim(),
-            );
-            process.stdout.write(manifestVersion(packageVersion, count));
-          ')"
+          if [ -n "${SELECTED_VERSION-}" ]; then
+            if [[ ! "$SELECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Selected release version is not a stable version." >&2
+              exit 1
+            fi
+            version="$SELECTED_VERSION"
+          else
+            version="$(node --input-type=module -e '
+              import { execFileSync } from "node:child_process";
+              import { readFileSync } from "node:fs";
+              import { manifestVersion } from "./config/manifest-version.ts";
+              const packageVersion = JSON.parse(readFileSync("package.json", "utf8")).version;
+              const count = Number(
+                execFileSync("git", ["rev-list", "--count", "HEAD"], { encoding: "utf8" }).trim(),
+              );
+              process.stdout.write(manifestVersion(packageVersion, count));
+            ')"
+          fi
           if [ -z "$version" ]; then
             echo "Could not resolve the manifest version." >&2
             exit 1
