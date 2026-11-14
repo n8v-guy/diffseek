@@ -176,13 +176,18 @@ deliberate exception: progress turns into its outcome in place, and any other
 notification stays up for a minimum time, after which the next click on the
 page, key press, or wheel scroll hides it. Input during the minimum does not
 count. A newer notification replaces it, and clicking it closes it at once.
+Auto-view's batches in one streamed burst share one notification that is
+never remounted; it shows the outcome once no batch has started for one and
+a half seconds, and changes again only for a later failure.
 
 **Why:** Fixed delays are either too short on slow machines or wasted time on
 fast ones, and they hide what the code is actually waiting for. **Cost:** A
 streamed page can get one pass per frame instead of one per quiet period, and a background tab defers coalesced passes until it is shown. A
 notification no longer disappears on its own while the reviewer only reads,
-and the minimum is a timer: it reads the same on every machine. A due metadata
-reread waits until the page has been quiet (D016); that wait is the other timer.
+and the minimum is a timer: it reads the same on every machine. So is
+auto-view's settle time: nothing signals that GitHub has finished streaming
+files, and a toast that flipped per batch flickered. A due metadata reread
+waits until the page has been quiet (D016); that wait is the other timer.
 
 ## D014 — Defaults apply only when the repository has no guidance
 

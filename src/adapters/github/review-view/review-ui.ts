@@ -8,6 +8,8 @@ import {
 
 /** The one product timer that paces UI: the shortest time a toast stays up. */
 const snackbarMinimumMs = 5_000;
+/** Auto-view's toast shows its outcome once no batch has started this long. */
+const autoViewSettleMs = 1_500;
 const filterOptionsLabel = 'Filter options';
 const markFilesFailed = "Couldn't mark files viewed. Try again.";
 
@@ -177,6 +179,70 @@ export function showBatchResult(
   showSnackbar(root, message);
 }
 
+type AutoViewNotice = {
+  started(): void;
+  /** `null` means the batch was cancelled and has no outcome. */
+  finished(result: ActionResult | null): void;
+  cancel(): void;
+};
+
+/**
+ * One toast for a whole auto-view burst. GitHub streams files in, so
+ * auto-view runs as many small batches; each used to mount its own progress
+ * toast and flip it to the outcome, which flickered twice a second. Batches
+ * now share one toast that is never remounted, and its text changes only
+ * when its meaning does: progress, then the outcome once no batch has started
+ * for a short settle time, then a failure if a later batch fails.
+ */
+export function autoViewNotice(root: Document): AutoViewNotice {
+  const messages = markMessages['auto-view'];
+  const view = root.defaultView;
+  let toast: HTMLElement | null = null;
+  let running = 0;
+  let outcome: string | null = null;
+  let timer: number | undefined;
+  const clear = () => {
+    if (timer !== undefined) view?.clearTimeout(timer);
+    timer = undefined;
+  };
+  const settle = () => {
+    timer = undefined;
+    if (!toast?.isConnected) return;
+    if (outcome === null) {
+      dismissSnackbar(toast);
+      return;
+    }
+    if (toast.textContent === outcome) return;
+    replaceStatusSnackbars(root, toast);
+    toast.textContent = outcome;
+    settleAfterMinimum(toast);
+  };
+  return {
+    started() {
+      running += 1;
+      clear();
+      if (toast?.isConnected) return;
+      outcome = null;
+      toast = showSnackbar(root, messages.progress ?? messages.done, 'progress');
+    },
+    finished(result) {
+      running = Math.max(0, running - 1);
+      if (result) {
+        outcome =
+          result.failed.length > 0 || outcome === messages.failed
+            ? messages.failed
+            : messages.done;
+      }
+      if (running > 0) return;
+      clear();
+      const pending = toast?.dataset.diffseekSnackbarKind === 'progress';
+      if (!pending) settle();
+      else timer = view?.setTimeout(settle, autoViewSettleMs);
+    },
+    cancel: clear,
+  };
+}
+
 /** A batch that was cancelled has no outcome; drop its progress toast. */
 export function dismissSnackbar(snackbar: HTMLElement | null): void {
   if (!snackbar) return;
@@ -283,11 +349,11 @@ function listenForDismissal(root: Document): void {
 }
 
 /** A newer toast replaces finished ones; the live region stays mounted. */
-function replaceStatusSnackbars(root: Document): void {
+function replaceStatusSnackbars(root: Document, keep?: HTMLElement): void {
   for (const snackbar of root.querySelectorAll<HTMLElement>(
     '[data-diffseek="snackbar"][data-diffseek-snackbar-kind="status"]',
   )) {
-    snackbar.remove();
+    if (snackbar !== keep) snackbar.remove();
   }
 }
 

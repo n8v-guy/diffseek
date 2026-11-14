@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  autoViewNotice,
   dismissSnackbar,
   removeInjected,
   showAlwaysRead,
@@ -211,5 +212,149 @@ describe('review status UI', () => {
         ),
       ].map((item) => item.textContent),
     ).toEqual(['Auto-view off']);
+  });
+});
+
+describe('auto-view notice', () => {
+  const settleMs = 1_500;
+  const marking = 'Auto-view: marking generated files viewed…';
+  const marked = 'Auto-view: generated files marked viewed';
+  const failedText = "Couldn't mark files viewed. Try again.";
+  const ok = { requested: 2, completed: ['a.ts', 'b.ts'], failed: [] };
+  const failed = { requested: 1, completed: [], failed: ['c.ts'] };
+  const toasts = () =>
+    [...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]')];
+
+  /** Every toast mount and removal, and every text the reviewer sees change. */
+  function watchToasts(): { changes: string[]; stop: () => void } {
+    const changes: string[] = [];
+    const isToast = (node: Node) =>
+      node instanceof HTMLElement && node.dataset.diffseek === 'snackbar';
+    const note = (records: MutationRecord[]) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (isToast(node)) changes.push('mount');
+          else if (node.nodeType === Node.TEXT_NODE) {
+            changes.push(`text ${node.textContent ?? ''}`);
+          }
+        }
+        for (const node of record.removedNodes) {
+          if (isToast(node)) changes.push('remove');
+        }
+      }
+    };
+    const observer = new MutationObserver(note);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return {
+      changes,
+      stop: () => {
+        note(observer.takeRecords());
+        observer.disconnect();
+      },
+    };
+  }
+
+  beforeEach(() => {
+    document.body.innerHTML = '<main></main>';
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('keeps one toast through a streamed burst and shows the outcome once it settles', () => {
+    const notice = autoViewNotice(document);
+    const watch = watchToasts();
+    for (let batch = 0; batch < 12; batch += 1) {
+      notice.started();
+      vi.advanceTimersByTime(80);
+      notice.finished(ok);
+      expect(toasts().map((toast) => toast.textContent)).toEqual([marking]);
+      // GitHub streams the next files in up to about a second later.
+      vi.advanceTimersByTime(batch < 11 ? 1_100 : settleMs - 1);
+    }
+    expect(toasts()[0]?.textContent).toBe(marking);
+    vi.advanceTimersByTime(1);
+    watch.stop();
+
+    expect(watch.changes).toEqual(['mount', `text ${marked}`]);
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0]?.dataset.diffseekSnackbarKind).toBe('status');
+  });
+
+  it('leaves a settled toast alone for a late batch, and reports a later failure in place', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.finished(ok);
+    vi.advanceTimersByTime(settleMs);
+    const toast = toasts()[0];
+    const watch = watchToasts();
+
+    notice.started();
+    notice.finished(ok);
+    vi.advanceTimersByTime(settleMs);
+    notice.started();
+    notice.finished(failed);
+    watch.stop();
+
+    expect(watch.changes).toEqual([`text ${failedText}`]);
+    expect(toasts()).toEqual([toast]);
+  });
+
+  it('reports a failure from any batch in the burst', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.finished(failed);
+    notice.started();
+    notice.finished(ok);
+    vi.advanceTimersByTime(settleMs);
+
+    expect(toasts().map((toast) => toast.textContent)).toEqual([failedText]);
+  });
+
+  it('waits for overlapping batches before settling', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.started();
+    notice.finished(ok);
+    vi.advanceTimersByTime(5_000);
+    expect(toasts()[0]?.textContent).toBe(marking);
+
+    notice.finished(ok);
+    vi.advanceTimersByTime(settleMs);
+    expect(toasts()[0]?.textContent).toBe(marked);
+  });
+
+  it('drops the toast when every batch in the burst was cancelled', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.finished(null);
+    vi.advanceTimersByTime(settleMs);
+
+    expect(toasts()).toEqual([]);
+    expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
+  });
+
+  it('starts a fresh toast after a newer one replaced the settled outcome', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.finished(failed);
+    vi.advanceTimersByTime(settleMs);
+    showHideNow(document);
+
+    notice.started();
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marking]);
+    notice.finished(ok);
+    vi.advanceTimersByTime(settleMs);
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marked]);
+  });
+
+  it('cancel stops a pending outcome', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.finished(ok);
+    notice.cancel();
+    vi.advanceTimersByTime(5_000);
+
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marking]);
   });
 });

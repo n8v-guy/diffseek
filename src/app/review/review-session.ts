@@ -5,6 +5,7 @@ import type {
 } from '@diffseek/browser';
 import {
   afterNextPaint,
+  autoViewNotice,
   bindSnapshot,
   dismissSnackbar,
   filterMenus,
@@ -126,6 +127,7 @@ export class ReviewSession {
   private reconciling = false;
   private dirty = false;
   private defaultViewedInFlight = 0;
+  private readonly autoViewNotice: ReturnType<typeof autoViewNotice>;
   private readonly metadataWatch = metadataWatch();
   private readonly metadataRefresh = metadataRefreshState();
   private applied: ViewPlan | null = null;
@@ -174,6 +176,7 @@ export class ReviewSession {
       if (path) this.actionExecutor.invalidate(path);
     };
     options.root.addEventListener('click', this.onNativeClick, true);
+    this.autoViewNotice = autoViewNotice(options.root);
     this.quiet = sessionQuiet(options.root, options.quietClock, () =>
       this.requestRevalidation(),
     );
@@ -221,6 +224,7 @@ export class ReviewSession {
     if (this.lifecycle.signal.aborted) return;
     this.lifecycle.abort();
     this.quiet.cancel();
+    this.autoViewNotice.cancel();
     this.options.metadataCommits.invalidate(this.options.review);
     this.actionExecutor.cancel();
     this.options.root.removeEventListener('click', this.onNativeClick, true);
@@ -405,7 +409,7 @@ export class ReviewSession {
   private enqueueDefaultViewed(paths: string[]): void {
     for (const path of paths) this.defaultViewedAttempts.add(path);
     this.defaultViewedInFlight += 1;
-    const progress = showBatchStarted(this.options.root, 'auto-view', true);
+    this.autoViewNotice.started();
     void this.actionExecutor
       .enqueue({
         reviewKey: this.options.review.key,
@@ -417,8 +421,7 @@ export class ReviewSession {
       .then((result) => {
         this.defaultViewedInFlight = Math.max(0, this.defaultViewedInFlight - 1);
         if (this.lifecycle.signal.aborted) return;
-        if (result) showBatchResult(this.options.root, 'auto-view', true, result, progress);
-        else dismissSnackbar(progress);
+        this.autoViewNotice.finished(result);
         this.schedule();
       });
   }
