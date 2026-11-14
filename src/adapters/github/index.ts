@@ -20,6 +20,7 @@ export {
   viewedControlState,
   type PageSnapshot,
 } from './review-page/page-adapter';
+export { nonDefaultBase } from './review-page/base-branch';
 export {
   markViewed,
   mountViewedActions,

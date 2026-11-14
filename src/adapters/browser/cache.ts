@@ -1,8 +1,9 @@
 import { browser } from 'wxt/browser';
 
-import type {
-  MetadataFiles,
-  RepositoryRef,
+import {
+  repositoryKey,
+  type MetadataFiles,
+  type RepositoryRef,
 } from '@diffseek/repository-metadata';
 
 import { isRecord } from './record';
@@ -10,7 +11,7 @@ import { isRecord } from './record';
 export type { RepositoryRef };
 
 /**
- * Default-branch metadata and when it was refreshed. `overlays` holds, per
+ * Default-branch metadata, or a non-default base branch's, and when it was refreshed. `overlays` holds, per
  * pull number, the head oid, when that pull's files were read, and the pull's
  * own text for metadata files in its diff (null: deleted by the pull).
  */
@@ -126,5 +127,5 @@ function isCacheEntry(value: unknown): value is CacheEntry {
 }
 
 function cacheKey(repository: RepositoryRef): string {
-  return `diffseek:metadata:${repository.owner}/${repository.repo}`;
+  return `diffseek:metadata:${repositoryKey(repository)}`;
 }

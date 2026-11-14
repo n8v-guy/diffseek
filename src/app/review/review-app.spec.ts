@@ -7,6 +7,7 @@ import fixture from '@diffseek/github/review-page/fixtures/github-pr.html?raw';
 import type {
   MetadataFiles,
   RepositoryMetadata,
+  RepositoryRef,
 } from '@diffseek/repository-metadata';
 
 import {
@@ -297,6 +298,23 @@ describe('review app lifecycle', () => {
     });
     expect(document.querySelector('[data-filter-value="default"]')).toBeNull();
     expect(refreshDefault).toHaveBeenCalledOnce();
+    app.stop();
+  });
+
+  it('reads a non-default base branch for the whole session', async () => {
+    openMenu();
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<a class="prc-BranchName-BranchName-x" href="/octo/repo/tree/release">release</a>' +
+        '<script type="application/json" data-target="react-app.embeddedData">' +
+        '{"repository":{"ownerLogin":"octo","name":"repo","defaultBranch":"main"}}</script>',
+    );
+    const readImmediate = vi.fn(async (_repository: RepositoryRef) => emptyMetadata);
+    const refreshDefault = vi.fn(async (_review: RepositoryRef) => loadedDefault(emptyMetadata));
+    const app = await reviewApp({ readImmediate, refreshDefault });
+
+    expect(readImmediate.mock.calls[0]?.[0]).toMatchObject({ branch: 'release' });
+    await until(() => expect(refreshDefault.mock.calls[0]?.[0]).toMatchObject({ branch: 'release' }));
     app.stop();
   });
 

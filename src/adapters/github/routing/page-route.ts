@@ -3,6 +3,8 @@ export type ReviewRef = {
   repo: string;
   pull: number;
   key: string;
+  /** Set when the pull's base is not the default branch. */
+  branch?: string;
 };
 
 export function isReviewFilesPath(pathname: string): boolean {
