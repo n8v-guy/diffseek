@@ -177,6 +177,58 @@ export function showBatchResult(
   showSnackbar(root, message);
 }
 
+type AutoViewNotice = {
+  started(): void;
+  /** `null` means the batch was cancelled and has no outcome. */
+  finished(result: ActionResult | null): void;
+  /** Every generated file is viewed or tried and no batch is running. */
+  done(): void;
+  cancel(): void;
+};
+
+/**
+ * One toast for a whole auto-view run. GitHub streams files in, so auto-view
+ * runs as many small batches; each used to mount its own progress toast and
+ * flip it to the outcome, which flickered twice a second. Batches now share
+ * one toast that is never remounted. It shows progress until the session
+ * reports that every generated file in the pull is viewed or was tried, then
+ * the outcome once. A file that loads after that starts a new run.
+ */
+export function autoViewNotice(root: Document): AutoViewNotice {
+  const messages = markMessages['auto-view'];
+  let toast: HTMLElement | null = null;
+  let outcome: string | null = null;
+  const inProgress = () =>
+    toast?.isConnected === true && toast.dataset.diffseekSnackbarKind === 'progress';
+  return {
+    started() {
+      if (inProgress()) return;
+      outcome = null;
+      toast = showSnackbar(root, messages.progress ?? messages.done, 'progress');
+    },
+    finished(result) {
+      if (!result) return;
+      outcome =
+        result.failed.length > 0 || outcome === messages.failed
+          ? messages.failed
+          : messages.done;
+    },
+    done() {
+      if (!toast || !inProgress()) return;
+      if (outcome === null) {
+        dismissSnackbar(toast);
+        return;
+      }
+      replaceStatusSnackbars(root);
+      toast.textContent = outcome;
+      settleAfterMinimum(toast);
+    },
+    cancel() {
+      if (inProgress()) dismissSnackbar(toast);
+    },
+  };
+}
+
 /** A batch that was cancelled has no outcome; drop its progress toast. */
 export function dismissSnackbar(snackbar: HTMLElement | null): void {
   if (!snackbar) return;

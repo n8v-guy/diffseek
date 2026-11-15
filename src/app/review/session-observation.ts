@@ -42,21 +42,27 @@ export function classifySnapshot(
   });
 }
 
-export function pendingDefaultViewed(
+/**
+ * Auto-view's work in this pull. `pending` are loaded generated files to mark
+ * now. `outstanding` is true while any generated file is neither viewed nor
+ * tried, loaded or not, or while metadata is still settling: a file whose
+ * diff has not loaded has no Viewed button yet and is marked once it loads.
+ */
+export function autoViewWork(
   files: readonly FileRecord[],
   defaults: FilterDefaults,
   attempts: ReadonlySet<string>,
-): string[] {
-  if (!defaults.viewed.has('generated')) return [];
-  return files
-    .filter(
-      (file) =>
-        file.generated &&
-        !file.viewed &&
-        file.capabilities.viewed &&
-        !attempts.has(file.path),
-    )
-    .map((file) => file.path);
+  settled: boolean,
+): { pending: string[]; outstanding: boolean } {
+  if (!settled) return { pending: [], outstanding: true };
+  if (!defaults.viewed.has('generated')) return { pending: [], outstanding: false };
+  const left = files.filter(
+    (file) => file.generated && !file.viewed && !attempts.has(file.path),
+  );
+  return {
+    pending: left.filter((file) => file.capabilities.viewed).map((file) => file.path),
+    outstanding: left.length > 0,
+  };
 }
 
 export function syncViewedLabels(files: FileRecord[]): void {
