@@ -68,6 +68,7 @@ import {
   trackDiffseekWrites,
 } from './redraw-trace';
 import {
+  autoViewWork,
   cancelPanelReconcile,
   classifyKeyFor,
   classifySnapshot,
@@ -75,7 +76,6 @@ import {
   pageNodesChanged,
   type PanelReconcileSchedule,
   type PanelScheduleOptions,
-  pendingDefaultViewed,
   queuePanelReconcile,
   refreshViewedState,
   retainNativeOwners,
@@ -304,11 +304,11 @@ export class ReviewSession {
     structureChanged: boolean,
   ): void {
     const root = this.options.root;
-    const defaultViewedPaths = this.metadataRefresh.settled
-      ? pendingDefaultViewed(catalogSnapshot.files, this.options.filterDefaults, this.defaultViewedAttempts)
-      : [];
-    const generatedDefaultBusy =
-      this.defaultViewedInFlight > 0 || defaultViewedPaths.length > 0;
+    const { pending: defaultViewedPaths, outstanding } = autoViewWork(
+      catalogSnapshot.files, this.options.filterDefaults, this.defaultViewedAttempts, this.metadataRefresh.settled,
+    );
+    const generatedDefaultBusy = this.defaultViewedInFlight > 0 || defaultViewedPaths.length > 0;
+    if (!generatedDefaultBusy && !outstanding) this.autoViewNotice.done();
     const menus = filterMenus(root);
     const plan = planView({
       files: catalogSnapshot.files,

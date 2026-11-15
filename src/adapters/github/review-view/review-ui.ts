@@ -8,8 +8,6 @@ import {
 
 /** The one product timer that paces UI: the shortest time a toast stays up. */
 const snackbarMinimumMs = 5_000;
-/** Auto-view's toast shows its outcome once no batch has started this long. */
-const autoViewSettleMs = 1_500;
 const filterOptionsLabel = 'Filter options';
 const markFilesFailed = "Couldn't mark files viewed. Try again.";
 
@@ -183,63 +181,51 @@ type AutoViewNotice = {
   started(): void;
   /** `null` means the batch was cancelled and has no outcome. */
   finished(result: ActionResult | null): void;
+  /** Every generated file is viewed or tried and no batch is running. */
+  done(): void;
   cancel(): void;
 };
 
 /**
- * One toast for a whole auto-view burst. GitHub streams files in, so
- * auto-view runs as many small batches; each used to mount its own progress
- * toast and flip it to the outcome, which flickered twice a second. Batches
- * now share one toast that is never remounted, and its text changes only
- * when its meaning does: progress, then the outcome once no batch has started
- * for a short settle time, then a failure if a later batch fails.
+ * One toast for a whole auto-view run. GitHub streams files in, so auto-view
+ * runs as many small batches; each used to mount its own progress toast and
+ * flip it to the outcome, which flickered twice a second. Batches now share
+ * one toast that is never remounted. It shows progress until the session
+ * reports that every generated file in the pull is viewed or was tried, then
+ * the outcome once. A file that loads after that starts a new run.
  */
 export function autoViewNotice(root: Document): AutoViewNotice {
   const messages = markMessages['auto-view'];
-  const view = root.defaultView;
   let toast: HTMLElement | null = null;
-  let running = 0;
   let outcome: string | null = null;
-  let timer: number | undefined;
-  const clear = () => {
-    if (timer !== undefined) view?.clearTimeout(timer);
-    timer = undefined;
-  };
-  const settle = () => {
-    timer = undefined;
-    if (!toast?.isConnected) return;
-    if (outcome === null) {
-      dismissSnackbar(toast);
-      return;
-    }
-    if (toast.textContent === outcome) return;
-    replaceStatusSnackbars(root, toast);
-    toast.textContent = outcome;
-    settleAfterMinimum(toast);
-  };
+  const inProgress = () =>
+    toast?.isConnected === true && toast.dataset.diffseekSnackbarKind === 'progress';
   return {
     started() {
-      running += 1;
-      clear();
-      if (toast?.isConnected) return;
+      if (inProgress()) return;
       outcome = null;
       toast = showSnackbar(root, messages.progress ?? messages.done, 'progress');
     },
     finished(result) {
-      running = Math.max(0, running - 1);
-      if (result) {
-        outcome =
-          result.failed.length > 0 || outcome === messages.failed
-            ? messages.failed
-            : messages.done;
-      }
-      if (running > 0) return;
-      clear();
-      const pending = toast?.dataset.diffseekSnackbarKind === 'progress';
-      if (!pending) settle();
-      else timer = view?.setTimeout(settle, autoViewSettleMs);
+      if (!result) return;
+      outcome =
+        result.failed.length > 0 || outcome === messages.failed
+          ? messages.failed
+          : messages.done;
     },
-    cancel: clear,
+    done() {
+      if (!toast || !inProgress()) return;
+      if (outcome === null) {
+        dismissSnackbar(toast);
+        return;
+      }
+      replaceStatusSnackbars(root);
+      toast.textContent = outcome;
+      settleAfterMinimum(toast);
+    },
+    cancel() {
+      if (inProgress()) dismissSnackbar(toast);
+    },
   };
 }
 
@@ -349,11 +335,11 @@ function listenForDismissal(root: Document): void {
 }
 
 /** A newer toast replaces finished ones; the live region stays mounted. */
-function replaceStatusSnackbars(root: Document, keep?: HTMLElement): void {
+function replaceStatusSnackbars(root: Document): void {
   for (const snackbar of root.querySelectorAll<HTMLElement>(
     '[data-diffseek="snackbar"][data-diffseek-snackbar-kind="status"]',
   )) {
-    if (snackbar !== keep) snackbar.remove();
+    snackbar.remove();
   }
 }
 

@@ -216,7 +216,6 @@ describe('review status UI', () => {
 });
 
 describe('auto-view notice', () => {
-  const settleMs = 1_500;
   const marking = 'Auto-view: marking generated files viewed…';
   const marked = 'Auto-view: generated files marked viewed';
   const failedText = "Couldn't mark files viewed. Try again.";
@@ -261,19 +260,18 @@ describe('auto-view notice', () => {
 
   afterEach(() => vi.useRealTimers());
 
-  it('keeps one toast through a streamed burst and shows the outcome once it settles', () => {
+  it('keeps one toast through a streamed run and shows the outcome only when done', () => {
     const notice = autoViewNotice(document);
     const watch = watchToasts();
     for (let batch = 0; batch < 12; batch += 1) {
       notice.started();
-      vi.advanceTimersByTime(80);
       notice.finished(ok);
+      // More generated files are still loading, so the session does not call done.
+      vi.advanceTimersByTime(10_000);
       expect(toasts().map((toast) => toast.textContent)).toEqual([marking]);
-      // GitHub streams the next files in up to about a second later.
-      vi.advanceTimersByTime(batch < 11 ? 1_100 : settleMs - 1);
     }
-    expect(toasts()[0]?.textContent).toBe(marking);
-    vi.advanceTimersByTime(1);
+    notice.done();
+    notice.done();
     watch.stop();
 
     expect(watch.changes).toEqual(['mount', `text ${marked}`]);
@@ -281,80 +279,83 @@ describe('auto-view notice', () => {
     expect(toasts()[0]?.dataset.diffseekSnackbarKind).toBe('status');
   });
 
-  it('leaves a settled toast alone for a late batch, and reports a later failure in place', () => {
+  it('starts a new run for a file that loads after the outcome', () => {
     const notice = autoViewNotice(document);
     notice.started();
-    notice.finished(ok);
-    vi.advanceTimersByTime(settleMs);
-    const toast = toasts()[0];
+    notice.finished(failed);
+    notice.done();
+    expect(toasts().map((toast) => toast.textContent)).toEqual([failedText]);
     const watch = watchToasts();
 
     notice.started();
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marking]);
     notice.finished(ok);
-    vi.advanceTimersByTime(settleMs);
-    notice.started();
-    notice.finished(failed);
+    notice.done();
     watch.stop();
 
-    expect(watch.changes).toEqual([`text ${failedText}`]);
-    expect(toasts()).toEqual([toast]);
+    expect(watch.changes).toEqual(['remove', 'mount', `text ${marked}`]);
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marked]);
   });
 
-  it('reports a failure from any batch in the burst', () => {
+  it('reports a failure from any batch in the run', () => {
     const notice = autoViewNotice(document);
     notice.started();
     notice.finished(failed);
     notice.started();
     notice.finished(ok);
-    vi.advanceTimersByTime(settleMs);
+    notice.done();
 
     expect(toasts().map((toast) => toast.textContent)).toEqual([failedText]);
   });
 
-  it('waits for overlapping batches before settling', () => {
+  it('ignores done when no run is in progress', () => {
     const notice = autoViewNotice(document);
-    notice.started();
-    notice.started();
-    notice.finished(ok);
-    vi.advanceTimersByTime(5_000);
-    expect(toasts()[0]?.textContent).toBe(marking);
+    notice.done();
+    expect(toasts()).toEqual([]);
 
+    notice.started();
     notice.finished(ok);
-    vi.advanceTimersByTime(settleMs);
-    expect(toasts()[0]?.textContent).toBe(marked);
+    notice.done();
+    showHideNow(document);
+    notice.done();
+    expect(toasts().map((toast) => toast.textContent)).toEqual(['Hidden']);
   });
 
-  it('drops the toast when every batch in the burst was cancelled', () => {
+  it('drops the toast when every batch in the run was cancelled', () => {
     const notice = autoViewNotice(document);
     notice.started();
     notice.finished(null);
-    vi.advanceTimersByTime(settleMs);
+    notice.done();
 
     expect(toasts()).toEqual([]);
     expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
   });
 
-  it('starts a fresh toast after a newer one replaced the settled outcome', () => {
+  it('starts a fresh toast after the reviewer closed the progress one', () => {
     const notice = autoViewNotice(document);
     notice.started();
-    notice.finished(failed);
-    vi.advanceTimersByTime(settleMs);
-    showHideNow(document);
+    toasts()[0]?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(toasts()).toEqual([]);
+    notice.finished(ok);
+    notice.done();
+    expect(toasts()).toEqual([]);
 
     notice.started();
-    expect(toasts().map((toast) => toast.textContent)).toEqual([marking]);
     notice.finished(ok);
-    vi.advanceTimersByTime(settleMs);
+    notice.done();
     expect(toasts().map((toast) => toast.textContent)).toEqual([marked]);
   });
 
-  it('cancel stops a pending outcome', () => {
+  it('cancel drops a run in progress but leaves an outcome', () => {
     const notice = autoViewNotice(document);
     notice.started();
-    notice.finished(ok);
     notice.cancel();
-    vi.advanceTimersByTime(5_000);
+    expect(toasts()).toEqual([]);
 
-    expect(toasts().map((toast) => toast.textContent)).toEqual([marking]);
+    notice.started();
+    notice.finished(ok);
+    notice.done();
+    notice.cancel();
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marked]);
   });
 });
