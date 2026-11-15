@@ -261,3 +261,15 @@ replaces a pending click.
 keeps its scrolling, selection, and URL as they would be (D001). **Cost:** A
 narrowing click also moves the reviewer away from a spot deeper in the slice,
 and the URL hash changes to that file.
+
+## D018 — Icons are rendered from SVG at build time
+
+**Decision:** Two SVGs are the only committed icon sources: `assets/icon.svg`
+and `assets/icon-low.svg`, a redraw on a 16 px grid. The build renders the
+manifest PNGs from them with a pinned resvg, the low-res one at 16 and 32 px
+and the main one at 48 px and up. `pnpm store-icon` renders the Chrome Web
+Store icon the same way.
+
+**Why:** No binary enters the repository, and the AMO sources archive rebuilds
+the same icons. The main drawing turns to mush below 48 px. **Cost:** The build
+needs resvg's native package, and the store icon is uploaded by hand.

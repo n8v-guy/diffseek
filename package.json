@@ -30,6 +30,7 @@
     "prepare": "husky",
     "release:zip": "wxt zip --config config/wxt.config.ts",
     "zip:firefox": "wxt zip -b firefox --config config/wxt.config.ts && git archive --format=zip --output=.output/diffseek-$(node --input-type=module -e 'import {readFileSync} from \"node:fs\"; process.stdout.write(JSON.parse(readFileSync(\".output/firefox-mv3/manifest.json\",\"utf8\")).version)')-sources.zip HEAD",
+    "store-icon": "./scripts/icons.ts",
     "store-screenshots": "./scripts/store-screenshots.ts",
     "test": "vitest --config config/vitest.config.ts",
     "test:ci": "vitest run --config config/vitest.config.ts",
@@ -52,6 +53,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",
+    "@resvg/resvg-js": "2.6.2",
     "@tsconfig/strictest": "^2.0.8",
     "@typescript/native": "npm:typescript@^7.0.2",
     "@types/node": "^26.6.6",

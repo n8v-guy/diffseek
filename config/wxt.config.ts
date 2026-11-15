@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 
 import { defineConfig } from 'wxt';
 
+import { manifestIcons, renderIcons } from '../scripts/icons.ts';
+
 import { manifestVersion } from './manifest-version.ts';
 
 const packageVersion =
@@ -24,6 +26,8 @@ export default defineConfig({
     description:
       'Filter by owner, folder or type, mark it viewed in one click, see progress fill up. Generated files are hidden and auto-viewed.',
     version: manifestVersion(packageVersion, branchCommitCount),
+    icons: manifestIcons,
+    action: { default_icon: manifestIcons },
     permissions: ['storage'],
     host_permissions: [
       'https://github.com/*',
@@ -43,6 +47,11 @@ export default defineConfig({
         }
       : {}),
   }),
+  hooks: {
+    'build:publicAssets': async (wxt, files) => {
+      files.push(...(await renderIcons(wxt.config.wxtDir)));
+    },
+  },
   vite: () => ({
     resolve: { tsconfigPaths: true },
     build: {
