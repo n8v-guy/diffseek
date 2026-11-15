@@ -26,13 +26,49 @@ type QueuedTransition = {
   ownsCollapse: boolean;
 };
 
+/**
+ * Clicks the first shown file in the tree, as a reviewer would, so GitHub
+ * scrolls its diff into view. Skipped when that diff is already on screen
+ * with no filtered-out file above it.
+ */
+export function revealFirstShown(snapshot: SupportedSnapshot): void {
+  const paths = new Set(snapshot.files.map((file) => file.path));
+  const item = snapshot
+    .treeItems()
+    .find((candidate) => candidate.hidden === false && paths.has(candidate.id));
+  if (item == null) return;
+  const region = snapshot.region(item.id);
+  if (region != null && onScreen(region)) return;
+  [...item.querySelectorAll<HTMLAnchorElement>('a[href^="#diff-"]')]
+    .find((link) => link.closest('[role="treeitem"]') === item)
+    ?.click();
+}
+
+function onScreen(region: HTMLElement): boolean {
+  const height = region.ownerDocument.defaultView?.innerHeight ?? 0;
+  const { top, bottom } = region.getBoundingClientRect();
+  if (bottom <= 0 || top >= height) return false;
+  return ![
+    ...region.ownerDocument.querySelectorAll<HTMLElement>(
+      '[data-diffseek-filtered-out]',
+    ),
+  ].some((other) => {
+    const box = other.getBoundingClientRect();
+    return box.bottom > 0 && box.top < top;
+  });
+}
+
 export class ReviewPresenter {
   private readonly autoCollapsed = new Set<string>();
   private readonly desiredCollapsed = new Map<string, boolean>();
   private readonly locators = new Map<string, Locator>();
   private readonly pending = new Map<string, PendingTransition>();
   private readonly queue: QueuedTransition[] = [];
+  private readonly idleWaiters: (() => void)[] = [];
   private draining = false;
+  private shown: Set<string> | null = null;
+  private filterKey = '';
+  private revealRequest = 0;
 
   apply(
     snapshot: SupportedSnapshot,
@@ -73,6 +109,7 @@ export class ReviewPresenter {
     }
 
     this.updateFolders(snapshot, matching, index);
+    this.revealIfNarrowed(snapshot, filters, matching);
   }
 
   clear(snapshot: SupportedSnapshot): void {
@@ -99,6 +136,37 @@ export class ReviewPresenter {
     }
   }
 
+  /**
+   * Only the reviewer changes filters, so a changed filter that hides a shown
+   * file is their narrowing. Page loads and auto-view keep the filters as is.
+   */
+  private revealIfNarrowed(
+    snapshot: SupportedSnapshot,
+    filters: FilterState,
+    matching: Set<string>,
+  ): void {
+    const key = [...filters].map(([facet, values]) => {
+      const sorted = [...values].sort((left, right) => left.localeCompare(right));
+      return `${facet}:${sorted.join(',')}`;
+    }).join('|');
+    const narrowed =
+      key !== this.filterKey &&
+      [...(this.shown ?? [])].some((path) => !matching.has(path));
+    this.shown = matching;
+    this.filterKey = key;
+    if (!narrowed) return;
+    // After the collapses settle, so the target stops moving before the click.
+    const request = ++this.revealRequest;
+    void this.idle().then(() => {
+      if (request === this.revealRequest) revealFirstShown(snapshot);
+    });
+  }
+
+  private idle(): Promise<void> {
+    if (!this.draining && this.queue.length === 0) return Promise.resolve();
+    return new Promise((resolve) => this.idleWaiters.push(resolve));
+  }
+
   reset(snapshot?: SupportedSnapshot | null): void {
     if (snapshot) {
       for (const file of snapshot.files) {
@@ -109,6 +177,8 @@ export class ReviewPresenter {
       }
     }
     this.queue.length = 0;
+    this.revealRequest += 1;
+    this.shown = null;
     const owned = new Set(this.autoCollapsed);
     for (const [path, transition] of this.pending) {
       transition.controller.abort();
@@ -183,6 +253,7 @@ export class ReviewPresenter {
     }
     this.draining = false;
     if (this.queue.length > 0) void this.drain();
+    else for (const resolve of this.idleWaiters.splice(0)) resolve();
   }
 
   private async transition(
