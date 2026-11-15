@@ -32,6 +32,7 @@ export { ReviewPresenter } from './review-view/presenter';
 export {
   afterCurrentTask,
   afterNextPaint,
+  autoViewNotice,
   dismissSnackbar,
   filterMenus,
   isNativeMutation,

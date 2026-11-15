@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  autoViewNotice,
   dismissSnackbar,
   removeInjected,
   showAlwaysRead,
@@ -211,5 +212,150 @@ describe('review status UI', () => {
         ),
       ].map((item) => item.textContent),
     ).toEqual(['Auto-view off']);
+  });
+});
+
+describe('auto-view notice', () => {
+  const marking = 'Auto-view: marking generated files viewed…';
+  const marked = 'Auto-view: generated files marked viewed';
+  const failedText = "Couldn't mark files viewed. Try again.";
+  const ok = { requested: 2, completed: ['a.ts', 'b.ts'], failed: [] };
+  const failed = { requested: 1, completed: [], failed: ['c.ts'] };
+  const toasts = () =>
+    [...document.querySelectorAll<HTMLElement>('[data-diffseek="snackbar"]')];
+
+  /** Every toast mount and removal, and every text the reviewer sees change. */
+  function watchToasts(): { changes: string[]; stop: () => void } {
+    const changes: string[] = [];
+    const isToast = (node: Node) =>
+      node instanceof HTMLElement && node.dataset.diffseek === 'snackbar';
+    const note = (records: MutationRecord[]) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (isToast(node)) changes.push('mount');
+          else if (node.nodeType === Node.TEXT_NODE) {
+            changes.push(`text ${node.textContent ?? ''}`);
+          }
+        }
+        for (const node of record.removedNodes) {
+          if (isToast(node)) changes.push('remove');
+        }
+      }
+    };
+    const observer = new MutationObserver(note);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return {
+      changes,
+      stop: () => {
+        note(observer.takeRecords());
+        observer.disconnect();
+      },
+    };
+  }
+
+  beforeEach(() => {
+    document.body.innerHTML = '<main></main>';
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('keeps one toast through a streamed run and shows the outcome only when done', () => {
+    const notice = autoViewNotice(document);
+    const watch = watchToasts();
+    for (let batch = 0; batch < 12; batch += 1) {
+      notice.started();
+      notice.finished(ok);
+      // More generated files are still loading, so the session does not call done.
+      vi.advanceTimersByTime(10_000);
+      expect(toasts().map((toast) => toast.textContent)).toEqual([marking]);
+    }
+    notice.done();
+    notice.done();
+    watch.stop();
+
+    expect(watch.changes).toEqual(['mount', `text ${marked}`]);
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0]?.dataset.diffseekSnackbarKind).toBe('status');
+  });
+
+  it('starts a new run for a file that loads after the outcome', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.finished(failed);
+    notice.done();
+    expect(toasts().map((toast) => toast.textContent)).toEqual([failedText]);
+    const watch = watchToasts();
+
+    notice.started();
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marking]);
+    notice.finished(ok);
+    notice.done();
+    watch.stop();
+
+    expect(watch.changes).toEqual(['remove', 'mount', `text ${marked}`]);
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marked]);
+  });
+
+  it('reports a failure from any batch in the run', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.finished(failed);
+    notice.started();
+    notice.finished(ok);
+    notice.done();
+
+    expect(toasts().map((toast) => toast.textContent)).toEqual([failedText]);
+  });
+
+  it('ignores done when no run is in progress', () => {
+    const notice = autoViewNotice(document);
+    notice.done();
+    expect(toasts()).toEqual([]);
+
+    notice.started();
+    notice.finished(ok);
+    notice.done();
+    showHideNow(document);
+    notice.done();
+    expect(toasts().map((toast) => toast.textContent)).toEqual(['Hidden']);
+  });
+
+  it('drops the toast when every batch in the run was cancelled', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.finished(null);
+    notice.done();
+
+    expect(toasts()).toEqual([]);
+    expect(document.querySelector('[data-diffseek="snackbars"]')).toBeNull();
+  });
+
+  it('starts a fresh toast after the reviewer closed the progress one', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    toasts()[0]?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(toasts()).toEqual([]);
+    notice.finished(ok);
+    notice.done();
+    expect(toasts()).toEqual([]);
+
+    notice.started();
+    notice.finished(ok);
+    notice.done();
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marked]);
+  });
+
+  it('cancel drops a run in progress but leaves an outcome', () => {
+    const notice = autoViewNotice(document);
+    notice.started();
+    notice.cancel();
+    expect(toasts()).toEqual([]);
+
+    notice.started();
+    notice.finished(ok);
+    notice.done();
+    notice.cancel();
+    expect(toasts().map((toast) => toast.textContent)).toEqual([marked]);
   });
 });
