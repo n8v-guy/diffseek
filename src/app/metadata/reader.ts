@@ -410,13 +410,14 @@ async function probe(
   review: Review,
   request: Dependencies['request'],
 ): Promise<MetadataFiles> {
-  const ref = refOf(review);
-  let files = await readInto({}, [attributesPath], ref, review, request);
-  for (const location of codeownersLocations) {
-    files = await readInto(files, [location], ref, review, request);
-    if (files[location]) break;
-  }
-  return files;
+  // One round trip: every spot at once; the first found CODEOWNERS is chosen later.
+  return readInto(
+    {},
+    [attributesPath, ...codeownersLocations],
+    refOf(review),
+    review,
+    request,
+  );
 }
 
 /** Reads each path at `ref`; a missing file is dropped, a failed read throws. */

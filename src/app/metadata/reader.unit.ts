@@ -139,13 +139,19 @@ describe('cold read', () => {
     });
   });
 
-  it('stops spot-checking at the first CODEOWNERS and makes at most four requests', async () => {
-    const request = raw({ CODEOWNERS: '* @root' });
+  it('spot-checks every CODEOWNERS spot at once in four requests and uses the first found', async () => {
+    const request = raw({ CODEOWNERS: '* @root', 'docs/CODEOWNERS': '* @docs' });
     const search = vi.fn(async (): Promise<MetadataSearchResult> => {
       throw new Error('signed out');
     });
-    await refresh(1, ['a/b/c/d.ts'], 0, request, search);
-    expect(requested(request)).toEqual(['.gitattributes', '.github/CODEOWNERS', 'CODEOWNERS']);
+    const result = await refresh(1, ['a/b/c/d.ts'], 0, request, search);
+    expect(requested(request)).toEqual([
+      '.gitattributes',
+      '.github/CODEOWNERS',
+      'CODEOWNERS',
+      'docs/CODEOWNERS',
+    ]);
+    expect(result.metadata.codeowners).toBe('* @root');
 
     const none = raw({});
     await refresh(2, ['a/b/c/d.ts'], 0, none, search);
@@ -210,7 +216,7 @@ describe('non-default base', () => {
     await writeCache(base, result.cache);
 
     expect(result.metadata.codeowners).toBe('* @team');
-    expect(requested(request)).toHaveLength(2);
+    expect(requested(request)).toHaveLength(4);
     expect(await readCache(repository)).toBeNull();
     expect((await readImmediateMetadata(base)).codeowners).toBe('* @team');
   });
@@ -706,6 +712,9 @@ describe('pull request side', () => {
     expect(resolveHead).toHaveBeenCalledTimes(2);
     expect(request.mock.calls.map(([input]) => [input.ref, input.path])).toEqual([
       ['HEAD', '.gitattributes'],
+      ['HEAD', '.github/CODEOWNERS'],
+      ['HEAD', 'CODEOWNERS'],
+      ['HEAD', 'docs/CODEOWNERS'],
     ]);
     expect(await readCache(repository)).toBeNull();
   });
