@@ -27,7 +27,6 @@ export default defineConfig({
       'Filter by owner, folder or type, mark it viewed in one click, see progress fill up. Generated files are hidden and auto-viewed.',
     version: manifestVersion(packageVersion, branchCommitCount),
     icons: manifestIcons,
-    action: { default_icon: manifestIcons },
     permissions: ['storage'],
     host_permissions: [
       'https://github.com/*',
