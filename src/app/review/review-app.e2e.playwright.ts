@@ -1064,6 +1064,24 @@ test('keeps reconcile passes within budget for cold, warm, and hot loads', async
   await expectReconcilesWithin(page, 'hot', 1);
 });
 
+test('brings the first file of a narrowed slice into view', async () => {
+  const page = await openPull(13);
+  // Tall diffs push later files below the fold, as on a real pull request.
+  await page.addStyleTag({ content: '[role="region"] { min-height: 1200px; }' });
+  const docs = page.locator('#diff-viewed');
+  await expect(docs).not.toBeInViewport();
+
+  await page.getByLabel('Filter options').click();
+  const docsRow = page.locator(
+    '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Docs"])',
+  );
+  await docsRow.hover();
+  await docsRow.locator('[data-filter-only]').click();
+
+  await expect(docs).toBeInViewport();
+  await expect(page).toHaveURL(/#diff-viewed$/);
+});
+
 async function openPull(pull: number, nativeFilter = false): Promise<Page> {
   const page = await context.newPage();
   await page.route(

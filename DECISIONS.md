@@ -237,3 +237,21 @@ quiet, a listing can be 7 days old and a pull-request file 2 days old. A page
 that never goes quiet keeps serving that copy; newly arrived diff paths are
 still read. After one immediate retry, a second failure uses that same
 wait, and a path that arrived during the failure is part of the next try.
+
+## D017 — A narrowing filter click moves to the slice
+
+**Decision:** Only the reviewer changes filters, so a page pass whose filters
+differ from the last applied ones and that hides a shown file is their
+narrowing. DiffSeek then clicks the first shown file in GitHub's tree, as the
+reviewer would, and GitHub scrolls its diff into view. The click waits until
+the collapses from that pass are confirmed. It is skipped when no file is
+shown, or when that file's diff is already on screen with no filtered-out file
+above it. Widening, page loads, streamed files, auto-view, and other passes
+keep the filters as they are and never move the page; a newer narrowing
+replaces a pending click.
+
+**Why:** Filtered-out files stay in the diff as collapsed headers, so after
+"only" the slice can start a screen or more below. GitHub's own tree click
+keeps its scrolling, selection, and URL as they would be (D001). **Cost:** A
+narrowing click also moves the reviewer away from a spot deeper in the slice,
+and the URL hash changes to that file.

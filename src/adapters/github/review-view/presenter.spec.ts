@@ -1,5 +1,5 @@
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { emptyFacetExclusions } from '@diffseek/review';
 import type { FilterState } from '@diffseek/review';
@@ -7,7 +7,7 @@ import type { FilterState } from '@diffseek/review';
 import fixture from '../review-page/fixtures/github-pr.html?raw';
 import { scanPage } from '../review-page/page-adapter';
 
-import { ReviewPresenter } from './presenter';
+import { revealFirstShown, ReviewPresenter } from './presenter';
 
 const filters = (): FilterState => emptyFacetExclusions();
 
@@ -316,3 +316,74 @@ async function untilDom(check: () => void, guardMs = 4_000): Promise<void> {
     }, guardMs);
   });
 }
+
+describe('revealFirstShown', () => {
+  beforeEach(() => {
+    document.documentElement.innerHTML = fixture;
+  });
+
+  function firstShownAfterHidingSource() {
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+    for (const path of ['src/app.ts', 'src/new.ts', 'src/generated.ts']) {
+      const item = snapshot.treeItem(path);
+      if (item) item.hidden = true;
+      const region = snapshot.region(path);
+      if (region) region.dataset.diffseekFilteredOut = 'true';
+    }
+    const clicks: string[] = [];
+    document.querySelector('[role="tree"]')?.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (event.target instanceof HTMLAnchorElement) {
+        clicks.push(event.target.getAttribute('href') ?? '');
+      }
+    });
+    return { snapshot, clicks };
+  }
+
+  function placeRegion(id: string, top: number, bottom: number): void {
+    const region = document.getElementById(id);
+    if (region) {
+      vi.spyOn(region, 'getBoundingClientRect').mockReturnValue(
+        DOMRect.fromRect({ y: top, height: bottom - top }),
+      );
+    }
+  }
+
+  it('clicks the tree link of the first shown file when its diff is off screen', () => {
+    const { snapshot, clicks } = firstShownAfterHidingSource();
+    placeRegion('diff-viewed', 2_000, 2_100);
+
+    revealFirstShown(snapshot);
+
+    expect(clicks).toEqual(['#diff-viewed']);
+  });
+
+  it('leaves the page alone when that diff is already on screen', () => {
+    const { snapshot, clicks } = firstShownAfterHidingSource();
+    placeRegion('diff-viewed', 40, 300);
+
+    revealFirstShown(snapshot);
+
+    expect(clicks).toEqual([]);
+  });
+
+  it('clicks when a filtered-out header is on screen above that diff', () => {
+    const { snapshot, clicks } = firstShownAfterHidingSource();
+    placeRegion('diff-generated', 0, 40);
+    placeRegion('diff-viewed', 40, 300);
+
+    revealFirstShown(snapshot);
+
+    expect(clicks).toEqual(['#diff-viewed']);
+  });
+
+  it('does nothing when no file is shown', () => {
+    const { snapshot, clicks } = firstShownAfterHidingSource();
+    for (const item of snapshot.treeItems()) item.hidden = true;
+
+    revealFirstShown(snapshot);
+
+    expect(clicks).toEqual([]);
+  });
+});

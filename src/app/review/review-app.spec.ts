@@ -1665,3 +1665,57 @@ function manualClock(): { clock: QuietClock; fire: () => void; armed: () => bool
     armed: () => run !== undefined,
   };
 }
+
+describe('slice focus', () => {
+  const codeFilter = '[data-filter-kind="groups"][data-filter-value="Code"]';
+
+  function treeClicks(): string[] {
+    const clicks: string[] = [];
+    document.querySelector('[role="tree"]')?.addEventListener('click', (event) => {
+      if (event.target instanceof HTMLAnchorElement) {
+        clicks.push(event.target.getAttribute('href') ?? '');
+      }
+    });
+    return clicks;
+  }
+
+  it('clicks the first shown file after a filter hides files, not after one shows them', async () => {
+    const app = await reviewApp({ ...metadataSource('src/** group=Code') });
+    await nextReconcile(openMenu);
+    const clicks = treeClicks();
+
+    await nextReconcile(() => document.querySelector<HTMLElement>(codeFilter)?.click());
+    await until(() => expect(clicks).toEqual(['#diff-viewed']));
+
+    await nextReconcile(() => document.querySelector<HTMLElement>(codeFilter)?.click());
+    await nextReconcile(() =>
+      document.querySelector<HTMLElement>('[data-filter-kind="statuses"][data-filter-value="modified"]')?.click(),
+    );
+    await until(() => expect(clicks).toEqual(['#diff-viewed', '#diff-new']));
+    app.stop();
+  });
+
+  it('does not move the page when files leave the view without a filter change', async () => {
+    await fakeBrowser.storage.local.set({
+      'diffseek:filter-defaults': { hidden: ['viewed'], viewed: [] },
+    });
+    const app = await reviewApp({ ...metadataSource('src/** group=Code') });
+    await nextReconcile(openMenu);
+    const clicks = treeClicks();
+
+    await nextReconcile(() => {
+      const viewed = document.querySelector('#diff-app button[aria-label="Not Viewed"]');
+      viewed?.setAttribute('aria-label', 'Viewed');
+      viewed?.setAttribute('aria-pressed', 'true');
+    });
+    await until(() => expect(document.getElementById('src/app.ts')?.hidden).toBe(true));
+    await until(() =>
+      expect(document.querySelector('#diff-app button')?.getAttribute('aria-label')).toBe(
+        'Expand file',
+      ),
+    );
+
+    expect(clicks).toEqual([]);
+    app.stop();
+  });
+});
