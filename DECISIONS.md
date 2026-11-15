@@ -176,13 +176,19 @@ deliberate exception: progress turns into its outcome in place, and any other
 notification stays up for a minimum time, after which the next click on the
 page, key press, or wheel scroll hides it. Input during the minimum does not
 count. A newer notification replaces it, and clicking it closes it at once.
+Auto-view's batches share one notification that is never remounted. It
+shows the outcome once no batch is running and every generated file in the
+pull, loaded or not, is viewed or was tried. Generated files that turn up
+after that start a new notification.
 
 **Why:** Fixed delays are either too short on slow machines or wasted time on
 fast ones, and they hide what the code is actually waiting for. **Cost:** A
 streamed page can get one pass per frame instead of one per quiet period, and a background tab defers coalesced passes until it is shown. A
 notification no longer disappears on its own while the reviewer only reads,
-and the minimum is a timer: it reads the same on every machine. A due metadata
-reread waits until the page has been quiet (D016); that wait is the other timer.
+and the minimum is a timer: it reads the same on every machine. Auto-view's
+notification stays on progress while a generated file's diff has not loaded,
+since only a loaded diff can be marked. A due metadata reread
+waits until the page has been quiet (D016); that wait is the other timer.
 
 ## D014 — Defaults apply only when the repository has no guidance
 

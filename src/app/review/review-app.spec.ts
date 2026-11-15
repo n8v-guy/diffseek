@@ -1326,6 +1326,45 @@ describe('review app interactions', () => {
     app.stop();
   });
 
+  it('shows the auto-view outcome once every generated file in the pull is marked', async () => {
+    await fakeBrowser.storage.local.set({
+      'diffseek:filter-defaults': { hidden: [], viewed: ['generated'] },
+    });
+    const markFiles = vi.fn(async (snapshot: SupportedSnapshot, paths: string[]) => {
+      for (const path of paths) {
+        snapshot.viewedControl(path)?.setAttribute('aria-label', 'Viewed');
+        snapshot.viewedControl(path)?.setAttribute('aria-pressed', 'true');
+      }
+      return { requested: paths.length, completed: paths, failed: [] };
+    });
+    const toasts = () =>
+      [...document.querySelectorAll('[data-diffseek="snackbar"]')].map((toast) => toast.textContent);
+    const app = await reviewApp({
+      markFiles: signalled(markFiles),
+      ...metadataSource('src/generated.ts linguist-generated\nsrc/late.ts linguist-generated'),
+    });
+    await streamTreeItem('src/late.ts');
+    await until(() => expect(markFiles).toHaveBeenCalledTimes(1));
+    await until(() => expect(document.querySelector('#diff-generated button[aria-label="Viewed"]')).not.toBeNull());
+    await nextReconcile(() => app.reconcile());
+    // src/late.ts has no diff yet, so the run is not done.
+    expect(toasts()).toEqual(['Auto-view: marking generated files viewed…']);
+
+    await nextReconcile(() => {
+      document.body.insertAdjacentHTML('beforeend', `
+        <div id="diff-src-late-ts" role="region" aria-labelledby="heading-late">
+          <div data-diff-header-wrapper="true">
+            <button aria-label="Collapse file"></button>
+            <h3 id="heading-late"><a href="#diff-src-late-ts"><code>src/late.ts</code></a></h3>
+            <button aria-label="Not Viewed" aria-pressed="false">Viewed</button>
+          </div>
+        </div>`);
+    });
+    await until(() => expect(toasts()).toEqual(['Auto-view: generated files marked viewed']));
+    expect(markFiles.mock.calls.map(([, paths]) => paths)).toEqual([['src/generated.ts'], ['src/late.ts']]);
+    app.stop();
+  });
+
   it('marks generated files when auto-view turns on and stops when it turns off', async () => {
     const markFiles = vi.fn(async (snapshot: SupportedSnapshot, paths: string[], viewed: boolean) => {
       for (const path of paths) {

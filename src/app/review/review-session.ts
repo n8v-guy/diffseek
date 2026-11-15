@@ -5,6 +5,7 @@ import type {
 } from '@diffseek/browser';
 import {
   afterNextPaint,
+  autoViewNotice,
   bindSnapshot,
   dismissSnackbar,
   filterMenus,
@@ -67,6 +68,7 @@ import {
   trackDiffseekWrites,
 } from './redraw-trace';
 import {
+  autoViewWork,
   cancelPanelReconcile,
   classifyKeyFor,
   classifySnapshot,
@@ -74,7 +76,6 @@ import {
   pageNodesChanged,
   type PanelReconcileSchedule,
   type PanelScheduleOptions,
-  pendingDefaultViewed,
   queuePanelReconcile,
   refreshViewedState,
   retainNativeOwners,
@@ -126,6 +127,7 @@ export class ReviewSession {
   private reconciling = false;
   private dirty = false;
   private defaultViewedInFlight = 0;
+  private readonly autoViewNotice: ReturnType<typeof autoViewNotice>;
   private readonly metadataWatch = metadataWatch();
   private readonly metadataRefresh = metadataRefreshState();
   private applied: ViewPlan | null = null;
@@ -174,6 +176,7 @@ export class ReviewSession {
       if (path) this.actionExecutor.invalidate(path);
     };
     options.root.addEventListener('click', this.onNativeClick, true);
+    this.autoViewNotice = autoViewNotice(options.root);
     this.quiet = sessionQuiet(options.root, options.quietClock, () =>
       this.requestRevalidation(),
     );
@@ -221,6 +224,7 @@ export class ReviewSession {
     if (this.lifecycle.signal.aborted) return;
     this.lifecycle.abort();
     this.quiet.cancel();
+    this.autoViewNotice.cancel();
     this.options.metadataCommits.invalidate(this.options.review);
     this.actionExecutor.cancel();
     this.options.root.removeEventListener('click', this.onNativeClick, true);
@@ -300,11 +304,11 @@ export class ReviewSession {
     structureChanged: boolean,
   ): void {
     const root = this.options.root;
-    const defaultViewedPaths = this.metadataRefresh.settled
-      ? pendingDefaultViewed(catalogSnapshot.files, this.options.filterDefaults, this.defaultViewedAttempts)
-      : [];
-    const generatedDefaultBusy =
-      this.defaultViewedInFlight > 0 || defaultViewedPaths.length > 0;
+    const { pending: defaultViewedPaths, outstanding } = autoViewWork(
+      catalogSnapshot.files, this.options.filterDefaults, this.defaultViewedAttempts, this.metadataRefresh.settled,
+    );
+    const generatedDefaultBusy = this.defaultViewedInFlight > 0 || defaultViewedPaths.length > 0;
+    if (!generatedDefaultBusy && !outstanding) this.autoViewNotice.done();
     const menus = filterMenus(root);
     const plan = planView({
       files: catalogSnapshot.files,
@@ -405,7 +409,7 @@ export class ReviewSession {
   private enqueueDefaultViewed(paths: string[]): void {
     for (const path of paths) this.defaultViewedAttempts.add(path);
     this.defaultViewedInFlight += 1;
-    const progress = showBatchStarted(this.options.root, 'auto-view', true);
+    this.autoViewNotice.started();
     void this.actionExecutor
       .enqueue({
         reviewKey: this.options.review.key,
@@ -417,8 +421,7 @@ export class ReviewSession {
       .then((result) => {
         this.defaultViewedInFlight = Math.max(0, this.defaultViewedInFlight - 1);
         if (this.lifecycle.signal.aborted) return;
-        if (result) showBatchResult(this.options.root, 'auto-view', true, result, progress);
-        else dismissSnackbar(progress);
+        this.autoViewNotice.finished(result);
         this.schedule();
       });
   }
