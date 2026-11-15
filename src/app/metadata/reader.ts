@@ -25,7 +25,8 @@ export const defaultMetadataTtlMs = 604_800_000;
 /** Pull-request metadata file lifetime: 2 days. */
 export const pullMetadataTtlMs = 172_800_000;
 
-const defaultBranch = 'HEAD';
+/** Raw reads at HEAD follow the default branch. */
+const refOf = (review: RepositoryRef): string => review.branch ?? 'HEAD';
 const attributesPath = '.gitattributes';
 
 type Review = RepositoryRef & { pull: number; paths: readonly string[] };
@@ -86,7 +87,7 @@ export async function refreshDefaultMetadata(
   const pendingHead = dependencies.resolveHead
     ? primeHead(review, cached, timestamp, revalidate, dependencies.resolveHead)
     : undefined;
-  // Listing bodies stay on the default branch. A failure here must not block
+  // Listing bodies stay on the listing's branch. A failure here must not block
   // the pull request's own files, and must not be stored as a fresh listing.
   try {
     const current =
@@ -97,7 +98,7 @@ export async function refreshDefaultMetadata(
       const files = await readInto(
         current.files,
         unloadedMetadataPaths(current.files, review.paths),
-        defaultBranch,
+        refOf(review),
         review,
         request,
       );
@@ -257,7 +258,7 @@ async function withFallback(
   const codeowners = chooseCodeowners(Object.keys(merged));
   if (codeowners !== undefined && merged[codeowners]?.text === undefined) {
     try {
-      next = await readInto(next, [codeowners], defaultBranch, review, request);
+      next = await readInto(next, [codeowners], refOf(review), review, request);
       merged = overlaid(next, applicable(overlay, paths));
     } catch {
       // The pull texts already read stay usable when the default read fails.
@@ -371,7 +372,7 @@ function overlaid(
   return Object.fromEntries([...kept, ...replaced]);
 }
 
-/** A failed search keeps any cached listing, even an empty one; only no cache probes. */
+/** A failed search keeps any cached listing, even an empty one; only no cache probes. A non-default base always probes. */
 async function refreshListing(
   review: Review,
   cached: RepositoryCache | null,
@@ -385,6 +386,8 @@ async function refreshListing(
     pulls: cached?.pulls ?? [],
     overlays: cached?.overlays ?? {},
   });
+  // Code search sees only the default branch.
+  if (review.branch !== undefined) return listed(await probe(review, request));
   try {
     const found = await search({ repo: `${review.owner}/${review.repo}` });
     const index: MetadataFiles = {};
@@ -402,17 +405,19 @@ async function refreshListing(
   }
 }
 
-/** Without search: the root attributes and at most three CODEOWNERS spots. */
+/** Without search, or on a base search cannot see: the root attributes and at most three CODEOWNERS spots. */
 async function probe(
   review: Review,
   request: Dependencies['request'],
 ): Promise<MetadataFiles> {
-  let files = await readInto({}, [attributesPath], defaultBranch, review, request);
-  for (const location of codeownersLocations) {
-    files = await readInto(files, [location], defaultBranch, review, request);
-    if (files[location]) break;
-  }
-  return files;
+  // One round trip: every spot at once; the first found CODEOWNERS is chosen later.
+  return readInto(
+    {},
+    [attributesPath, ...codeownersLocations],
+    refOf(review),
+    review,
+    request,
+  );
 }
 
 /** Reads each path at `ref`; a missing file is dropped, a failed read throws. */

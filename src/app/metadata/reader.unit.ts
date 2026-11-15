@@ -139,13 +139,19 @@ describe('cold read', () => {
     });
   });
 
-  it('stops spot-checking at the first CODEOWNERS and makes at most four requests', async () => {
-    const request = raw({ CODEOWNERS: '* @root' });
+  it('spot-checks every CODEOWNERS spot at once in four requests and uses the first found', async () => {
+    const request = raw({ CODEOWNERS: '* @root', 'docs/CODEOWNERS': '* @docs' });
     const search = vi.fn(async (): Promise<MetadataSearchResult> => {
       throw new Error('signed out');
     });
-    await refresh(1, ['a/b/c/d.ts'], 0, request, search);
-    expect(requested(request)).toEqual(['.gitattributes', '.github/CODEOWNERS', 'CODEOWNERS']);
+    const result = await refresh(1, ['a/b/c/d.ts'], 0, request, search);
+    expect(requested(request)).toEqual([
+      '.gitattributes',
+      '.github/CODEOWNERS',
+      'CODEOWNERS',
+      'docs/CODEOWNERS',
+    ]);
+    expect(result.metadata.codeowners).toBe('* @root');
 
     const none = raw({});
     await refresh(2, ['a/b/c/d.ts'], 0, none, search);
@@ -167,6 +173,52 @@ describe('cold read', () => {
     expect(failed.changed).toBe(false);
     expect(failed.cache.refreshedAt).toBe(0);
     expect(await readCache(repository)).toBeNull();
+  });
+});
+
+describe('non-default base', () => {
+  const base = { ...repository, branch: 'release' };
+  const atRef = (files: Record<string, Record<string, string>>) =>
+    vi.fn<Raw>(async ({ ref, path }) => {
+      const text = files[ref]?.[path];
+      return text === undefined
+        ? { status: 'missing' }
+        : { status: 'found', text, contentType: 'text/plain', url: '' };
+    });
+  const read = (request: Raw, search: ReturnType<typeof searching>) =>
+    refreshDefaultMetadata(
+      { ...base, pull: 2, paths: ['src/a.ts'] },
+      { request, search, now: () => 1_000 },
+    );
+
+  it('reads the base branch instead of the default branch metadata', async () => {
+    const request = atRef({
+      HEAD: texts,
+      release: { CODEOWNERS: '* @release', '.gitattributes': '*.ts group=Release' },
+    });
+    const search = searching();
+
+    const result = await read(request, search);
+
+    expect(search).not.toHaveBeenCalled();
+    expect(new Set(request.mock.calls.map(([input]) => input.ref))).toEqual(new Set(['release']));
+    expect(result.metadata).toEqual({
+      codeowners: '* @release',
+      attributes: '*.ts group=Release',
+      nestedAttributes: {},
+    });
+  });
+
+  it('finds base metadata the default branch lacks, and caches it apart', async () => {
+    const request = atRef({ release: { '.github/CODEOWNERS': '* @team' } });
+
+    const result = await read(request, searching([]));
+    await writeCache(base, result.cache);
+
+    expect(result.metadata.codeowners).toBe('* @team');
+    expect(requested(request)).toHaveLength(4);
+    expect(await readCache(repository)).toBeNull();
+    expect((await readImmediateMetadata(base)).codeowners).toBe('* @team');
   });
 });
 
@@ -660,6 +712,9 @@ describe('pull request side', () => {
     expect(resolveHead).toHaveBeenCalledTimes(2);
     expect(request.mock.calls.map(([input]) => [input.ref, input.path])).toEqual([
       ['HEAD', '.gitattributes'],
+      ['HEAD', '.github/CODEOWNERS'],
+      ['HEAD', 'CODEOWNERS'],
+      ['HEAD', 'docs/CODEOWNERS'],
     ]);
     expect(await readCache(repository)).toBeNull();
   });

@@ -8,6 +8,7 @@ import {
 import {
   changesPathFromClassic,
   markViewed,
+  nonDefaultBase,
   resolvePullHead,
   reviewFromPath,
   type ReviewRef,
@@ -90,10 +91,12 @@ export async function startReviewApp(
   let generation = 0;
   let scheduled = false;
 
-  const replaceSession = async (next: ReviewRef | null) => {
+  const replaceSession = async (route: ReviewRef | null) => {
     const expectedGeneration = ++generation;
     session?.stop();
     session = null;
+    const branch = route && nonDefaultBase(root, route);
+    const next = route && (branch ? { ...route, branch } : route);
     review = next;
     if (!next) {
       root.dispatchEvent(new CustomEvent('diffseek-reconciled'));

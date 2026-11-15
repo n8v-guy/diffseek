@@ -27,28 +27,36 @@ its blob. Exactly one CODEOWNERS is chosen from those paths (.github/, root,
 docs/) and only .gitattributes files in an ancestor-or-same directory of a diff
 path are read. The cache holds the listing and the texts per repository, keyed
 by blob. How long that cache lasts, and when a due copy is reread, is D016.
-Warm and hot reviews make no metadata request while those copies are fresh.
-Two reads do not wait for that reread: a known ancestor .gitattributes that a
+Warm and hot reviews make no metadata request while those copies are fresh. Two
+reads do not wait for that reread: a known ancestor .gitattributes that a
 streamed path newly needs, and a metadata file in the diff that this pull has
 not cached. That file is read at the pull's head and replaces the one default
 file. Only paths in the diff are read from the pull. A deleted chosen
 CODEOWNERS falls to the next known one on the default branch. A late path is
 not missed because an earlier tree was shorter or the same size. A signed-in
-search with no results is a valid answer: it is cached as a listing of none
-and never probed. Search is unusable on an HTTP error, a non-JSON response, an
+search with no results is a valid answer: it is cached as a listing of none and
+never probed. Search is unusable on an HTTP error, a non-JSON response, an
 unexpected shape, search errors, `logged_in !== true` (signed out), or too many
 pages. Then any cached entry is kept as is, and only with no cache entry does
-it read at most three CODEOWNERS spots and the root .gitattributes instead.
-Failures are not stored and do not refresh the entry's time. The next try
-waits for a quiet page (D016). A version 3 entry is kept; a pull overlay
-without its own time is as old as its listing. Entries from the older
-per-pull cache are ignored and dropped.
+it read the root .gitattributes and all three CODEOWNERS spots at once
+instead, keeping the first found CODEOWNERS. A pull into a branch other than the default reads those same spots at its base,
+as GitHub takes code owners from the base, and caches them per base branch, not
+per base commit: no two branch names sharing a commit were seen, and a commit
+key would miss on every base push. The
+base comes from the pull header and the default from GitHub's page data; either
+one missing reads as the default branch. Failures are not stored and do not
+refresh the entry's time. The next try waits for a quiet page (D016). A version
+3 entry is kept; a pull overlay without its own time is as old as its listing.
+Entries from the older per-pull cache are ignored and dropped.
 
 **Why:** Probing each touched folder at the pull-request head made cold loads
 slower and redrew more. One listing finds every file, and a blob-keyed cache
-reads only what changed. **Cost:** Search covers the default branch only and
-can lag its index, so a new nested file waits for a later refresh, and the
-fallback ignores nested files. A hung read is abandoned after a guard time.
+reads only what changed. Reading the spots at once took the fallback from
+about 2.2s to 1.2s on a cold load (median of 13). **Cost:** Search covers the
+default branch only and can lag its index, so a new nested file waits for a
+later refresh, and the fallback and a non-default base ignore nested files.
+The fallback always makes four requests, usually with not-found replies. A
+hung read is abandoned after a guard time.
 
 ## D004 — Label sources compose through one interface
 

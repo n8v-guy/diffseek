@@ -20,4 +20,8 @@ export {
   unloadedMetadataPaths,
   type MetadataFiles,
 } from './metadata-files';
-export type { RepositoryMetadata, RepositoryRef } from './metadata';
+export {
+  repositoryKey,
+  type RepositoryMetadata,
+  type RepositoryRef,
+} from './metadata';

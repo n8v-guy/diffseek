@@ -1,4 +1,4 @@
-import type { RepositoryRef } from './metadata';
+import { repositoryKey, type RepositoryRef } from './metadata';
 
 type WriteMetadata<T> = (
   repository: RepositoryRef,
@@ -41,8 +41,4 @@ export class MetadataCommitGuard<T> {
     this.tails.set(key, result.catch(() => undefined));
     return result;
   }
-}
-
-function repositoryKey(repository: RepositoryRef): string {
-  return `${repository.owner}/${repository.repo}`;
 }
