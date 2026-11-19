@@ -135,11 +135,11 @@ describe('live-perf helpers', () => {
       'no samples',
     ]);
     expect(medianBudgetFailures([slow, slow, slow], defaultLivePerfBudgets({}))).toEqual([
-      'cold firstRenderSeconds 50 > 6',
-      'cold menuOpenSeconds 20 > 3',
-      'cold panelsSeconds 100 > 14',
-      'cold reconciles 800 > 10',
-      'cold domMutations 20000 > 5',
+      'cold firstRenderSeconds 50 > 4.7',
+      'cold menuOpenSeconds 20 > 2.3',
+      'cold panelsSeconds 100 > 13.1',
+      'cold reconciles 800 > 9',
+      'cold domMutations 20000 > 7',
     ]);
     const summary = livePerfSummary({
       prUrl: 'https://example.test',
