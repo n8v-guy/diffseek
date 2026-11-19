@@ -64,27 +64,27 @@ export type CookieLike = {
 };
 
 /**
- * Defaults come from 32 green runs from 1 to 15 Nov 2026, after the ~33 s
- * load redraw went away. Durations are ceil(1.1x the slowest run median);
- * counts sit at or just above the highest healthy value.
+ * Defaults come from the last month of Live E2E run medians, per load.
+ * Seconds: round up to 0.1 s of p90 + min(3 s, 10% of p90). Menu open shares
+ * one limit, the largest of the three loads. Redraws, reconciles, and DOM
+ * mutations must be less than or equal to the highest observed value.
  */
 export function defaultLivePerfBudgets(
   env: NodeJS.ProcessEnv = process.env,
 ): LivePerfBudgets {
   return {
-    coldFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S, 6),
-    warmFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S, 6),
-    hotFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S, 4),
-    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, 14),
-    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, 14),
-    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, 11),
-    menuOpenSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MENU_S, 3),
-    reconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_RECONCILES, 10),
-    domMutations: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MUTATIONS, 5),
+    coldFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_RENDER_S, 4.7),
+    warmFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_RENDER_S, 4.6),
+    hotFirstRenderSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_RENDER_S, 3.5),
+    coldPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANELS_S, 13.1),
+    warmPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANELS_S, 13.4),
+    hotPanelsSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_HOT_PANELS_S, 10.3),
+    menuOpenSeconds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MENU_S, 2.3),
+    reconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_RECONCILES, 9),
+    domMutations: numberEnv(env.DIFFSEEK_LIVE_BUDGET_MUTATIONS, 7),
     actionReconciles: numberEnv(env.DIFFSEEK_LIVE_BUDGET_ACTION_RECONCILES, 8),
     treeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_TREE_REBUILDS, 0),
     panelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_PANEL_REBUILDS, 0),
-    // Cold and warm always showed 1 tree and 1 panel rebuild since 1 Nov 2026; actions stay at 0.
     coldTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_TREE_REBUILDS, 1),
     coldPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANEL_REBUILDS, 1),
     warmTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_TREE_REBUILDS, 1),

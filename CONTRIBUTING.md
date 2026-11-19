@@ -46,10 +46,11 @@ and to fully classified counts, plus reconcile passes, DiffSeek's page writes,
 and GitHub tree or panel rebuilds. Cold and warm keep those rebuilds within
 a bound, so a GitHub load redraw can be absent; a rebuild past the bound
 fails. Hot expects every row GitHub removes to come back.
-The cold sample also toggles the viewed filter and marks one file viewed. Median
-durations must stay under limits: one shared cutoff for all three loads,
-derived from the typical CI cold load with some headroom, and looser ceilings
-for first render and menu open.
+The cold sample also toggles the viewed filter and marks one file viewed. Limits
+come from the last month of live end-to-end data, per load. Median durations
+must stay under p90 + min(3 s, 10% of p90), rounded up to 0.1 s. Rebuild,
+reconcile, and page write counts must be less than or equal to the highest
+observed value.
 
 Live end-to-end waits are event-based; timeouts only fail a stuck run. GitHub
 first renders a static Filter options button and swaps in an interactive one
