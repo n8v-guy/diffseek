@@ -102,8 +102,8 @@ describe('live-perf helpers', () => {
       firstRenderSeconds: 4,
       menuOpenSeconds: 1,
       panelsSeconds: 8,
-      reconciles: 12,
-      domMutations: 400,
+      reconciles: 6,
+      domMutations: 3,
       treeRebuilds: 0,
       treeRowsRemoved: 0,
       requests: { total: 3, search: 0, metadata: 0, other: 3 },
@@ -135,11 +135,11 @@ describe('live-perf helpers', () => {
       'no samples',
     ]);
     expect(medianBudgetFailures([slow, slow, slow], defaultLivePerfBudgets({}))).toEqual([
-      'cold firstRenderSeconds 50 > 12',
-      'cold menuOpenSeconds 20 > 6',
-      'cold panelsSeconds 100 > 16',
-      'cold reconciles 800 > 500',
-      'cold domMutations 20000 > 12000',
+      'cold firstRenderSeconds 50 > 6',
+      'cold menuOpenSeconds 20 > 3',
+      'cold panelsSeconds 100 > 14',
+      'cold reconciles 800 > 10',
+      'cold domMutations 20000 > 5',
     ]);
     const summary = livePerfSummary({
       prUrl: 'https://example.test',
