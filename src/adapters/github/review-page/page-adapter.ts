@@ -1,11 +1,18 @@
 import type { ChangeStatus, FileRecord } from '@diffseek/review';
 import { extensionOf } from '@diffseek/review';
 
-const headerButtonSelector = '[data-diff-header-wrapper="true"] button';
-const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
+export const diffHeaderSelector = '[data-diff-header-wrapper="true"]';
+export const diffRegionSelector = '[role="region"][id^="diff-"]';
+export const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
+export const fileTreeItemSelector = '[role="treeitem"]';
+const headerButtonSelector = `${diffHeaderSelector} button`;
 
 export function fileTreeElement(root: ParentNode): HTMLElement | null {
   return root.querySelector<HTMLElement>(fileTreeSelector);
+}
+
+export function diffRegionElements(root: ParentNode): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(diffRegionSelector)];
 }
 
 export type PageSnapshot =
@@ -27,7 +34,7 @@ export type PageSnapshot =
 
 /** Tree membership + per-row href/status. Region hydration must not invalidate this. */
 export function treeStructureKey(root: Document): string | null {
-  const tree = root.querySelector<HTMLElement>(fileTreeSelector);
+  const tree = fileTreeElement(root);
   if (!tree) return null;
   return [...tree.querySelectorAll<HTMLElement>('[role="treeitem"][id]')]
     .map((item) => {
@@ -41,9 +48,7 @@ export function treeStructureKey(root: Document): string | null {
 }
 
 export function regionStructureKey(root: Document): string {
-  return [
-    ...root.querySelectorAll<HTMLElement>('[role="region"][id^="diff-"]'),
-  ]
+  return diffRegionElements(root)
     .map((region) => `${region.id}\0${displayedPathOf(region) ?? ''}`)
     .join('\n');
 }
@@ -55,7 +60,7 @@ export function pageStructureKey(root: Document): string | null {
 }
 
 export function scanPage(root: Document): PageSnapshot {
-  const tree = root.querySelector<HTMLElement>(fileTreeSelector);
+  const tree = fileTreeElement(root);
   if (!tree) return { supported: false, reason: 'No file tree on this page' };
 
   const files: FileRecord[] = [];
@@ -194,7 +199,7 @@ export function bindSnapshot(
     supported: true,
     files,
     unavailable,
-    tree: () => root.querySelector<HTMLElement>(fileTreeSelector),
+    tree: () => fileTreeElement(root),
     treeItems: () => [
       ...root.querySelectorAll<HTMLElement>(
         `${fileTreeSelector} [role="treeitem"][id]`,
@@ -219,9 +224,7 @@ function indexRegions(root: Document): {
 } {
   const byId = new Map<string, HTMLElement[]>();
   const byPath = new Map<string, HTMLElement[]>();
-  for (const region of root.querySelectorAll<HTMLElement>(
-    '[role="region"][id^="diff-"]',
-  )) {
+  for (const region of diffRegionElements(root)) {
     const idMatches = byId.get(region.id) ?? [];
     idMatches.push(region);
     byId.set(region.id, idMatches);

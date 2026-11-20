@@ -11,6 +11,11 @@ export function isReviewFilesPath(pathname: string): boolean {
   return reviewFromPath(pathname) != null;
 }
 
+/** GitHub renders an empty `user-login` meta for signed-out visitors. */
+export function isSignedOut(root: Document): boolean {
+  return root.querySelector('meta[name="user-login"]')?.getAttribute('content') === '';
+}
+
 /**
  * GitHub sends visitors who cannot use the changes route back to
  * `/files?new_files_changed=true`; redirecting again would loop.

@@ -7,6 +7,7 @@ import {
 } from '@diffseek/browser';
 import {
   changesPathFromClassic,
+  isSignedOut,
   markViewed,
   nonDefaultBase,
   resolvePullHead,
@@ -160,9 +161,4 @@ export async function startReviewApp(
       review = null;
     },
   };
-}
-
-/** GitHub renders an empty `user-login` meta for signed-out visitors. */
-function isSignedOut(root: Document): boolean {
-  return root.querySelector('meta[name="user-login"]')?.getAttribute('content') === '';
 }

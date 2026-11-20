@@ -13,7 +13,7 @@ filter and batch-mark without introducing a new review workflow.
 - Hide non-matches in the tree; collapse and mute them in the diff.
 - Avoid GitHub's internal state and undocumented APIs.
 - Ask only for storage and access to GitHub and its raw file host.
-- Keep other browsers and user-defined review ordering deferred.
+- Defer user-defined review ordering and browser targets beyond Chrome and Firefox.
 
 Shipped behavior and the trade-offs that still hold are recorded in
 [DECISIONS.md](DECISIONS.md).

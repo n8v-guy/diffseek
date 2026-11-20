@@ -3,12 +3,14 @@ name: CI
 on:
   push:
     branches: ["**"]
+  pull_request:
 
 permissions:
   contents: read
 
 jobs:
   test:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
 
     steps:
@@ -22,8 +24,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:ci:full
+      - name: Upload failed fixture browser traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fixture-browser-traces
+          path: test-results/**/trace.zip
+          if-no-files-found: ignore
 
   strict:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
 
     steps:

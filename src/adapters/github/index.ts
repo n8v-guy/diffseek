@@ -11,7 +11,7 @@ export { readRawFile } from './repository-content/raw-file-client';
 export type { RawFileRequest, RawFileResult } from './repository-content/raw-file';
 export {
   bindSnapshot,
-  fileToggleAction,
+  diffRegionElements,
   fileTreeElement,
   refreshObservedFiles,
   regionStructureKey,
@@ -20,6 +20,12 @@ export {
   viewedControlState,
   type PageSnapshot,
 } from './review-page/page-adapter';
+export {
+  classifyPageMutations,
+  collectReviewNodeIds,
+  filteredFileExpanded,
+  watchObservationRoots,
+} from './review-page/page-observation';
 export { nonDefaultBase } from './review-page/base-branch';
 export {
   markViewed,
@@ -35,7 +41,6 @@ export {
   autoViewNotice,
   dismissSnackbar,
   filterMenus,
-  isNativeMutation,
   menuNeedsRemount,
   removeInjected,
   removeUnavailable,
@@ -47,6 +52,7 @@ export {
 } from './review-view/review-ui';
 export {
   changesPathFromClassic,
+  isSignedOut,
   reviewFromPath,
   type ReviewRef,
 } from './routing/page-route';
