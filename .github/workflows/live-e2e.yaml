@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       head_sha:
-        description: Main commit whose CI run succeeded
+        description: Commit of the dispatched branch whose CI run succeeded
         required: true
         type: string
 
@@ -15,8 +15,9 @@ concurrency:
 permissions: {}
 
 jobs:
+  # Any branch can run this; only main starts a release (start-release and
+  # release.yaml both require main).
   live:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -27,7 +28,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - name: Require this main commit and a successful CI run
+      - name: Require the branch head and a successful CI run
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

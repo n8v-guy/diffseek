@@ -21,6 +21,7 @@ import {
   generatedIndexedText,
   hotLossFailures,
   isInlineStorageState,
+  livePerfScenarios,
   livePerfSummary,
   liveSampleCount,
   medianBudgetFailures,
@@ -50,6 +51,7 @@ const generatedCounter =
 const viewedFacetAction =
   '[data-diffseek-menu-viewed-action][data-viewed-facet="viewed"][data-viewed-value="true"]';
 const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
+const generatedToggle = '[data-filter-kind="generated"][data-filter-value="true"]';
 const stepTimeout = 20_000;
 const panelsTimeout = 90_000;
 // Fresh-install hiding without auto-view, which would mark the fixture's
@@ -62,9 +64,9 @@ test.describe('live DiffSeek performance', () => {
   test.setTimeout(1_800_000);
 
   let context: BrowserContext;
-  const cold: LivePerfSample[] = [];
-  const warm: LivePerfSample[] = [];
-  const hot: LivePerfSample[] = [];
+  const loads = Object.fromEntries(
+    livePerfScenarios.map((scenario) => [scenario, [] as LivePerfSample[]]),
+  ) as Record<LivePerfScenario, LivePerfSample[]>;
   const phases: Array<{ sample: number; phase: string } & RedrawCounts> = [];
 
   test.beforeAll(async () => {
@@ -106,18 +108,14 @@ test.describe('live DiffSeek performance', () => {
 
   test.afterAll(async () => {
     await context.close();
-    if (cold.length === 0) return;
+    if (loads.cold.length === 0) return;
     const report = {
       prUrl: livePrUrl,
       samples,
-      cold,
-      warm,
-      hot,
-      medians: {
-        cold: medianSample(cold),
-        warm: medianSample(warm),
-        hot: medianSample(hot),
-      },
+      ...loads,
+      medians: Object.fromEntries(
+        livePerfScenarios.map((scenario) => [scenario, medianSample(loads[scenario])]),
+      ),
       phases,
     };
     const outDir = resolve('.cache');
@@ -132,7 +130,7 @@ test.describe('live DiffSeek performance', () => {
     console.log(markdown);
   });
 
-  test('measures cold, warm, and hot reviews', async () => {
+  test('measures cold, warm, hot, restored, cold-mark, and unmark reviews', async () => {
     for (let index = 0; index < samples; index += 1) {
       await clearExtensionStore(context);
       await writeShownDefaults(context);
@@ -140,7 +138,7 @@ test.describe('live DiffSeek performance', () => {
       const coldSample = await measureReview(page, 'cold', async () => {
         await page.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
       });
-      cold.push(coldSample);
+      loads.cold.push(coldSample);
       expect(rebuildFailures(coldSample, budgets)).toEqual([]);
       phases.push(
         { sample: index, phase: 'toggle-filter', ...(await runToggle(page)) },
@@ -150,22 +148,45 @@ test.describe('live DiffSeek performance', () => {
       const warmSample = await measureReview(page, 'warm', async () => {
         await page.reload({ waitUntil: 'domcontentloaded' });
       });
-      warm.push(warmSample);
+      loads.warm.push(warmSample);
       expect(rebuildFailures(warmSample, budgets)).toEqual([]);
 
       await showConversation(page);
       const hotSample = await measureReview(page, 'hot', () => showFiles(page));
-      hot.push(hotSample);
+      loads.hot.push(hotSample);
       expect(hotLossFailures(hotSample)).toEqual([]);
+
+      const filtered = await excludeFirstValues(page);
+      await showPullList(page);
+      const restoredSample = await measureReview(page, 'restored', () => openPullFromList(page), filtered.hidden);
+      loads.restored.push(restoredSample);
+      expect(rebuildFailures(restoredSample, budgets)).toEqual([]);
+      expect(hotLossFailures(restoredSample)).toEqual([]);
+      expect(await reviewState(page)).toEqual(filtered);
+      // Auto-view is still off here, so this leaves every file unviewed.
+      await clearViewedFiles(page);
       await page.close();
+
+      // No saved defaults is a fresh install: auto-view marks generated files viewed.
+      await clearExtensionStore(context);
+      const marking = await context.newPage();
+      const coldMarkSample = await measureReview(marking, 'coldMark', async () => {
+        await marking.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
+      });
+      loads.coldMark.push(coldMarkSample);
+      expect(rebuildFailures(coldMarkSample, budgets)).toEqual([]);
+      const unmarkSample = await measureUnmark(marking);
+      loads.unmark.push(unmarkSample);
+      expect(rebuildFailures(unmarkSample, budgets)).toEqual([]);
+      await marking.close();
     }
 
     for (const phase of phases) {
       expect(actionFailures(phase.phase, phase, budgets)).toEqual([]);
     }
-    expect(medianBudgetFailures(cold, budgets)).toEqual([]);
-    expect(medianBudgetFailures(warm, budgets)).toEqual([]);
-    expect(medianBudgetFailures(hot, budgets)).toEqual([]);
+    for (const scenario of livePerfScenarios) {
+      expect(medianBudgetFailures(loads[scenario], budgets)).toEqual([]);
+    }
   });
 
   test('hide defaults hide generated and viewed files until shown', async () => {
@@ -175,10 +196,7 @@ test.describe('live DiffSeek performance', () => {
     await page.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
     await openFilterMenu(page, panelsTimeout);
     const viewed = page.locator(viewedToggle);
-    const generated = page.locator(
-      '[data-filter-kind="generated"][data-filter-value="true"]',
-    );
-    const generatedToggle = '[data-filter-kind="generated"][data-filter-value="true"]';
+    const generated = page.locator(generatedToggle);
     const generatedCountSelector =
       '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count';
     await untilDom(page, { kind: 'attr', selector: viewedToggle, name: 'aria-checked', value: 'mixed' }, stepTimeout, 'viewed toggle mixed');
@@ -204,10 +222,12 @@ async function loadStorageState(source: string): Promise<unknown> {
   return JSON.parse(await readFile(source, 'utf8'));
 }
 
+/** `hidden` is the tree rows a restored load must hide again before it is complete. */
 async function measureReview(
   page: Page,
   scenario: LivePerfScenario,
   navigate: () => Promise<void>,
+  hidden: string[] = [],
 ): Promise<LivePerfSample> {
   const requests = emptyGithubRequestCounts();
   // Metadata fetches run in the extension service worker, so the page misses them.
@@ -221,9 +241,10 @@ async function measureReview(
     await navigate();
     await untilDom(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
     const firstRenderSeconds = await renderSeconds(page, started);
-    // GitHub removes and restores panels on this navigation. Hot starts
-    // counting here and later fails on rows back after 500 ms or never back.
-    if (scenario === 'hot') await resetRedraws(page);
+    // GitHub removes and restores panels on these navigations. They start
+    // counting here and later fail on rows back after 500 ms or never back.
+    const inPage = scenario === 'hot' || scenario === 'restored';
+    if (inPage) await resetRedraws(page);
     const menuOpenSeconds = await openFilterMenu(page);
     await untilDom(
       page,
@@ -231,8 +252,16 @@ async function measureReview(
       panelsTimeout,
       'generated counter categorized',
     );
+    if (scenario === 'coldMark') {
+      // The counter covers loaded files only; this notice waits for streamed ones too.
+      await untilDom(page, { kind: 'text', selector: '[data-diffseek="snackbar"]', pattern: '^Auto-view: generated files marked viewed$' }, 300_000, 'auto-view done');
+      await untilGenerated(page, 'true');
+    }
+    if (scenario === 'restored') {
+      await untilDom(page, { kind: 'tree-hidden', ids: hidden }, panelsTimeout, 'the same files hidden again');
+    }
     const panelsSeconds = secondsBetween(started);
-    if (scenario === 'hot') {
+    if (inPage) {
       // Wait for every removed row to return (event), not a fixed delay. The
       // trace still timestamps returns: one back after 500 ms is a net loss.
       // A row that never returns trips the guard and is then counted as lost.
@@ -241,24 +270,105 @@ async function measureReview(
         document.dispatchEvent(new Event('diffseek-redraw-settle'));
       });
     }
-    const counts = await readRedraws(page);
-    const sample: LivePerfSample = {
+    return recordSample({
       scenario,
       firstRenderSeconds,
       menuOpenSeconds,
       panelsSeconds,
       requests,
-      ...counts,
-    };
-    test.info().annotations.push({
-      type: `live-perf:${scenario}`,
-      description: JSON.stringify(sample),
+      ...(await readRedraws(page)),
     });
-    console.log(`diffseek live-perf:${scenario}`, sample);
-    return sample;
   } finally {
     browserContext.off('request', onRequest);
   }
+}
+
+/** From cold-mark's open menu: the generated count unmarks every generated file. */
+async function measureUnmark(page: Page): Promise<LivePerfSample> {
+  const requests = emptyGithubRequestCounts();
+  const onRequest = (request: Request) => {
+    noteGithubRequest(requests, request.url());
+  };
+  const browserContext = page.context();
+  browserContext.on('request', onRequest);
+  try {
+    await resetRedraws(page);
+    const menuOpenSeconds = await openFilterMenu(page);
+    const before = await readRedraws(page);
+    const started = Date.now();
+    await page.locator(generatedCounter).click({ timeout: stepTimeout });
+    // The first pass after the click redraws GitHub's first unmarked file.
+    await untilDom(page, { kind: 'dataset-above', key: 'diffseekReconciles', value: before.reconciles }, panelsTimeout, 'first unmark reconcile');
+    const firstRenderSeconds = secondsBetween(started);
+    await untilGenerated(page, 'false');
+    return recordSample({
+      scenario: 'unmark',
+      firstRenderSeconds,
+      menuOpenSeconds,
+      panelsSeconds: secondsBetween(started),
+      requests,
+      ...(await readRedraws(page)),
+    });
+  } finally {
+    browserContext.off('request', onRequest);
+  }
+}
+
+function recordSample(sample: LivePerfSample): LivePerfSample {
+  test.info().annotations.push({
+    type: `live-perf:${sample.scenario}`,
+    description: JSON.stringify(sample),
+  });
+  console.log(`diffseek live-perf:${sample.scenario}`, sample);
+  return sample;
+}
+
+/** Every generated file has its viewed state, and no auto-view batch is running. */
+async function untilGenerated(page: Page, viewed: 'true' | 'false'): Promise<void> {
+  await untilDom(page, { kind: 'attr', selector: generatedCounter, name: 'aria-pressed', value: viewed }, 300_000, `generated files viewed=${viewed}`);
+  await untilDom(page, { kind: 'absent', selector: `${generatedToggle}:disabled` }, 300_000, 'generated row enabled');
+}
+
+/**
+ * Excludes the first owner, group, and format, then returns the filtered
+ * state. Viewed files are shown again: GitHub's viewed state can differ after
+ * the pull reloads, and the tree must depend on the filters alone.
+ */
+async function excludeFirstValues(page: Page): Promise<ReviewState> {
+  await openFilterMenu(page);
+  const toggles = ['owners', 'groups', 'languages'].map((facet) => `[data-filter-kind="${facet}"]`);
+  // The viewed row cycles shown (true), hidden now (false), and always hidden (mixed).
+  const viewed = await page.locator(viewedToggle).getAttribute('aria-checked');
+  const viewedClicks = viewed === 'false' ? 2 : Number(viewed === 'mixed');
+  for (let click = 0; click < viewedClicks; click += 1) toggles.push(viewedToggle);
+  for (const toggle of toggles) {
+    const before = await readRedraws(page);
+    await page.locator(toggle).first().click({ timeout: stepTimeout });
+    await untilDom(page, { kind: 'dataset-above', key: 'diffseekReconciles', value: before.reconciles }, stepTimeout, `${toggle} reconcile`);
+  }
+  await untilDom(page, { kind: 'attr', selector: viewedToggle, name: 'aria-checked', value: 'true' }, stepTimeout, 'viewed files shown');
+  await untilDom(page, { kind: 'tree-hidden' }, panelsTimeout, 'every filtered file hidden in the tree');
+  return reviewState(page);
+}
+
+type ReviewState = { menu: string[]; tree: string[]; hidden: string[] };
+
+/** Every menu row's choice, every tree row's visibility and expansion, and the hidden files. */
+async function reviewState(page: Page): Promise<ReviewState> {
+  await openFilterMenu(page);
+  return page.evaluate(() => ({
+    menu: [...document.querySelectorAll('[data-diffseek="filters"] [data-filter-kind]')].map((item) =>
+      ['data-filter-kind', 'data-filter-value', 'aria-checked'].map((name) => item.getAttribute(name)).join(':'),
+    ),
+    tree: [...document.querySelectorAll<HTMLElement>('[role="tree"][aria-label="File Tree"] [role="treeitem"]')].map(
+      (item) => [item.id, item.hidden === true ? 'hidden' : 'shown', item.getAttribute('aria-expanded')].join(':'),
+    ),
+    hidden: [
+      ...document.querySelectorAll<HTMLElement>('[role="tree"][aria-label="File Tree"] [role="treeitem"]:not([aria-expanded])'),
+    ]
+      .filter((item) => item.hidden === true)
+      .map((item) => item.id),
+  }));
 }
 
 async function runToggle(page: Page): Promise<RedrawCounts> {
@@ -302,11 +412,29 @@ async function runMark(page: Page): Promise<RedrawCounts> {
 }
 
 async function showConversation(page: Page): Promise<void> {
-  const conversation = page.getByRole('link', { name: /^Conversation/ });
-  await untilDom(page, { kind: 'link-prefix', prefix: 'Conversation' }, stepTimeout, `Conversation link missing at ${page.url()}`);
+  // GitHub now labels this tab Overview; older pages say Conversation.
+  const tab = /^(Overview|Conversation)/;
+  const conversation = page.getByRole('link', { name: tab });
+  await untilDom(page, { kind: 'link-text', pattern: tab.source }, stepTimeout, `Overview link missing at ${page.url()}`);
   await conversation.first().click({ timeout: stepTimeout });
   await page.waitForURL(/\/pull\/\d+(?:[?#].*)?$/, { timeout: stepTimeout });
   await untilDom(page, { kind: 'absent', selector: '[data-diffseek-viewed-action]' }, stepTimeout, 'DiffSeek controls gone');
+}
+
+async function showPullList(page: Page): Promise<void> {
+  await closeFilterMenu(page);
+  const pulls = new URL(livePrUrl).pathname.replace(/\/pull\/\d+\/changes$/, '/pulls');
+  await page.locator(`a[href="${pulls}"]`).first().click({ timeout: stepTimeout });
+  await page.waitForURL(/\/pulls(?:[?#].*)?$/, { timeout: stepTimeout });
+  await untilDom(page, { kind: 'absent', selector: '[data-diffseek-viewed-action]' }, stepTimeout, 'DiffSeek controls gone');
+}
+
+/** A click in the list, so the browser cannot restore the page from history. */
+async function openPullFromList(page: Page): Promise<void> {
+  const pull = new URL(livePrUrl).pathname.replace(/\/changes$/, '');
+  await page.locator(`a[href$="${pull}"]`).first().click({ timeout: stepTimeout });
+  await page.waitForURL(/\/pull\/\d+(?:[?#].*)?$/, { timeout: stepTimeout });
+  await showFiles(page);
 }
 
 async function showFiles(page: Page): Promise<void> {

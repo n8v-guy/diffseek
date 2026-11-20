@@ -13,9 +13,28 @@ export const expectedGeneratedTotal = 87;
  * Cold is a first load with an empty extension cache. Warm is a reload.
  * Hot is an in-page navigation back to the files view. `panelsSeconds` ends
  * when the catalog has the full file list and every non-viewed facet is
- * classified. Viewed-state settle is out of scope.
+ * classified. Viewed-state settle is out of scope, except in the loads below.
+ * Cold-mark is cold with the fresh-install defaults, so auto-view marks the
+ * generated files viewed; it ends when they all are. Unmark starts at a click
+ * on the generated count and ends when they are all unmarked. Restored starts
+ * at a click on the pull in the repository's list, from filters set on the
+ * hot load, and ends like hot with those filters back.
  */
-export type LivePerfScenario = 'cold' | 'warm' | 'hot';
+export const livePerfScenarios = ['cold', 'warm', 'hot', 'coldMark', 'unmark', 'restored'] as const;
+
+export type LivePerfScenario = (typeof livePerfScenarios)[number];
+
+type ScenarioLimits = {
+  firstRenderSeconds: number;
+  menuOpenSeconds: number;
+  panelsSeconds: number;
+  reconciles: number;
+  domMutations: number;
+  treeRebuilds: number;
+  panelRebuilds: number;
+};
+
+type LimitedScenario = 'coldMark' | 'unmark' | 'restored';
 
 export type LivePerfSample = RedrawCounts & {
   scenario: LivePerfScenario;
@@ -50,6 +69,7 @@ export type LivePerfBudgets = {
   coldPanelRebuilds: number;
   warmTreeRebuilds: number;
   warmPanelRebuilds: number;
+  scenarios: Record<LimitedScenario, ScenarioLimits>;
 };
 
 export type CookieLike = {
@@ -89,6 +109,61 @@ export function defaultLivePerfBudgets(
     coldPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_COLD_PANEL_REBUILDS, 1),
     warmTreeRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_TREE_REBUILDS, 1),
     warmPanelRebuilds: numberEnv(env.DIFFSEEK_LIVE_BUDGET_WARM_PANEL_REBUILDS, 1),
+    // Newer loads: seconds are twice, and counts equal, the worst of 5 local runs.
+    scenarios: {
+      coldMark: scenarioLimits(env, 'COLD_MARK', { firstRenderSeconds: 6.9, menuOpenSeconds: 5.6, panelsSeconds: 69.7, reconciles: 77, domMutations: 95, treeRebuilds: 0, panelRebuilds: 0 }),
+      unmark: scenarioLimits(env, 'UNMARK', { firstRenderSeconds: 12, menuOpenSeconds: 0, panelsSeconds: 12.7, reconciles: 1, domMutations: 2, treeRebuilds: 0, panelRebuilds: 0 }),
+      restored: scenarioLimits(env, 'RESTORED', { firstRenderSeconds: 7.6, menuOpenSeconds: 12.9, panelsSeconds: 77.9, reconciles: 37, domMutations: 15, treeRebuilds: 0, panelRebuilds: 0 }),
+    },
+  };
+}
+
+function scenarioLimits(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  defaults: ScenarioLimits,
+): ScenarioLimits {
+  const limit = (suffix: string, metric: keyof ScenarioLimits) =>
+    numberEnv(env[`DIFFSEEK_LIVE_BUDGET_${name}_${suffix}`], defaults[metric]);
+  return {
+    firstRenderSeconds: limit('RENDER_S', 'firstRenderSeconds'),
+    menuOpenSeconds: limit('MENU_S', 'menuOpenSeconds'),
+    panelsSeconds: limit('PANELS_S', 'panelsSeconds'),
+    reconciles: limit('RECONCILES', 'reconciles'),
+    domMutations: limit('MUTATIONS', 'domMutations'),
+    treeRebuilds: limit('TREE_REBUILDS', 'treeRebuilds'),
+    panelRebuilds: limit('PANEL_REBUILDS', 'panelRebuilds'),
+  };
+}
+
+function limitsFor(scenario: LivePerfScenario, budgets: LivePerfBudgets): ScenarioLimits {
+  if (scenario !== 'cold' && scenario !== 'warm' && scenario !== 'hot') {
+    return budgets.scenarios[scenario];
+  }
+  return {
+    firstRenderSeconds: {
+      cold: budgets.coldFirstRenderSeconds,
+      warm: budgets.warmFirstRenderSeconds,
+      hot: budgets.hotFirstRenderSeconds,
+    }[scenario],
+    menuOpenSeconds: budgets.menuOpenSeconds,
+    panelsSeconds: {
+      cold: budgets.coldPanelsSeconds,
+      warm: budgets.warmPanelsSeconds,
+      hot: budgets.hotPanelsSeconds,
+    }[scenario],
+    reconciles: budgets.reconciles,
+    domMutations: budgets.domMutations,
+    treeRebuilds: {
+      cold: budgets.coldTreeRebuilds,
+      warm: budgets.warmTreeRebuilds,
+      hot: budgets.treeRebuilds,
+    }[scenario],
+    panelRebuilds: {
+      cold: budgets.coldPanelRebuilds,
+      warm: budgets.warmPanelRebuilds,
+      hot: budgets.panelRebuilds,
+    }[scenario],
   };
 }
 
@@ -217,40 +292,25 @@ export function rebuildFailures(
   sample: LivePerfSample,
   budgets: LivePerfBudgets,
 ): string[] {
+  const limits = limitsFor(sample.scenario, budgets);
   const failures: string[] = [];
-  if (sample.scenario === 'cold' || sample.scenario === 'warm') {
-    const cold = sample.scenario === 'cold';
-    const tree = cold ? budgets.coldTreeRebuilds : budgets.warmTreeRebuilds;
-    const panel = cold ? budgets.coldPanelRebuilds : budgets.warmPanelRebuilds;
-    if (sample.treeRebuilds > tree) {
-      failures.push(`${sample.scenario} treeRebuilds ${sample.treeRebuilds} > ${tree}`);
-    }
-    if (sample.panelRebuilds > panel) {
-      failures.push(`${sample.scenario} panelRebuilds ${sample.panelRebuilds} > ${panel}`);
-    }
-    return failures;
+  if (sample.treeRebuilds > limits.treeRebuilds) {
+    failures.push(`${sample.scenario} treeRebuilds ${sample.treeRebuilds} > ${limits.treeRebuilds}`);
   }
-  if (sample.treeRebuilds > budgets.treeRebuilds) {
-    failures.push(
-      `${sample.scenario} treeRebuilds ${sample.treeRebuilds} > ${budgets.treeRebuilds}`,
-    );
-  }
-  if (sample.panelRebuilds > budgets.panelRebuilds) {
-    failures.push(
-      `${sample.scenario} panelRebuilds ${sample.panelRebuilds} > ${budgets.panelRebuilds}`,
-    );
+  if (sample.panelRebuilds > limits.panelRebuilds) {
+    failures.push(`${sample.scenario} panelRebuilds ${sample.panelRebuilds} > ${limits.panelRebuilds}`);
   }
   return failures;
 }
 
-/** Hot navigation churns GitHub's own panels. Fail only when rows stay gone. */
+/** In-page navigation churns GitHub's own panels. Fail only when rows stay gone. */
 export function hotLossFailures(sample: LivePerfSample): string[] {
   const failures: string[] = [];
   if (sample.treeNetLoss > 0) {
-    failures.push(`hot treeNetLoss ${sample.treeNetLoss} > 0`);
+    failures.push(`${sample.scenario} treeNetLoss ${sample.treeNetLoss} > 0`);
   }
   if (sample.panelNetLoss > 0) {
-    failures.push(`hot panelNetLoss ${sample.panelNetLoss} > 0`);
+    failures.push(`${sample.scenario} panelNetLoss ${sample.panelNetLoss} > 0`);
   }
   return failures;
 }
@@ -262,52 +322,16 @@ export function medianBudgetFailures(
 ): string[] {
   if (samples.length === 0) return ['no samples'];
   const sample = medianSample(samples);
-  const failures: string[] = [];
-  const renderBudget = {
-    cold: budgets.coldFirstRenderSeconds,
-    warm: budgets.warmFirstRenderSeconds,
-    hot: budgets.hotFirstRenderSeconds,
-  }[sample.scenario];
-  const panelsBudget = {
-    cold: budgets.coldPanelsSeconds,
-    warm: budgets.warmPanelsSeconds,
-    hot: budgets.hotPanelsSeconds,
-  }[sample.scenario];
-  if (sample.firstRenderSeconds > renderBudget) {
-    failures.push(
-      `${sample.scenario} firstRenderSeconds ${sample.firstRenderSeconds} > ${renderBudget}`,
-    );
-  }
-  if (sample.menuOpenSeconds > budgets.menuOpenSeconds) {
-    failures.push(
-      `${sample.scenario} menuOpenSeconds ${sample.menuOpenSeconds} > ${budgets.menuOpenSeconds}`,
-    );
-  }
-  if (sample.panelsSeconds > panelsBudget) {
-    failures.push(
-      `${sample.scenario} panelsSeconds ${sample.panelsSeconds} > ${panelsBudget}`,
-    );
-  }
-  if (sample.reconciles > budgets.reconciles) {
-    failures.push(
-      `${sample.scenario} reconciles ${sample.reconciles} > ${budgets.reconciles}`,
-    );
-  }
-  if (sample.domMutations > budgets.domMutations) {
-    failures.push(
-      `${sample.scenario} domMutations ${sample.domMutations} > ${budgets.domMutations}`,
-    );
-  }
-  return failures;
+  const limits = limitsFor(sample.scenario, budgets);
+  return (['firstRenderSeconds', 'menuOpenSeconds', 'panelsSeconds', 'reconciles', 'domMutations'] as const)
+    .filter((metric) => sample[metric] > limits[metric])
+    .map((metric) => `${sample.scenario} ${metric} ${sample[metric]} > ${limits[metric]}`);
 }
 
-export function livePerfSummary(report: {
-  prUrl: string;
-  cold: LivePerfSample[];
-  warm: LivePerfSample[];
-  hot: LivePerfSample[];
-}): string {
-  const rows = (['cold', 'warm', 'hot'] as const).map((scenario) => {
+export function livePerfSummary(
+  report: { prUrl: string } & Record<LivePerfScenario, LivePerfSample[]>,
+): string {
+  const rows = livePerfScenarios.map((scenario) => {
     const medianRow = medianSample(report[scenario]);
     const { requests } = medianRow;
     return {
@@ -329,7 +353,7 @@ export function livePerfSummary(report: {
     ...rows.map((row) => row.requests),
     '',
     'Durations and request counts are medians. The total counts github.com plus a raw.githubusercontent.com read of .gitattributes or CODEOWNERS. Metadata is a raw or blob fetch of those files. Other is the rest of the total.',
-    'Cold and warm tree rebuilds and diff-panel rebuilds must stay within their caps (a GitHub load redraw may be present or absent). Hot ignores mass removal and fails only when a row removed after the first DiffSeek control is still gone 500 ms later.',
+    'Cold and warm tree rebuilds and diff-panel rebuilds must stay within their caps (a GitHub load redraw may be present or absent). Hot and restored ignore mass removal and fail only when a row removed after the first DiffSeek control is still gone 500 ms later.',
     '',
   ].join('\n');
 }

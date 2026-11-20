@@ -828,6 +828,8 @@ test('hides generated and viewed files and auto-views generated for a fresh inst
   expect(await readStoredFilterDefaults()).toEqual({});
 
   await writeFilterDefaults({ hidden: ['viewed'], viewed: [] });
+  // A reload restores this tab's selection; without one it reads the defaults.
+  await page.evaluate(() => sessionStorage.clear());
   await page.reload();
   await page.getByLabel('Filter options').click();
   await expect(viewed).toHaveAttribute('aria-checked', 'mixed');
@@ -840,6 +842,7 @@ test('hides generated and viewed files and auto-views generated for a fresh inst
 
   // The fresh hiding defaults with auto-view switched off.
   await writeFilterDefaults({ hidden: ['viewed', 'generated'], viewed: [] });
+  await page.evaluate(() => sessionStorage.clear());
   await page.reload();
   await page.getByLabel('Filter options').click();
   await expect(viewed).toHaveAttribute('aria-checked', 'mixed');

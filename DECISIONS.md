@@ -97,9 +97,12 @@ stops and must test against GitHub's menu.
 
 ## D007 — Persist only special filter defaults
 
-**Decision:** Keep ordinary exclusions inside one review session. Persist only
-the hidden defaults for viewed and generated files and the auto-view setting,
-extension-wide, using the existing local storage permission. Auto-view uses
+**Decision:** Keep ordinary exclusions scoped to one review. Save that
+review's selection in the tab's session storage, so leaving and returning, a
+reload, or history navigation restores it while a fresh tab starts from the
+defaults. Persist only the hidden defaults for viewed and generated files and
+the auto-view setting, extension-wide, using the existing local storage
+permission. Auto-view uses
 GitHub's current controls once per generated file; it does not enforce the
 state afterwards.
 

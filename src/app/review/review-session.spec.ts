@@ -12,6 +12,7 @@ const emptyMetadata = { codeowners: '', attributes: '' };
 
 beforeEach(() => {
   fakeBrowser.reset();
+  sessionStorage.clear();
   document.documentElement.innerHTML = fixture;
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 });
@@ -173,6 +174,23 @@ describe('reconcile strategy', () => {
 
     expect(reconciles.count).toBe(passes + 1);
     app.stop();
+  });
+
+  it('restores this tab\'s filter selection when the same review returns', async () => {
+    const codeFilter = '[data-filter-kind="groups"][data-filter-value="Code"]';
+    const first = await startWith({});
+    document.querySelector<HTMLButtonElement>(codeFilter)?.click();
+    await nextTask();
+    first.app.stop();
+
+    const again = await startWith({});
+    expect(document.querySelector(codeFilter)?.getAttribute('aria-checked')).toBe('false');
+    again.app.stop();
+    sessionStorage.clear();
+
+    const fresh = await startWith({});
+    expect(document.querySelector(codeFilter)?.getAttribute('aria-checked')).toBe('true');
+    fresh.app.stop();
   });
 
   it('batches metadata levels that arrive together into one pass', async () => {
