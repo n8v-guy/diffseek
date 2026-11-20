@@ -26,8 +26,13 @@ repository root, enable the Corepack shim if you use Corepack, then install.
 
 ```sh
 corepack enable pnpm
+pnpm --version
 pnpm install --frozen-lockfile
 ```
+
+If Corepack's directory is read-only, pass `--install-directory` with a
+writable directory and put it first on `PATH`. If registry downloads need
+your environment's HTTP proxy, set `NODE_USE_ENV_PROXY=1` for Node.js.
 
 The install prepares WXT and the Git hooks. Use `pnpm dev` for extension
 development, or run `pnpm build` and load `.output/chrome-mv3` as an unpacked
@@ -84,12 +89,12 @@ shortly after, so tests open the menu only once the interactive one is there.
 
 ## Release and CI
 
-CI runs on every push and on pull requests from forks. After CI passes on main,
-live end-to-end runs and then the release, in that order for the same commit. The
-release builds the store package and publishes a versioned GitHub release with
-a changelog. Its version comes from the commit count. Live end-to-end can also
-be started by hand on any branch whose head passed CI; only main goes on to a
-release. It needs the signed-in session as a repository secret.
+CI runs on pushes and pull requests, including forks. After CI passes on a
+push to main, live end-to-end runs and then the release for the same commit.
+The release builds the store packages and publishes a versioned GitHub release
+with a changelog. Its version comes from the commit count. Live end-to-end can
+also be started by hand on any branch whose head passed CI. It needs the
+signed-in session as a repository secret.
 
 Publishing to the Chrome Web Store is manual and only from main. It requires
 CI, live end-to-end, and the release to be green for that commit, and it

@@ -49,10 +49,10 @@ jobs:
           SHA: ${{ steps.meta.outputs.sha }}
         run: |
           require_workflow_success() {
-            local name="$1"
+            local name="$1" event="$2"
             local run_json conclusion run_id
             run_json="$(
-              gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&per_page=100" \
+              gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&event=${event}&per_page=100" \
                 | jq -c --arg name "$name" '
                   [.workflow_runs[]
                     | select(.name == $name and .status == "completed")]
@@ -77,9 +77,9 @@ jobs:
             fi
           }
 
-          require_workflow_success "CI"
-          require_workflow_success "Live E2E"
-          require_workflow_success "Release Chrome Extension"
+          require_workflow_success "CI" push
+          require_workflow_success "Live E2E" workflow_dispatch
+          require_workflow_success "Release Chrome Extension" workflow_dispatch
 
       - name: Download ZIP from Release workflow artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

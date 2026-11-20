@@ -37,8 +37,8 @@ jobs:
             echo "Release for ${HEAD_SHA} was dispatched from ${RUN_SHA}." >&2
             exit 1
           fi
-          for workflow in ci.yaml live-e2e.yaml; do
-            run=$(gh run list --workflow "$workflow" --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+          for check in ci.yaml:push live-e2e.yaml:workflow_dispatch; do
+            run=$(gh run list --workflow "${check%:*}" --event "${check#*:}" --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
             gh run watch "$run" --exit-status
           done
 
