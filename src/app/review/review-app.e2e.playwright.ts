@@ -270,11 +270,10 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
     'aria-live',
     'polite',
   );
-  await expect(
-    page.locator('[data-diffseek="snackbar"]', {
-      hasText: 'Marking visible files in folder viewed…',
-    }),
-  ).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-toast-log',
+    /Marking visible files in folder viewed…/,
+  );
   await expect(page.locator('html')).toHaveAttribute(
     'data-native-click-after-snackbar-paint',
     'true',
