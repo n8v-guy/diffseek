@@ -146,9 +146,40 @@ describe('live-perf helpers', () => {
       cold: [fast],
       warm: [fast],
       hot: [fast],
+      coldMark: [{ ...fast, scenario: 'coldMark' }],
+      unmark: [{ ...fast, scenario: 'unmark' }],
+      restored: [{ ...fast, scenario: 'restored' }],
     });
     expect(summary).toContain('tree rebuilds');
     expect(summary).toContain('| cold | 3 | 0 | 0 | 3 |');
+    expect(summary).toContain('| restored | 3 | 0 | 0 | 3 |');
+  });
+
+  it('limits the newer loads on their own budgets and env overrides', () => {
+    const budgets = defaultLivePerfBudgets({
+      DIFFSEEK_LIVE_BUDGET_UNMARK_PANELS_S: '1.5',
+      DIFFSEEK_LIVE_BUDGET_UNMARK_TREE_REBUILDS: '0',
+    });
+    const unmark: LivePerfSample = {
+      scenario: 'unmark',
+      firstRenderSeconds: 0,
+      menuOpenSeconds: 0,
+      panelsSeconds: 2,
+      reconciles: 0,
+      domMutations: 0,
+      treeRebuilds: 1,
+      panelRebuilds: 0,
+      treeRowsRemoved: 0,
+      panelsRemoved: 0,
+      treeRowsReadded: 0,
+      panelsReadded: 0,
+      treeNetLoss: 0,
+      panelNetLoss: 0,
+      requests: emptyGithubRequestCounts(),
+    };
+    expect(medianBudgetFailures([unmark], budgets)).toEqual(['unmark panelsSeconds 2 > 1.5']);
+    expect(rebuildFailures(unmark, budgets)).toEqual(['unmark treeRebuilds 1 > 0']);
+    expect(budgets.scenarios.coldMark).toEqual(defaultLivePerfBudgets({}).scenarios.coldMark);
   });
 
   it('parses storageState cookies and inline JSON secrets', () => {

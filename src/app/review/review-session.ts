@@ -3,6 +3,7 @@ import type {
   FilterDefaults,
   RepositoryCache,
 } from '@diffseek/browser';
+import { restoreFilterSelection, saveFilterSelection } from '@diffseek/browser';
 import {
   afterNextPaint,
   autoViewNotice,
@@ -145,9 +146,7 @@ export class ReviewSession {
 
   constructor(options: ReviewSessionOptions) {
     this.options = options;
-    for (const facet of options.filterDefaults.hidden) {
-      this.filters.get(facet)?.add('true');
-    }
+    restoreFilterSelection(options.root, options.review.key, this.filters, options.filterDefaults.hidden);
     this.metadata = options.metadata;
     this.metadataRevision = options.metadataCommits.begin(options.review);
     this.actionExecutor = new ViewedActionExecutor({
@@ -536,6 +535,7 @@ export class ReviewSession {
 
   private emitReconciled(): void {
     noteReconcile(this.options.root);
+    saveFilterSelection(this.options.root, this.options.review.key, this.filters);
     this.options.root.dispatchEvent(new CustomEvent('diffseek-reconciled'));
   }
 }

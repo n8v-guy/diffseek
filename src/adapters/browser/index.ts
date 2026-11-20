@@ -10,4 +10,8 @@ export {
   type FilterDefaults,
   type RememberedFilterFacet,
 } from './filter-defaults';
+export {
+  restoreFilterSelection,
+  saveFilterSelection,
+} from './filter-selection';
 export { isRecord } from './record';

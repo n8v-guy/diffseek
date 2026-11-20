@@ -202,6 +202,7 @@ async function until(
 
 beforeEach(async () => {
   fakeBrowser.reset();
+  sessionStorage.clear();
   await fakeBrowser.storage.local.set({
     'diffseek:filter-defaults': { hidden: [], viewed: [] },
   });

@@ -12,10 +12,11 @@ export type DomCondition =
   | { kind: 'text'; selector: string; pattern: string }
   | { kind: 'attr'; selector: string; name: string; value: string }
   | { kind: 'dataset-above'; key: string; value: number }
-  | { kind: 'link-prefix'; prefix: string }
+  | { kind: 'link-text'; pattern: string }
   | { kind: 'unviewed-file-row' }
   | { kind: 'filter-button-ready' }
   | { kind: 'filter-menu-or-replaced' }
+  | { kind: 'tree-hidden'; ids?: string[] }
   | { kind: 'trace-settled' };
 
 declare global {
@@ -60,6 +61,19 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
           (action) => action.closest('[role="treeitem"]') === row,
         ),
       );
+    // Without `ids`, the hidden file rows must match the filters: each file has
+    // one change status, so those rows' hidden counts add up. GitHub streams
+    // panels in, and a file's row is hidden only once its panel is there.
+    const treeHidden = (ids: string[] | undefined): boolean => {
+      const rows = document.querySelectorAll<HTMLElement>('[role="tree"] [role="treeitem"]:not([aria-expanded])');
+      const hidden = [...rows].filter((row) => row.hidden === true).map((row) => row.id);
+      if (ids) return hidden.join('\n') === ids.join('\n');
+      const counts = [
+        ...document.querySelectorAll('.diffseek-menu-row:has([data-filter-kind="statuses"]) .diffseek-menu-count'),
+      ].map((count) => count.textContent.trim().split('/').map(Number));
+      const filtered = counts.reduce((sum, [shown = 0, total = 0]) => sum + total - shown, 0);
+      return counts.length > 0 && hidden.length === filtered;
+    };
     const mark = (passed: boolean): '' | 'ready' => (passed ? 'ready' : '');
     const filterMenuState = (): 'open' | 'replaced' | '' => {
       if (document.querySelector('[data-diffseek="filters"]')) return 'open';
@@ -86,10 +100,10 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
           return mark(
             Number(document.documentElement.dataset[condition.key] ?? '0') > condition.value,
           );
-        case 'link-prefix':
+        case 'link-text':
           return mark(
             [...document.querySelectorAll('a')].some(
-              (link) => link.textContent.trim().startsWith(condition.prefix) && visible(link),
+              (link) => new RegExp(condition.pattern).test(link.textContent.trim()) && visible(link),
             ),
           );
         case 'unviewed-file-row':
@@ -100,6 +114,8 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
         }
         case 'filter-menu-or-replaced':
           return filterMenuState();
+        case 'tree-hidden':
+          return mark(treeHidden(condition.ids));
         case 'trace-settled': {
           const data = document.documentElement.dataset;
           return mark(data.diffseekTreeOpen === '0' && data.diffseekPanelOpen === '0');
