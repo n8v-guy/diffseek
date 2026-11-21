@@ -11,7 +11,7 @@ const root = resolve(import.meta.dirname, '..');
 const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8')) as unknown;
 assert.ok(typeof pkg === 'object' && pkg !== null && 'version' in pkg && typeof pkg.version === 'string');
 const { stdout } = await exec('git', ['rev-list', '--count', 'HEAD'], { cwd: root });
-const [major, minor] = pkg.version.split('.');
+const [major = '0', minor = '0'] = pkg.version.split('.');
 const expected = `${major}.${minor}.${stdout.trim()}`;
 const zipFiles = (await readdir(resolve(root, '.output'))).filter((name) => name.endsWith('-firefox.zip'));
 assert.equal(zipFiles.length, 1, 'Expected exactly one Firefox ZIP');
