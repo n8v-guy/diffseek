@@ -83,7 +83,7 @@ describe('ReviewPresenter', () => {
     expect(click).not.toHaveBeenCalled();
   });
 
-  it('leaves a file without a loaded diff visible when filters are active', () => {
+  it('hides a filtered-out file that has no collapse control', () => {
     document
       .querySelector('#diff-config button[aria-label="Collapse file"]')
       ?.remove();
@@ -91,10 +91,10 @@ describe('ReviewPresenter', () => {
 
     presenter.apply(snapshot, state);
 
-    expect(document.getElementById('config/app.json')?.hidden).toBe(false);
+    expect(document.getElementById('config/app.json')?.hidden).toBe(true);
     expect(
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
-    ).toBeUndefined();
+    ).toBe('true');
   });
 
   it('keeps a folder visible when it contains an unavailable descendant', () => {
