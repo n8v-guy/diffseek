@@ -53,8 +53,16 @@ Playwright keeps failure traces under `test-results/`. CI attaches them as
 
 The pre-push check is `pnpm check:push`. To run the two CI jobs' package checks
 locally, use `pnpm check:ci:full` (which also installs Chromium and its system
-dependencies), then `pnpm build -b firefox` and `pnpm check:strict`. CI also
-checks workflows with actionlint and zizmor.
+dependencies). To reproduce the Firefox checks, use a full Git checkout
+and put Firefox on `PATH`:
+
+```sh
+pnpm exec wxt zip -b firefox --config config/wxt.config.ts
+node scripts/firefox-package-smoke.ts
+pnpm check:strict
+```
+
+CI also checks workflows with actionlint and zizmor.
 
 Live end-to-end tests are opt-in and run against a real test pull request with
 a saved, signed-in GitHub session; a signed-out session never reaches the

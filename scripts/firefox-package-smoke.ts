@@ -1,102 +1,201 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { readFile, readdir } from 'node:fs/promises';
-import { createServer } from 'node:net';
-import { resolve } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
+import { once } from 'node:events';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline';
+import type { Readable } from 'node:stream';
 import { promisify } from 'node:util';
 
+import { manifestVersion } from '../config/manifest-version.ts';
+
 const exec = promisify(execFile);
-const root = resolve(import.meta.dirname, '..');
-const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8')) as unknown;
-assert.ok(typeof pkg === 'object' && pkg !== null && 'version' in pkg && typeof pkg.version === 'string');
-const { stdout } = await exec('git', ['rev-list', '--count', 'HEAD'], { cwd: root });
-const [major = '0', minor = '0'] = pkg.version.split('.');
-const expected = `${major}.${minor}.${stdout.trim()}`;
-const zipFiles = (await readdir(resolve(root, '.output'))).filter((name) => name.endsWith('-firefox.zip'));
-assert.equal(zipFiles.length, 1, 'Expected exactly one Firefox ZIP');
-const zipFile = zipFiles[0];
-assert.ok(zipFile !== undefined);
-const archive = resolve(root, '.output', zipFile);
-const { stdout: manifestText } = await exec('unzip', ['-p', archive, 'manifest.json']);
-const manifest = JSON.parse(manifestText) as unknown;
-assert.ok(typeof manifest === 'object' && manifest !== null && 'version' in manifest && typeof manifest.version === 'string' && 'manifest_version' in manifest && 'browser_specific_settings' in manifest);
-const gecko = manifest.browser_specific_settings as { gecko: { id: string } };
-assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, expected, 'Manifest version must match full git history');
-assert.equal(gecko.gecko.id, 'diffseek@n8v.me');
-await exec('unzip', ['-t', archive]);
+const root = join(import.meta.dirname, '..');
+const geckoId = 'diffseek@n8v.me';
+const pullUrl = 'https://github.com/octo/repo/pull/8/changes';
 
-const fixture = await readFile(resolve(root, 'src/adapters/github/review-page/fixtures/github-pr.html'), 'utf8');
-const instrumented = fixture.replace('<ul role="tree" aria-label="File Tree">', `<ul role="tree" aria-label="File Tree">
-<li id="src" role="treeitem" aria-label="src"><div>src</div></li>
-<li id="docs" role="treeitem" aria-label="docs"><div>docs</div></li>`)
-;
+async function validatePackage(): Promise<string> {
+  const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as {
+    name: string;
+    version: string;
+  };
+  const { stdout: shallow } = await exec('git', ['rev-parse', '--is-shallow-repository'], { cwd: root });
+  assert.equal(shallow.trim(), 'false', 'Firefox package smoke requires full Git history');
+  const { stdout: count } = await exec('git', ['rev-list', '--count', 'HEAD'], { cwd: root });
+  const version = manifestVersion(pkg.version, Number(count));
+  const archive = join(root, '.output', `${pkg.name}-${version}-firefox.zip`);
 
-const port = await new Promise<number>((ok, fail) => {
- const server = createServer();
- server.once('error', fail);
- server.listen(0, '127.0.0.1', () => {
-  const address = server.address();
-  if (address === null || typeof address === 'string') return fail(new Error('Missing port'));
-  const allocatedPort = address.port;
-  server.close(() => ok(allocatedPort));
- });
-});
-const driver = spawn('geckodriver', ['--port', String(port)], { stdio: 'pipe' });
-let session = '';
-const endpoint = `http://127.0.0.1:${port}`;
-async function request(method: string, path: string, body?: unknown) {
- const response = await fetch(endpoint + path, {
-  method, headers: { 'content-type': 'application/json' },
-  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
- });
- const result = await response.json() as { value: unknown };
- if (!response.ok) throw new Error(`WebDriver ${method} ${path}: ${JSON.stringify(result)}`);
- return result.value;
+  await exec('unzip', ['-tq', archive]);
+  const { stdout } = await exec('unzip', ['-p', archive, 'manifest.json']);
+  const manifest = JSON.parse(stdout) as {
+    manifest_version: number;
+    version: string;
+    browser_specific_settings?: { gecko?: { id?: string } };
+  };
+  assert.equal(manifest.manifest_version, 3);
+  assert.equal(manifest.version, version);
+  assert.equal(manifest.browser_specific_settings?.gecko?.id, geckoId);
+  return archive;
 }
-async function until<T>(action: () => Promise<T | false>, message: string): Promise<T> {
- for (let i = 0; i < 60; i++) {
-  try { const result = await action(); if (result !== false) return result; } catch { /* retry */ }
-  await delay(500);
- }
- const diagnostics = session ? await execute('return {url: location.href, title: document.title, tree: !!document.querySelector(\'[role="tree"]\'), actions: document.querySelectorAll("[data-diffseek-viewed-action]").length, filters: document.querySelectorAll("[data-diffseek]").length, body: document.body?.innerText?.slice(0, 300)};').catch(() => null) : null;
- throw new Error(`${message}: ${JSON.stringify(diagnostics)}`);
+
+async function debuggerUrl(stderr: Readable, signal: AbortSignal): Promise<string> {
+  const lines = createInterface({ input: stderr, signal });
+  for await (const line of lines) {
+    const match = /^WebDriver BiDi listening on (ws:\/\/127\.0\.0\.1:\d+)$/.exec(line);
+    if (match?.[1]) return `${match[1]}/session`;
+    console.error(line);
+  }
+  throw new Error('Firefox did not start its WebDriver BiDi listener');
 }
-async function execute(script: string, args: unknown[] = []) {
- return request('POST', `/session/${session}/execute/sync`, { script, args });
+
+type Reply = { id: number } & (
+  | { type: 'success'; result: unknown }
+  | { type: 'error'; error: string; message: string }
+);
+type BlockedRequest = {
+  type: 'event';
+  method: string;
+  params: { isBlocked: boolean; request: { request: string } };
+};
+
+async function runReview(): Promise<void> {
+  function waitFor(selector: string): Promise<HTMLElement> {
+    return new Promise((resolve, reject) => {
+      const observer = new MutationObserver(check);
+      const timeout = setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(`Expected Firefox fixture element: ${selector}`));
+      }, 10_000);
+      function check() {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (element == null) return;
+        observer.disconnect();
+        clearTimeout(timeout);
+        resolve(element);
+      }
+      observer.observe(document, { subtree: true, childList: true, attributes: true });
+      check();
+    });
+  }
+
+  const docs = '[id="docs/readme.md"]';
+  const menu = '[data-diffseek="filters"]';
+  await waitFor(`${docs}[hidden] [data-diffseek-viewed-action]`);
+  (await waitFor('button[aria-label="Filter options"]')).click();
+  (await waitFor(`${menu} [data-filter-kind="viewed"][data-filter-value="true"]`)).click();
+  await waitFor(`${docs}:not([hidden])`);
+  (await waitFor(`${menu} [data-filter-kind="groups"][data-filter-value="Docs"]`)).click();
+  await waitFor(`${docs}[hidden]`);
+  if (document.getElementById('src/app.ts')?.hidden !== false) {
+    throw new Error('The Docs filter must leave src/app.ts visible');
+  }
 }
+
+async function smoke(socket: WebSocket, archive: string, html: string, signal: AbortSignal): Promise<void> {
+  await once(socket, 'open', { signal });
+
+  let id = 0;
+  const pending = new Map<number, (reply: Reply) => void>();
+  const failure = Promise.withResolvers<never>();
+  const abort = () => failure.reject(new Error('Firefox package smoke timed out'));
+  signal.addEventListener('abort', abort, { once: true });
+  socket.addEventListener('close', () => failure.reject(new Error('Firefox WebDriver BiDi disconnected')));
+
+  async function send<T = unknown>(method: string, params: object): Promise<T> {
+    const command = ++id;
+    const reply = new Promise<Reply>((resolve) => pending.set(command, resolve));
+    socket.send(JSON.stringify({ id: command, method, params }));
+    const message = await reply;
+    if (message.type === 'error') throw new Error(`${method}: ${message.error}: ${message.message}`);
+    return message.result as T;
+  }
+
+  socket.addEventListener('message', ({ data }) => {
+    const message = JSON.parse(String(data)) as Reply | BlockedRequest;
+    if (message.type !== 'event') {
+      pending.get(message.id)?.(message);
+      pending.delete(message.id);
+    } else if (message.method === 'network.beforeRequestSent' && message.params.isBlocked) {
+      void send('network.provideResponse', {
+        request: message.params.request.request,
+        statusCode: 200,
+        headers: [{ name: 'content-type', value: { type: 'string', value: 'text/html; charset=utf-8' } }],
+        body: { type: 'string', value: html },
+      }).catch(failure.reject);
+    }
+  });
+
+  try {
+    await Promise.race([exercise(), failure.promise]);
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+
+  async function exercise() {
+    // Only the recorded page is served. Unmatched HTTP(S) requests fail locally.
+    const proxy = '127.0.0.1:1';
+    await send('session.new', {
+      capabilities: { alwaysMatch: { proxy: { proxyType: 'manual', httpProxy: proxy, sslProxy: proxy } } },
+    });
+    const { extension } = await send<{ extension: string }>('webExtension.install', {
+      extensionData: { type: 'archivePath', path: archive },
+    });
+    assert.equal(extension, geckoId);
+
+    await send('session.subscribe', { events: ['network.beforeRequestSent'] });
+    await send('network.addIntercept', {
+      phases: ['beforeRequestSent'],
+      urlPatterns: [{ type: 'string', pattern: pullUrl }],
+    });
+    const { contexts: [page] } = await send<{ contexts: { context: string }[] }>('browsingContext.getTree', {});
+    assert.ok(page, 'Firefox did not open a tab');
+    await send('browsingContext.navigate', { context: page.context, url: pullUrl, wait: 'complete' });
+
+    const result = await send<{ type: string; exceptionDetails?: { text: string } }>('script.evaluate', {
+      expression: `(${runReview.toString()})()`,
+      target: { context: page.context },
+      awaitPromise: true,
+    });
+    assert.equal(result.type, 'success', result.exceptionDetails?.text ?? 'Firefox fixture failed');
+    await send('browser.close', {});
+  }
+}
+
+const archive = await validatePackage();
+const html = await readFile(
+  join(root, 'src/adapters/github/review-page/fixtures/github-pr.html'),
+  'utf8',
+);
+const profile = await mkdtemp(join(tmpdir(), 'diffseek-firefox-'));
 try {
- await until(async () => {
-  try { await fetch(endpoint + '/status'); return true; } catch { return false; }
- }, 'geckodriver did not start');
- const created = await request('POST', '/session', {
-  capabilities: { alwaysMatch: { browserName: 'firefox', 'moz:firefoxOptions': { args: ['-headless'] } } },
- }) as { sessionId: string };
- session = created.sessionId;
- const zip = await readFile(archive);
- await request('POST', `/session/${session}/moz/addon/install`, {
-  addon: zip.toString('base64'), temporary: true,
- });
- // The fixture is the same recorded GitHub markup used by Chromium tests.
- // Navigate to the permitted origin, then replace the page with the fixture.
- await request('POST', `/session/${session}/url`, {
-  url: 'https://github.com/microsoft/vscode/pull/1/changes',
- });
- await execute('history.pushState({}, "", "/octo/repo/pull/8/changes"); document.body.innerHTML = arguments[0]; document.dispatchEvent(new Event("turbo:load"));', [instrumented.split('<body>')[1]?.split('</body>')[0] ?? instrumented]);
- await until(async () => await execute(
-  'return document.querySelectorAll("[data-diffseek-viewed-action]").length >= 5;',
- ) === true, 'Packaged Firefox extension did not initialize on fixture');
- await execute(`document.querySelector('[aria-label="Filter options"]').click(); document.body.insertAdjacentHTML('beforeend', '<ul role="menu" aria-label="Filter options"></ul>');`);
- await until(async () => await execute(
-  'return !!document.querySelector(\'[data-diffseek="filters"]\');',
- ) === true, 'Firefox filter menu did not render');
- await execute(`document.querySelector('[data-filter-kind="groups"][data-filter-value="Docs"]').click();`);
- await until(async () => await execute(
-  'return document.getElementById("docs/readme.md")?.hidden === true;',
- ) === true, 'Docs filter did not hide the fixture file');
- console.log('Firefox package smoke passed:', manifest.version);
+  const signal = AbortSignal.timeout(45_000);
+  const firefox = spawn(
+    'firefox',
+    ['--headless', '--profile', profile, '--remote-debugging-port', '0'],
+    { stdio: ['ignore', 'ignore', 'pipe'] },
+  );
+  const closed = new Promise<void>((resolve) => firefox.once('close', resolve));
+  const shutdown = once(firefox, 'close', { signal });
+  void shutdown.catch(() => {});
+  try {
+    await once(firefox, 'spawn', { signal });
+    const url = await debuggerUrl(firefox.stderr, signal);
+    firefox.stderr.pipe(process.stderr);
+    const socket = new WebSocket(url);
+    try {
+      await smoke(socket, archive, html, signal);
+    } finally {
+      socket.close();
+    }
+    await shutdown;
+    assert.equal(firefox.exitCode, 0, 'Firefox exited unsuccessfully');
+  } finally {
+    firefox.kill('SIGKILL');
+    firefox.stderr.destroy();
+    await closed;
+  }
 } finally {
- if (session) await request('DELETE', `/session/${session}`).catch(() => {});
- driver.kill();
+  await rm(profile, { recursive: true, force: true });
 }
+console.log('Firefox package smoke passed');

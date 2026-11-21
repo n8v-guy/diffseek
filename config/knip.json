@@ -1,15 +1,10 @@
 {
-  "entry": [
-    "config/*.config.ts",
-    "entrypoints/**/*.ts"
-  ],
+  "entry": ["config/*.config.ts", "entrypoints/**/*.ts"],
   "project": [
     "config/**/*.ts",
     "entrypoints/**/*.ts",
     "scripts/**/*.ts",
     "src/**/*.ts"
   ],
-  "ignoreBinaries": [
-    "geckodriver"
-  ]
+  "ignoreBinaries": ["firefox"]
 }
