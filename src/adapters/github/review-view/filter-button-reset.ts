@@ -2,7 +2,7 @@ import type { FilterDefaults } from '@diffseek/browser';
 import type { FilterState } from '@diffseek/review';
 
 import { hasTransientExclusions, resetTransientExclusions } from './filter-reset';
-import { filterOptionsButton } from './review-ui';
+import { cssAnchorName, filterOptionsButton } from './review-ui';
 
 type ResetOptions = {
   filters: FilterState;
@@ -11,12 +11,12 @@ type ResetOptions = {
 };
 
 const buttonResetSelector = '[data-diffseek="filter-button-reset"]';
-/** Page-level flag. CSS shows the corner Reset pill while review filters hide files. */
+/** Page-level flag. CSS shows the corner Reset icon while review filters hide files. */
 export const filteredAttribute = 'data-diffseek-filtered';
 const latestOptions = new WeakMap<HTMLButtonElement, ResetOptions>();
 const ownedPills = new WeakSet<HTMLButtonElement>();
 
-/** The "Reset filters" pill: its label, then the reset icon. */
+/** Menu row: label, then the reset icon. The corner control drops the label. */
 export function resetFiltersButton(): HTMLButtonElement {
   const reset = document.createElement('button');
   reset.type = 'button';
@@ -37,7 +37,7 @@ export function resetFiltersButton(): HTMLButtonElement {
 
 /**
  * Writes `data-diffseek-filtered` on `<html>` only when the review-scoped
- * exclusion state changes. Visibility of the corner pill is CSS-only.
+ * exclusion state changes. Visibility of the corner icon is CSS-only.
  */
 export function syncFilteredAttribute(
   root: Document,
@@ -65,13 +65,31 @@ function ownedPill(root: Document): HTMLButtonElement | null {
 }
 
 /**
- * Returns whether it inserted or moved the pill. Inserts the corner Reset
- * once as a sibling of GitHub's Filter options button and leaves it there;
- * re-inserts only if GitHub replaces the wrapper or the trigger. A temporary
- * gap between the static trigger and the hydrated one does not remove it.
+ * The interactive trigger: Primer writes `anchor-name` when it hydrates the
+ * button. The server-rendered copy has the same accessible name and no anchor.
+ */
+function anchoredTrigger(root: Document): HTMLButtonElement | null {
+  const trigger = filterOptionsButton(root);
+  if (!trigger || cssAnchorName(trigger) == null) return null;
+  return trigger;
+}
+
+/** Keeps the icon on the trigger's corner without positioning GitHub's wrapper. */
+function tether(icon: HTMLButtonElement, trigger: HTMLButtonElement): void {
+  const anchor = cssAnchorName(trigger);
+  if (anchor == null || icon.style.getPropertyValue('position-anchor') === anchor) return;
+  icon.style.setProperty('position-anchor', anchor);
+}
+
+/**
+ * Returns whether it inserted or moved the icon. Inserts the corner Reset
+ * once as a sibling of GitHub's hydrated Filter options button and leaves it
+ * there; re-inserts only if GitHub replaces the wrapper or the trigger. A
+ * temporary gap before that hydrated trigger does not remove an owned icon,
+ * and the static copy is not a place to insert one.
  */
 export function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean {
-  const trigger = filterOptionsButton(root);
+  const trigger = anchoredTrigger(root);
   const wrapper = trigger?.parentElement;
   const existing = ownedPill(root);
   if (!trigger || !wrapper) {
@@ -85,26 +103,25 @@ export function ensureFilterButtonReset(root: Document, options: ResetOptions): 
   }
   if (existing) {
     latestOptions.set(existing, options);
+    tether(existing, trigger);
     const moved =
       existing.parentElement !== wrapper || trigger.nextElementSibling !== existing;
     if (moved) trigger.after(existing);
     return moved;
   }
   const pill = resetFiltersButton();
+  pill.querySelector('span')?.remove();
+  pill.setAttribute('aria-label', 'Reset filters');
   pill.dataset.diffseek = 'filter-button-reset';
-  pill.addEventListener(
-    'click',
-    (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const latest = latestOptions.get(pill);
-      if (!latest) return;
-      resetTransientExclusions(latest.filters, latest.filterDefaults);
-      latest.onChange();
-    },
-    true,
-  );
+  pill.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const latest = latestOptions.get(pill);
+    if (!latest) return;
+    resetTransientExclusions(latest.filters, latest.filterDefaults);
+    latest.onChange();
+  });
   ownedPills.add(pill);
+  tether(pill, trigger);
   trigger.after(pill);
   latestOptions.set(pill, options);
   return true;

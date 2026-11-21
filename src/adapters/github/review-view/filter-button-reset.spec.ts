@@ -16,7 +16,6 @@ function present<T>(value: T | null | undefined, label: string): T {
 }
 
 const visibilityCss = `
-  :has(> [data-diffseek='filter-button-reset']):not(body, html) { position: relative; }
   [data-diffseek='filter-button-reset'] { display: none; }
   html[data-diffseek-filtered] button[aria-expanded='false'] + [data-diffseek='filter-button-reset'],
   html[data-diffseek-filtered] button:not([aria-expanded]) + [data-diffseek='filter-button-reset'] {
@@ -52,15 +51,25 @@ describe('ensureFilterButtonReset', () => {
     document.head.append(style);
   });
 
-  it('inserts a labeled pill once beside the filter button', () => {
+  it('inserts one icon beside the hydrated filter button', () => {
     expect(mount()).toBe(true);
     expect(mount()).toBe(false);
 
     const live = document.querySelector('[aria-labelledby="live-label"]');
-    expect(pill()?.textContent).toBe('Reset filters');
-    expect(pill()?.querySelector('span + svg')).not.toBeNull();
+    expect(pill()?.getAttribute('aria-label')).toBe('Reset filters');
+    expect(pill()?.querySelector('span')).toBeNull();
+    expect(pill()?.querySelector('svg')).not.toBeNull();
+    expect(pill()?.style.getPropertyValue('position-anchor')).toBe('--filter-anchor');
     expect(pill()?.previousElementSibling).toBe(live);
     expect(pill()?.parentElement?.id).toBe('filter-wrap');
+  });
+
+  it('does not insert beside a static trigger that has no anchor name', () => {
+    for (const button of document.querySelectorAll('button')) {
+      button.removeAttribute('style');
+    }
+    expect(mount()).toBe(false);
+    expect(pill()).toBeNull();
   });
 
   it('shows the pill through the page attribute, and hides it while the menu is open', () => {

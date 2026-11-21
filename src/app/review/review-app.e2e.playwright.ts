@@ -606,6 +606,8 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toHaveCount(1);
   await expect(pill).toBeHidden();
   await expect(root).not.toHaveAttribute('data-diffseek-filtered');
+  await page.screenshot({ path: test.info().outputPath('reset-no-filters.png') });
+  await page.screenshot({ path: test.info().outputPath('reset-page.png'), fullPage: true });
 
   await page.getByLabel('Filter options').click();
   await page.locator('[data-filter-kind="groups"][data-filter-value="Code"]').click();
@@ -614,6 +616,7 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'true');
   await expect(pill).toBeHidden();
   await expect(page.locator('[data-diffseek="filters"] [data-reset-filters]')).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('reset-menu-open.png') });
 
   await pill.evaluate((element) => {
     element.dataset.diffseekPill = 'owned';
@@ -622,12 +625,15 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(page.locator('[role="menu"]')).toHaveCount(0);
   await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'false');
   await expect(pill).toBeVisible();
+  await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
   await expect(page.locator('[data-diffseek-pill="owned"]')).toHaveCount(1);
   const button = presentBox(await page.getByLabel('Filter options').boundingBox());
-  const icon = presentBox(await pill.locator('svg').boundingBox());
-  const label = presentBox(await pill.locator('span').boundingBox());
-  expect(label.x < icon.x).toBe(true);
-  expect(icon.x + icon.width / 2 > button.x + button.width / 2).toBe(true);
+  const icon = presentBox(await pill.boundingBox());
+  const iconCenter = { x: icon.x + icon.width / 2, y: icon.y + icon.height / 2 };
+  const corner = { x: button.x + button.width, y: button.y };
+  expect(Math.hypot(iconCenter.x - corner.x, iconCenter.y - corner.y)).toBeLessThan(8);
+  expect(Math.hypot(iconCenter.x - (button.x + button.width / 2), iconCenter.y - (button.y + button.height / 2))).toBeGreaterThan(12);
+  await page.screenshot({ path: test.info().outputPath('reset-filters-on.png') });
   await page.locator('#filter-options').scrollIntoViewIfNeeded();
   const hit = await page.evaluate(() => {
     const trigger = document.querySelector('#filter-options');
