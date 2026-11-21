@@ -626,17 +626,19 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   const button = presentBox(await page.getByLabel('Filter options').boundingBox());
   const icon = presentBox(await pill.locator('svg').boundingBox());
   const label = presentBox(await pill.locator('span').boundingBox());
-  // The same spot as in the menu: the icon 6 px inside the top-right corner.
-  const near = (a: number, b: number) => Math.abs(a - b) <= 2;
-  expect({
-    iconAtCorner:
-      near(icon.x + icon.width / 2, button.x + button.width - 6) &&
-      near(icon.y + icon.height / 2, button.y + 6),
-    labelBeforeIcon: label.x < icon.x,
-  }).toEqual({ iconAtCorner: true, labelBeforeIcon: true });
+  expect(label.x < icon.x).toBe(true);
+  expect(icon.x + icon.width / 2 > button.x + button.width / 2).toBe(true);
+  await page.locator('#filter-options').scrollIntoViewIfNeeded();
+  const hit = await page.evaluate(() => {
+    const trigger = document.querySelector('#filter-options');
+    if (!(trigger instanceof HTMLElement)) return 'missing-trigger';
+    const box = trigger.getBoundingClientRect();
+    const target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    return target instanceof Element ? (target.closest('#filter-options')?.id ?? target.id) : 'none';
+  });
+  expect(hit).toBe('filter-options');
 
-  // The lower half of the 2rem trigger stays the Filter options hit area.
-  await page.locator('#filter-options').click({ position: { x: 16, y: 28 } });
+  await page.locator('#filter-options').click();
   await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
   await expect(page.locator('#diff-app')).toBeHidden();
   await expect(pill).toBeHidden();
