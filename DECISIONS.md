@@ -299,4 +299,7 @@ page stays authoritative (D001). **Cost:** A hidden diff stays in the page, and
 GitHub's layout must tolerate regions it did not hide itself. Returning to a
 filtered review, GitHub redraws the tree and panels once, as its files are not
 natively collapsed; the restored live budgets allow that one redraw and its
-pass. Cold, warm, and hot loads keep theirs.
+pass. Cold, warm, and hot loads keep theirs. That redraw was taken for the
+wins: about 500 fewer lines, a filter click on 400 files settling in 22 ms
+instead of 2110 ms (local fixture, 10 ms per native click), and no click
+storms.
