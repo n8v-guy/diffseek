@@ -90,7 +90,10 @@ and a changed menu is patched or rebuilt.
 **Decision:** Reuse GitHub's filter menu but hide its native rows and let
 DiffSeek own all menu contents. If GitHub file filters are already active, use
 GitHub's own clear control before taking over. Viewed writes still use
-GitHub's native controls.
+GitHub's native controls. Reset filters appears in the menu and on GitHub's
+closed filter button only while review-scoped exclusions are active; with
+nothing to reset nothing is shown, and the menu keeps the space so rows stay
+put.
 
 **Why:** One model now owns visibility, counters, selection, and whether a click
 keeps the menu open. This removes native/extension drift without hooking GitHub

@@ -218,9 +218,9 @@
   background: var(--diffseek-hover);
 }
 
+/* Nothing to reset: show nothing, but keep its space so rows do not move. */
 .diffseek-reset-filters:disabled {
-  cursor: default;
-  opacity: 0.55;
+  visibility: hidden;
 }
 
 .diffseek-reset-filters svg {

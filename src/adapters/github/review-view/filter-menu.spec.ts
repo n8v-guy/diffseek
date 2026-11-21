@@ -263,7 +263,7 @@ describe('mountFilterMenu', () => {
     ).toBe(true);
   });
 
-  it('skips a disabled reset in keyboard order and focuses the first row after reset', () => {
+  it('skips a hidden reset in keyboard order and focuses the first row after reset', () => {
     const element = menu();
     const state = filters();
     mountFilterMenu(element, { files, filters: state, onChange: vi.fn() });

@@ -52,8 +52,9 @@ request reviews. GitHub remains the review system and visual authority.
 - A file is generated when .gitattributes or a built-in rule says so, or when
   GitHub shows its "not rendered by default" notice; a seen notice is kept
   after the diff loads.
-- Menu reset is always shown, is enabled only for review-scoped exclusions, and
-  never changes remembered defaults.
+- Reset filters shows only while review-scoped exclusions are active and never
+  changes remembered defaults. With nothing to reset the menu shows nothing
+  there, keeps its space so rows do not move, and skips it in keyboard order.
 - While review-scoped exclusions hide files and the menu is closed, the same
   Reset filters pill sits on the filter button's top-right corner, tethered to
   GitHub's own CSS anchor name.

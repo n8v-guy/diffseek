@@ -531,9 +531,13 @@ test('clears native filters before taking over the menu', async () => {
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Always hidden');
-  const reset = page.locator('[data-reset-filters]');
-  await expect(reset).toHaveText('Reset filters');
-  await expect(reset).toBeDisabled();
+  const reset = page.locator('[data-diffseek="filters"] [data-reset-filters]');
+  // Nothing to reset: nothing shown, and its space stays so rows do not move.
+  await expect(reset).toBeHidden();
+  const filtersBlock = page.locator('[data-diffseek="filters"]');
+  const rowOffset = async () =>
+    presentBox(await viewed.boundingBox()).y - presentBox(await filtersBlock.boundingBox()).y;
+  const rowOffsetWithoutReset = await rowOffset();
   await ownerRow.hover();
   await ownerOnly.click();
   await expect(
@@ -541,7 +545,9 @@ test('clears native filters before taking over the menu', async () => {
       '[data-filter-kind="owners"]:not([data-filter-value="@source"])',
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
-  await expect(reset).toBeEnabled();
+  await expect(reset).toBeVisible();
+  await expect(reset).toHaveText('Reset filters');
+  expect(await rowOffset()).toBe(rowOffsetWithoutReset);
   const [buttonRect, iconRect, labelRect, rootRect, rowRect] = await Promise.all([
     reset.boundingBox(),
     reset.locator('svg').boundingBox(),
@@ -568,7 +574,7 @@ test('clears native filters before taking over the menu', async () => {
   await expect(
     page.locator('[data-filter-kind="owners"][aria-checked="false"]'),
   ).toHaveCount(0);
-  await expect(reset).toBeDisabled();
+  await expect(reset).toBeHidden();
 });
 
 test('puts Reset filters on the closed filter button while filters hide files', async () => {
