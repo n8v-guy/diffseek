@@ -603,8 +603,7 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   });
   const pill = page.locator('[data-diffseek="filter-button-reset"]');
   const root = page.locator('html');
-  await expect(pill).toHaveCount(1);
-  await expect(pill).toBeHidden();
+  await expect(pill).toHaveCount(0);
   await expect(root).not.toHaveAttribute('data-diffseek-filtered');
 
   await page.getByLabel('Filter options').click();

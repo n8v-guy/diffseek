@@ -20,7 +20,6 @@ const retainedTrigger = new WeakMap<Document, HTMLButtonElement>();
 /** Kept after a rename so the name can be restored without another mutation. */
 const watchedTrigger = new WeakMap<Document, HTMLButtonElement>();
 const ownedIcon = new WeakMap<Document, HTMLButtonElement>();
-const installed = new WeakSet<Document>();
 
 function resetIcon(): SVGSVGElement {
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -116,15 +115,10 @@ function discardCopies(root: Document): boolean {
   return wrote;
 }
 
-/** The icon was removed, or a copy was added. Our own first insert is not a repair. */
+/** The icon was added or removed. A sibling between it and the trigger is left alone. */
 export function filterResetNeedsRepair(record: MutationRecord): boolean {
   if (record.type !== 'childList') return false;
-  const keep = record.target.ownerDocument ? owned(record.target.ownerDocument) : null;
-  for (const node of record.removedNodes) {
-    if (node instanceof Element && node.matches(buttonResetSelector)) return true;
-  }
-  for (const node of record.addedNodes) {
-    if (keep?.isSameNode(node)) continue;
+  for (const node of [...record.removedNodes, ...record.addedNodes]) {
     if (node instanceof Element && node.matches(buttonResetSelector)) return true;
   }
   return false;
@@ -159,36 +153,17 @@ function clearTriggerMark(button: HTMLButtonElement | undefined): boolean {
   return true;
 }
 
-/**
- * One-time insert. Called outside the review pass, so it is not a reconcile
- * and its DOM write is not a pass mutation.
- */
-export function mountFilterReset(root: Document, options: ResetOptions): void {
-  if (installed.has(root)) return;
-  const trigger = readTrigger(root);
-  remember(root, trigger);
-  if (!trigger?.parentElement) return;
-  const icon = owned(root);
-  if (!icon) {
-    const created = cornerButton();
-    latestOptions.set(created, options);
-    ownedIcon.set(root, created);
-    place(created, trigger);
-  } else if (!icon.parentElement?.isSameNode(trigger.parentElement)) {
-    latestOptions.set(icon, options);
-    place(icon, trigger);
-  } else if (!trigger.hasAttribute(filterTriggerMark)) {
-    trigger.setAttribute(filterTriggerMark, '');
-  }
-  installed.add(root);
-}
+type BadgeWrite = { wrote: boolean; placed: boolean };
 
 /**
- * Returns whether a review reconcile should count. The first insert does not
- * run here. A later reinstall, a move to a new wrapper, a dropped clone, or a
- * marker change does.
+ * `due` is a session restore or a menu close. Only then is a missing icon
+ * inserted. An icon already in the wrapper only has its mark kept current.
  */
-function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean {
+function ensureFilterButtonReset(
+  root: Document,
+  options: ResetOptions,
+  due: boolean,
+): BadgeWrite {
   const previous = retainedTrigger.get(root);
   const trigger = readTrigger(root);
   remember(root, trigger);
@@ -198,7 +173,7 @@ function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean
   if (clearTriggerMark(released)) wrote = true;
   if (!trigger?.parentElement) {
     if (icon) latestOptions.set(icon, options);
-    return wrote;
+    return { wrote, placed: false };
   }
   if (icon?.parentElement?.isSameNode(trigger.parentElement)) {
     latestOptions.set(icon, options);
@@ -206,23 +181,27 @@ function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean
       trigger.setAttribute(filterTriggerMark, '');
       wrote = true;
     }
-    return wrote;
+    return { wrote, placed: true };
   }
+  if (!due) return { wrote, placed: false };
   if (icon) {
     latestOptions.set(icon, options);
     place(icon, trigger);
-    return true;
+    return { wrote: true, placed: true };
   }
   const created = cornerButton();
   latestOptions.set(created, options);
   ownedIcon.set(root, created);
   place(created, trigger);
-  installed.add(root);
-  return true;
+  return { wrote: true, placed: true };
 }
 
-/** Writes the page attribute and keeps one corner Reset icon beside the live trigger. */
-export function syncFilterReset(root: Document, options: ResetOptions): boolean {
+/** Writes the page attribute. Inserts the corner icon only when `due`. */
+export function syncFilterReset(
+  root: Document,
+  options: ResetOptions,
+  due = false,
+): BadgeWrite {
   syncFilteredAttribute(root, options.filters, options.filterDefaults);
-  return ensureFilterButtonReset(root, options);
+  return ensureFilterButtonReset(root, options, due);
 }

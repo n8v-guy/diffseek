@@ -3,7 +3,7 @@ import type {
   FilterDefaults,
   RepositoryCache,
 } from '@diffseek/browser';
-import { restoreFilterSelection, saveFilterSelection } from '@diffseek/browser';
+import { hasSavedFilterSelection, restoreFilterSelection, saveFilterSelection } from '@diffseek/browser';
 import {
   afterNextPaint,
   autoViewNotice,
@@ -27,7 +27,6 @@ import {
   showBatchStarted,
   showRememberedFilterDefault,
   showUnavailable,
-  mountFilterReset,
   syncFilterReset,
   treeStructureKey,
   watchObservationRoots,
@@ -148,9 +147,12 @@ export class ReviewSession {
   private readonly quiet: QuietRevalidate;
 
   private readonly options: ReviewSessionOptions;
+  /** A saved review or a closed filter menu still owes one badge insert. */
+  private badgeDue = false; private sawFilterMenu = false;
 
   constructor(options: ReviewSessionOptions) {
     this.options = options;
+    this.badgeDue = hasSavedFilterSelection(options.root, options.review.key);
     restoreFilterSelection(options.root, options.review.key, this.filters, options.filterDefaults.hidden);
     this.metadata = options.metadata;
     this.metadataRevision = options.metadataCommits.begin(options.review);
@@ -181,15 +183,13 @@ export class ReviewSession {
     };
     options.root.addEventListener('click', this.onNativeClick, true);
     this.autoViewNotice = autoViewNotice(options.root);
-    this.quiet = sessionQuiet(options.root, options.quietClock, () =>
-      this.requestRevalidation(),
-    );
+    this.quiet = sessionQuiet(options.root, options.quietClock, () => this.requestRevalidation());
     installRedrawTrace(options.root);
     delete options.root.documentElement.dataset.diffseekFirstRenderEpoch;
     this.observer = new MutationObserver((records) => {
-      mountFilterReset(this.options.root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() });
       const mode = classifyPageMutations(records);
       if (mode) this.onPageMutation(mode);
+      else if (this.badgeDue && records.some((record) => record.attributeName === 'style')) this.schedule();
     });
     this.discoveryObserver = new MutationObserver((records) => {
       const mode = classifyPageMutations(records);
@@ -239,8 +239,7 @@ export class ReviewSession {
   private reconcileOnce(): void {
     noteReconcileEntry(this.options.root);
     const firstObservation = !this.metadataWatch.ready;
-    const metadataOpportunity =
-      consumeMetadataOpportunity(this.metadataWatch, this.options.root) || firstObservation;
+    const metadataOpportunity = consumeMetadataOpportunity(this.metadataWatch, this.options.root) || firstObservation;
     // Disconnect while writing so our own dataset toggles do not
     // immediately re-schedule another full reconcile during panel storms.
     this.observer.disconnect();
@@ -251,10 +250,7 @@ export class ReviewSession {
     const regionKey = regionStructureKey(root);
     const tree = fileTreeElement(root);
     const regions = diffRegionElements(root);
-    const structureChanged =
-      treeKey !== this.treeKey ||
-      regionKey !== this.regionKey ||
-      pageNodesChanged(this.treeNode, tree, this.regionNodes, regions);
+    const structureChanged = treeKey !== this.treeKey || regionKey !== this.regionKey || pageNodesChanged(this.treeNode, tree, this.regionNodes, regions);
     let next: PageSnapshot;
     if (treeKey != null && treeKey === this.treeKey && regionKey === this.regionKey && this.snapshot) {
       refreshObservedFiles(root, this.catalog.files());
@@ -318,7 +314,11 @@ export class ReviewSession {
       generatedDefaultBusy,
       countsSettling: countsSettling(this.options.settledCounts, this.options.review.key),
     });
-    const resetMoved = trackDiffseekWrites(root, () => syncFilterReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }));
+    if (this.sawFilterMenu && menus.length === 0) this.badgeDue = true;
+    else if (menus.length > 0) this.sawFilterMenu = true;
+    const badge = trackDiffseekWrites(root, () => syncFilterReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }, this.badgeDue));
+    if (badge.placed) this.badgeDue = false;
+    const resetMoved = badge.wrote;
     const change = changedSurfaces(this.applied, plan);
     this.applied = plan;
     const pageStale = structureChanged || change.page;

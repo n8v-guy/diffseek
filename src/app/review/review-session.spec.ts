@@ -80,74 +80,46 @@ describe('review session stream batching', () => {
     app.stop();
   });
 
-  it('mounts Reset once on the named trigger and does not write through hydration', async () => {
-    document.querySelector('button[aria-label="Filter options"]')?.replaceWith(
-      Object.assign(document.createElement('div'), { id: 'filter-wrap' }),
-    );
-    document.getElementById('filter-wrap')?.insertAdjacentHTML(
-      'beforeend',
-      `<span id="static-label">Filter options</span>
-      <button aria-haspopup="true" aria-expanded="false" aria-labelledby="static-label"></button>
-      <span id="live-label">Filter options</span>
-      <button id="live" aria-haspopup="true" aria-expanded="false" aria-labelledby="live-label"></button>`,
-    );
-    let writes = 0;
-    const countWrite = () => {
-      writes += 1;
-    };
-    document.addEventListener('diffseek-reconciled', countWrite);
-    const app = await startReviewApp({
-      root: document,
-      pathname: () => '/octo/repo/pull/1/changes',
-      readImmediate: async () => emptyMetadata,
-      refreshDefault: async () => ({
-        metadata: emptyMetadata,
-        cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
-        changed: false,
-      }),
-      readPull: async (_review, base) => ({ ...base, changed: false }),
-    });
-    const icon = () => document.querySelector('[data-diffseek="filter-button-reset"]');
-    const live = document.getElementById('live');
+  it('leaves Reset off a cold load and inserts it when the menu closes', async () => {
+    const { app, live, icon, since } = await openFilterPage();
+    live.setAttribute('style', 'anchor-name: --filter-anchor;');
+    await nextTask();
     expect(icon()).toBeNull();
-    const baseline = writes;
+    expect(since()).toBe(0);
 
-    live?.setAttribute('style', 'anchor-name: --filter-anchor;');
+    const menu = document.createElement('ul');
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Filter options');
+    document.body.append(menu);
     await nextTask();
-    expect(live?.nextElementSibling).toBe(icon());
-    expect(writes - baseline).toBe(0);
+    expect(icon()).toBeNull();
+    const opened = since();
+    menu.remove();
+    await nextTask();
+    expect(live.nextElementSibling).toBe(icon());
+    expect(since()).toBe(opened + 1);
+    app.stop();
+  });
 
-    live?.setAttribute('style', 'anchor-name: --filter-anchor-2;');
+  it('restores the Reset mark when the trigger name is the only change', async () => {
+    sessionStorage.setItem('diffseek:filters:octo/repo#1', '{"groups":["Docs"]}');
+    const { app, live, icon, since } = await openFilterPage();
+    live.setAttribute('style', 'anchor-name: --filter-anchor;');
     await nextTask();
-    live?.removeAttribute('style');
-    await nextTask();
-    expect(writes - baseline).toBe(0);
-    expect(live?.nextElementSibling).toBe(icon());
+    expect(live.nextElementSibling).toBe(icon());
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+    expect(since()).toBe(1);
 
-    const gap = document.createElement('span');
-    live?.setAttribute('style', 'anchor-name: --filter-anchor;');
-    live?.after(gap);
+    live.setAttribute('aria-label', 'Other options');
     await nextTask();
-    expect(gap.nextElementSibling).toBe(icon());
-    expect(writes - baseline).toBe(0);
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+    const renamed = since();
 
-    document.getElementById('filter-wrap')?.append(document.createElement('span'));
+    live.removeAttribute('aria-label');
     await nextTask();
-    expect(writes - baseline).toBe(0);
-
-    document.getElementById('filter-wrap')?.append(icon()?.cloneNode(true) ?? '');
-    await nextTask();
-    expect(document.querySelectorAll('[data-diffseek="filter-button-reset"]')).toHaveLength(1);
-    expect(gap.nextElementSibling).toBe(icon());
-    expect(writes - baseline).toBe(1);
-
-    icon()?.remove();
-    await nextTask();
-    expect(live?.nextElementSibling).toBe(icon());
-    expect(writes - baseline).toBe(2);
-
-    await retainAcrossAnchorSwap(live, icon, () => writes - baseline);
-    document.removeEventListener('diffseek-reconciled', countWrite);
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+    expect(live.nextElementSibling).toBe(icon());
+    expect(since()).toBe(renamed + 1);
     app.stop();
   });
 });
@@ -568,37 +540,47 @@ function regionNode(index: number): HTMLElement {
   return region;
 }
 
-/** A second anchored trigger must not steal Reset, and a rename drops the mark. */
-async function retainAcrossAnchorSwap(
-  live: HTMLElement | null,
-  icon: () => Element | null,
-  writesSince: () => number,
-): Promise<void> {
-  if (!live) throw new Error('missing live trigger');
-  const other = document.createElement('button');
-  other.setAttribute('aria-label', 'Filter options');
-  other.setAttribute('style', 'anchor-name: --other-anchor;');
-  live.parentElement?.append(other);
-  await nextTask();
-  live.removeAttribute('style');
-  await nextTask();
-  live.setAttribute('style', 'anchor-name: --filter-anchor;');
-  other.removeAttribute('style');
-  await nextTask();
-  expect(live.nextElementSibling).toBe(icon());
-  const parked = writesSince();
-
-  live.setAttribute('aria-label', 'Other options');
-  await nextTask();
-  expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
-  expect(other.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
-  expect(writesSince()).toBe(parked + 1);
-
-  live.removeAttribute('aria-label');
-  await nextTask();
-  expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
-  expect(live.nextElementSibling).toBe(icon());
-  expect(writesSince()).toBe(parked + 2);
+async function openFilterPage(): Promise<{
+  app: Awaited<ReturnType<typeof startReviewApp>>;
+  live: HTMLButtonElement;
+  icon: () => Element | null;
+  since: () => number;
+}> {
+  document.querySelector('button[aria-label="Filter options"]')?.replaceWith(
+    Object.assign(document.createElement('div'), { id: 'filter-wrap' }),
+  );
+  document.getElementById('filter-wrap')?.insertAdjacentHTML(
+    'beforeend',
+    `<span id="static-label">Filter options</span>
+    <button aria-haspopup="true" aria-expanded="false" aria-labelledby="static-label"></button>
+    <span id="live-label">Filter options</span>
+    <button id="live" aria-haspopup="true" aria-expanded="false" aria-labelledby="live-label"></button>`,
+  );
+  let writes = 0;
+  const countWrite = () => {
+    writes += 1;
+  };
+  document.addEventListener('diffseek-reconciled', countWrite);
+  const app = await startReviewApp({
+    root: document,
+    pathname: () => '/octo/repo/pull/1/changes',
+    readImmediate: async () => emptyMetadata,
+    refreshDefault: async () => ({
+      metadata: emptyMetadata,
+      cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
+      changed: false,
+    }),
+    readPull: async (_review, base) => ({ ...base, changed: false }),
+  });
+  const started = writes;
+  const live = document.getElementById('live');
+  if (!(live instanceof HTMLButtonElement)) throw new Error('missing live trigger');
+  return {
+    app,
+    live,
+    icon: () => document.querySelector('[data-diffseek="filter-button-reset"]'),
+    since: () => writes - started,
+  };
 }
 
 /** Lets observer callbacks queue their pass, then runs the next task. */
