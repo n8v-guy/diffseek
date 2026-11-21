@@ -42,8 +42,11 @@ request reviews. GitHub remains the review system and visual authority.
 - A menu row derives its count, viewed targets, and viewed indicator from the
   same live projection.
 - A facet containing only its fallback label is omitted from the menu.
-- Category actions normally target visible files; when the viewed facet alone
-  hides matching viewed files, they target those files as a reversible escape.
+- Category rows (owners, groups, formats, change status, generated) base their
+  viewed circle and click on every markable file in the category, ignoring all
+  filters, hidden files included (the badge stays visible/total); folder
+  actions target only files that pass the active filters except the Viewed
+  filter's hiding.
 - Remembered viewed/generated defaults are extension-wide; other exclusions are
   review-scoped.
 - With no saved filter defaults, viewed and generated files are hidden and

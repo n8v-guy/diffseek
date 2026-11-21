@@ -141,7 +141,8 @@ cannot mark are excluded. Notifications say which kind of scope changed (all
 files in a category versus the visible files in a folder) without naming it.
 
 **Why:** The menu icon and the click agree, including files the current
-filters have hidden. The tree stays limited to what is on screen. **Cost:** A
+filters have hidden. Folders stay limited to the active filters, apart from
+the Viewed filter's hiding. **Cost:** A
 menu click can change files the reviewer is not currently looking at.
 
 ## D010 — Fallback labels remain data but not menu noise
