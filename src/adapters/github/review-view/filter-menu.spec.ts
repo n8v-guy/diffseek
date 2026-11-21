@@ -263,6 +263,24 @@ describe('mountFilterMenu', () => {
     ).toBe(true);
   });
 
+  it('skips a disabled reset in keyboard order and focuses the first row after reset', () => {
+    const element = menu();
+    const state = filters();
+    mountFilterMenu(element, { files, filters: state, onChange: vi.fn() });
+    const root = element.querySelector<HTMLElement>('[data-diffseek="filters"]');
+    const rows = element.querySelectorAll<HTMLButtonElement>('[data-filter-kind]');
+    rows[1]?.focus();
+    root?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    expect(document.activeElement).toBe(rows[0]);
+
+    state.get('groups')?.add('Tests');
+    mountFilterMenu(element, { files, filters: state, onChange: vi.fn() });
+    const reset = element.querySelector<HTMLButtonElement>('[data-reset-filters]');
+    reset?.focus();
+    reset?.click();
+    expect(document.activeElement).toBe(element.querySelector('[data-filter-kind]'));
+  });
+
   it('resets transient exclusions without changing defaults', () => {
     const element = menu();
     const state = filters();

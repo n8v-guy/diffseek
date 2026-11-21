@@ -1,7 +1,8 @@
 export function moveFocus(event: KeyboardEvent): void {
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
   const root = event.currentTarget as HTMLElement;
-  const buttons = [...root.querySelectorAll<HTMLButtonElement>('button')];
+  const buttons = [...root.querySelectorAll<HTMLButtonElement>('button')]
+    .filter((button) => !button.disabled);
   if (buttons.length === 0) return;
   const current = buttons.indexOf(
     root.ownerDocument.activeElement as HTMLButtonElement,

@@ -216,6 +216,8 @@ function appendResetFilters(
   label.textContent = 'Reset filters';
   reset.append(label, icon);
   reset.addEventListener('click', () => {
+    // Reset disables itself, so focus moves to the first row first.
+    root.querySelector<HTMLButtonElement>('[data-filter-kind]')?.focus();
     resetTransientExclusions(options.filters, options.filterDefaults);
     options.onChange();
   });
