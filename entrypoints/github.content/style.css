@@ -214,19 +214,22 @@
   padding: 0 0.125rem 0 0.5rem;
 }
 
-/* The hit box sits fully outside the trigger: above its top-right corner. */
-:has(> [data-diffseek='filter-button-reset']):not(body, html) {
+/* Fallback only. :where loses to a class such as position: sticky. */
+:where(:not(body, html):has(> [data-diffseek='filter-button-reset'])) {
   position: relative;
 }
 
 [data-diffseek='filter-button-reset'] {
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 0;
   color: var(--diffseek-foreground);
+  cursor: pointer;
   display: none;
   font-family: inherit;
   height: 1rem;
+  justify-content: center;
   left: 100%;
   margin: 0;
   padding: 0;
@@ -237,14 +240,9 @@
   z-index: 2;
 }
 
-html[data-diffseek-filtered] button[aria-expanded='false'] + [data-diffseek='filter-button-reset'],
-html[data-diffseek-filtered] button:not([aria-expanded]) + [data-diffseek='filter-button-reset'] {
+html[data-diffseek-filtered] [data-diffseek-filter-trigger][aria-expanded='false'] + [data-diffseek='filter-button-reset'],
+html[data-diffseek-filtered] [data-diffseek-filter-trigger]:not([aria-expanded]) + [data-diffseek='filter-button-reset'] {
   display: flex;
-}
-
-[data-diffseek='filter-button-reset']:hover:enabled,
-[data-diffseek='filter-button-reset']:focus-visible {
-  background: transparent;
 }
 
 [data-diffseek='filter-button-reset']:focus-visible {
@@ -261,7 +259,8 @@ html[data-diffseek-filtered] button:not([aria-expanded]) + [data-diffseek='filte
   visibility: hidden;
 }
 
-.diffseek-reset-filters svg {
+.diffseek-reset-filters svg,
+[data-diffseek='filter-button-reset'] svg {
   fill: none;
   height: 0.875rem;
   stroke: currentcolor;

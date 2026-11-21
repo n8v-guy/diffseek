@@ -368,20 +368,29 @@ export function isNativeMutation(record: MutationRecord): boolean {
   );
 }
 
+/** Candidates for GitHub's Filter options trigger, including the static copy. */
+export const filterOptionsCandidateSelector =
+  'button[aria-haspopup], button[aria-label]';
+
 /**
  * GitHub's Filter options button, by accessible name. GitHub server-renders a
  * copy and swaps in the interactive one, which carries Primer's CSS anchor
  * name; that one wins.
  */
-/** Candidates for GitHub's Filter options trigger, including the static copy. */
-export const filterOptionsCandidateSelector =
-  'button[aria-haspopup], button[aria-label]';
-
-export function filterOptionsButton(root: Document): HTMLButtonElement | null {
-  const named = [
-    ...root.querySelectorAll<HTMLButtonElement>(filterOptionsCandidateSelector),
-  ].filter(isFilterOptionsTrigger);
+function filterOptionsButton(root: Document): HTMLButtonElement | null {
+  const named = filterOptionTriggers(root);
   return named.find((button) => cssAnchorName(button) != null) ?? named[0] ?? null;
+}
+
+/** The hydrated Filter options trigger. The static copy has the same name and no anchor. */
+export function anchoredFilterTrigger(root: ParentNode): HTMLButtonElement | null {
+  return filterOptionTriggers(root).find((button) => cssAnchorName(button) != null) ?? null;
+}
+
+function filterOptionTriggers(root: ParentNode): HTMLButtonElement[] {
+  return [...root.querySelectorAll<HTMLButtonElement>(filterOptionsCandidateSelector)].filter(
+    isFilterOptionsTrigger,
+  );
 }
 
 export function isFilterOptionsTrigger(button: HTMLButtonElement): boolean {
@@ -389,7 +398,7 @@ export function isFilterOptionsTrigger(button: HTMLButtonElement): boolean {
 }
 
 /** The CSS anchor name Primer sets inline on an overlay's trigger. */
-function cssAnchorName(element: Element): string | null {
+export function cssAnchorName(element: Element): string | null {
   return /anchor-name:\s*([^;,\s]+)/.exec(element.getAttribute('style') ?? '')?.[1] ?? null;
 }
 

@@ -80,7 +80,22 @@ describe('review session stream batching', () => {
     app.stop();
   });
 
-  it('repairs Reset adjacency after a sibling is inserted or the icon is removed', async () => {
+  it('mounts Reset once on the named trigger and does not write through hydration', async () => {
+    document.querySelector('button[aria-label="Filter options"]')?.replaceWith(
+      Object.assign(document.createElement('div'), { id: 'filter-wrap' }),
+    );
+    document.getElementById('filter-wrap')?.insertAdjacentHTML(
+      'beforeend',
+      `<span id="static-label">Filter options</span>
+      <button aria-haspopup="true" aria-expanded="false" aria-labelledby="static-label"></button>
+      <span id="live-label">Filter options</span>
+      <button id="live" aria-haspopup="true" aria-expanded="false" aria-labelledby="live-label"></button>`,
+    );
+    let writes = 0;
+    const countWrite = () => {
+      writes += 1;
+    };
+    document.addEventListener('diffseek-reconciled', countWrite);
     const app = await startReviewApp({
       root: document,
       pathname: () => '/octo/repo/pull/1/changes',
@@ -92,19 +107,44 @@ describe('review session stream batching', () => {
       }),
       readPull: async (_review, base) => ({ ...base, changed: false }),
     });
-    const trigger = document.querySelector('button[aria-label="Filter options"]');
     const icon = () => document.querySelector('[data-diffseek="filter-button-reset"]');
-    expect(trigger?.nextElementSibling).toBe(icon());
+    const live = document.getElementById('live');
+    expect(icon()).toBeNull();
+    const baseline = writes;
 
-    trigger?.after(document.createElement('span'));
-    expect(trigger?.nextElementSibling).not.toBe(icon());
+    live?.setAttribute('style', 'anchor-name: --filter-anchor;');
     await nextTask();
-    expect(trigger?.nextElementSibling).toBe(icon());
+    expect(live?.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(1);
+
+    live?.setAttribute('style', 'anchor-name: --filter-anchor-2;');
+    await nextTask();
+    live?.removeAttribute('style');
+    await nextTask();
+    expect(writes - baseline).toBe(1);
+    expect(live?.nextElementSibling).toBe(icon());
+
+    live?.setAttribute('style', 'anchor-name: --filter-anchor;');
+    live?.after(document.createElement('span'));
+    await nextTask();
+    expect(live?.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(2);
+
+    document.getElementById('filter-wrap')?.append(document.createElement('span'));
+    await nextTask();
+    expect(writes - baseline).toBe(2);
+
+    document.getElementById('filter-wrap')?.append(icon()?.cloneNode(true) ?? '');
+    await nextTask();
+    expect(document.querySelectorAll('[data-diffseek="filter-button-reset"]')).toHaveLength(1);
+    expect(live?.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(3);
 
     icon()?.remove();
-    expect(icon()).toBeNull();
     await nextTask();
-    expect(trigger?.nextElementSibling).toBe(icon());
+    expect(live?.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(4);
+    document.removeEventListener('diffseek-reconciled', countWrite);
     app.stop();
   });
 });

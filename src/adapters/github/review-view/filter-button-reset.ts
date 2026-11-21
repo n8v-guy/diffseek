@@ -2,7 +2,7 @@ import type { FilterDefaults } from '@diffseek/browser';
 import type { FilterState } from '@diffseek/review';
 
 import { hasTransientExclusions, resetTransientExclusions } from './filter-reset';
-import { filterOptionsButton } from './review-ui';
+import { anchoredFilterTrigger, cssAnchorName, isFilterOptionsTrigger } from './review-ui';
 
 type ResetOptions = {
   filters: FilterState;
@@ -11,16 +11,14 @@ type ResetOptions = {
 };
 
 const buttonResetSelector = '[data-diffseek="filter-button-reset"]';
+const triggerMark = 'data-diffseek-filter-trigger';
 /** Page-level flag. CSS shows the corner Reset icon while review filters hide files. */
-export const filteredAttribute = 'data-diffseek-filtered';
+const filteredAttribute = 'data-diffseek-filtered';
 const latestOptions = new WeakMap<HTMLButtonElement, ResetOptions>();
+const retainedTrigger = new WeakMap<Document, HTMLButtonElement>();
+const ownedIcon = new WeakMap<Document, HTMLButtonElement>();
 
-/** Menu row: label, then the reset icon. The corner control drops the label. */
-export function resetFiltersButton(): HTMLButtonElement {
-  const reset = document.createElement('button');
-  reset.type = 'button';
-  reset.className = 'diffseek-reset-filters';
-  reset.dataset.resetFilters = 'true';
+function resetIcon(): SVGSVGElement {
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   icon.dataset.diffseekResetIcon = 'true';
   icon.setAttribute('aria-hidden', 'true');
@@ -28,9 +26,18 @@ export function resetFiltersButton(): HTMLButtonElement {
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', 'M3 3v4h4M3.4 6.4A5 5 0 1 1 3 10');
   icon.append(path);
+  return icon;
+}
+
+/** Menu row: label, then the reset icon. */
+export function resetFiltersButton(): HTMLButtonElement {
+  const reset = document.createElement('button');
+  reset.type = 'button';
+  reset.className = 'diffseek-reset-filters';
+  reset.dataset.resetFilters = 'true';
   const label = document.createElement('span');
   label.textContent = 'Reset filters';
-  reset.append(label, icon);
+  reset.append(label, resetIcon());
   return reset;
 }
 
@@ -38,7 +45,7 @@ export function resetFiltersButton(): HTMLButtonElement {
  * Writes `data-diffseek-filtered` on `<html>` only when the review-scoped
  * exclusion state changes. Visibility of the corner icon is CSS-only.
  */
-export function syncFilteredAttribute(
+function syncFilteredAttribute(
   root: Document,
   filters: FilterState,
   filterDefaults?: FilterDefaults,
@@ -54,54 +61,112 @@ export function syncFilteredAttribute(
   if (el.hasAttribute(filteredAttribute)) el.removeAttribute(filteredAttribute);
 }
 
-/** The listener-owned corner icon. A clone is not in the map and is discarded. */
-function ownedPill(root: Document): HTMLButtonElement | null {
-  const node = root.querySelector<HTMLButtonElement>(buttonResetSelector);
-  if (!node) return null;
-  if (latestOptions.has(node)) return node;
-  node.remove();
+/**
+ * The live trigger, once it has Primer's anchor name. The same node stays
+ * the trigger while it is connected and still named, so a later anchor
+ * rewrite does not move the icon.
+ */
+function liveTrigger(root: Document): HTMLButtonElement | null {
+  const remembered = retainedTrigger.get(root);
+  if (
+    remembered?.isConnected &&
+    isFilterOptionsTrigger(remembered) &&
+    cssAnchorName(remembered) != null
+  ) {
+    return remembered;
+  }
+  const next = anchoredFilterTrigger(root);
+  if (next) retainedTrigger.set(root, next);
+  return next;
+}
+
+function owned(root: Document): HTMLButtonElement | null {
+  const icon = ownedIcon.get(root);
+  if (icon?.isConnected) return icon;
+  if (icon) ownedIcon.delete(root);
   return null;
 }
 
-/**
- * Returns whether it changed the DOM. The icon is inserted once beside the
- * current Filter options button and is not written again until GitHub moves
- * that button or breaks the adjacency. Positioning is CSS, so an anchor-name
- * change on the same trigger writes nothing.
- */
-export function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean {
-  const trigger = filterOptionsButton(root);
-  const wrapper = trigger?.parentElement ?? null;
-  const existing = ownedPill(root);
-  if (!trigger || !wrapper) {
-    if (existing) latestOptions.set(existing, options);
-    return false;
+/** Drops cloned icons. The owned node is the one this document inserted. */
+function discardCopies(root: Document): boolean {
+  const keep = owned(root);
+  let wrote = false;
+  for (const copy of root.querySelectorAll<HTMLButtonElement>(buttonResetSelector)) {
+    if (copy === keep) continue;
+    copy.remove();
+    wrote = true;
   }
-  if (existing) {
-    latestOptions.set(existing, options);
-    if (existing.parentElement === wrapper && trigger.nextElementSibling === existing) {
-      return false;
-    }
-    trigger.after(existing);
-    return true;
+  return wrote;
+}
+
+/** Child-list edits in the owned wrapper that separate Reset from its trigger. */
+export function filterResetNeedsRepair(record: MutationRecord): boolean {
+  if (record.type !== 'childList') return false;
+  const root = record.target.ownerDocument;
+  if (!root) return false;
+  const icon = owned(root);
+  for (const node of [...record.removedNodes, ...record.addedNodes]) {
+    if (node instanceof Element && node.matches(buttonResetSelector)) return true;
   }
-  const pill = resetFiltersButton();
-  pill.querySelector('span')?.remove();
-  pill.setAttribute('aria-label', 'Reset filters');
-  pill.dataset.diffseek = 'filter-button-reset';
-  pill.addEventListener('click', (event) => {
+  if (!icon?.parentNode?.isSameNode(record.target)) return false;
+  const trigger = liveTrigger(root);
+  return trigger != null && !trigger.nextElementSibling?.isSameNode(icon);
+}
+
+function cornerButton(): HTMLButtonElement {
+  const reset = document.createElement('button');
+  reset.type = 'button';
+  reset.dataset.resetFilters = 'true';
+  reset.dataset.diffseek = 'filter-button-reset';
+  reset.setAttribute('aria-label', 'Reset filters');
+  reset.append(resetIcon());
+  reset.addEventListener('click', (event) => {
     event.stopPropagation();
-    const latest = latestOptions.get(pill);
+    const latest = latestOptions.get(reset);
     if (!latest) return;
     resetTransientExclusions(latest.filters, latest.filterDefaults);
     latest.onChange();
   });
-  latestOptions.set(pill, options);
-  trigger.after(pill);
+  return reset;
+}
+
+function place(icon: HTMLButtonElement, trigger: HTMLButtonElement): void {
+  if (!trigger.hasAttribute(triggerMark)) trigger.setAttribute(triggerMark, '');
+  trigger.after(icon);
+}
+
+/**
+ * Returns whether it changed the DOM. The icon mounts once, beside the
+ * anchor-named trigger, and is not written again while that trigger stays
+ * connected, named, and adjacent.
+ */
+function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean {
+  const trigger = liveTrigger(root);
+  const icon = owned(root);
+  const removedCopies = discardCopies(root);
+  if (!trigger?.parentElement) {
+    if (icon) latestOptions.set(icon, options);
+    return removedCopies;
+  }
+  if (icon) {
+    latestOptions.set(icon, options);
+    if (
+      icon.parentElement?.isSameNode(trigger.parentElement) &&
+      trigger.nextElementSibling?.isSameNode(icon)
+    ) {
+      return removedCopies;
+    }
+    place(icon, trigger);
+    return true;
+  }
+  const created = cornerButton();
+  latestOptions.set(created, options);
+  ownedIcon.set(root, created);
+  place(created, trigger);
   return true;
 }
 
-/** Writes the page attribute and keeps one corner Reset pill in the filter wrapper. */
+/** Writes the page attribute and keeps one corner Reset icon beside the live trigger. */
 export function syncFilterReset(root: Document, options: ResetOptions): boolean {
   syncFilteredAttribute(root, options.filters, options.filterDefaults);
   return ensureFilterButtonReset(root, options);

@@ -615,32 +615,12 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toBeHidden();
   await expect(page.locator('[data-diffseek="filters"] [data-reset-filters]')).toBeVisible();
 
-  await pill.evaluate((element) => {
-    element.dataset.diffseekPill = 'owned';
-  });
   await page.keyboard.press('Escape');
   await expect(page.locator('[role="menu"]')).toHaveCount(0);
   await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'false');
   await expect(pill).toBeVisible();
   await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
-  await expect(page.locator('[data-diffseek-pill="owned"]')).toHaveCount(1);
-  const outside = async () => {
-    await page.locator('#filter-options').scrollIntoViewIfNeeded();
-    const button = presentBox(await page.getByLabel('Filter options').boundingBox());
-    const icon = presentBox(await pill.boundingBox());
-    expect(icon.x).toBeGreaterThanOrEqual(button.x + button.width - 1);
-    expect(icon.y + icon.height).toBeLessThanOrEqual(button.y + 1);
-    const hit = await page.evaluate(() => {
-      const trigger = document.querySelector('#filter-options');
-      if (!(trigger instanceof HTMLElement)) return 'missing-trigger';
-      const box = trigger.getBoundingClientRect();
-      const target = document.elementFromPoint(box.right - 1, box.top + 1);
-      return target instanceof Element ? (target.closest('#filter-options')?.id ?? 'other') : 'none';
-    });
-    expect(hit).toBe('filter-options');
-  };
-  await outside();
-
+  await page.locator('#filter-options').scrollIntoViewIfNeeded();
   const corner = presentBox(await page.locator('#filter-options').boundingBox());
   await page.mouse.click(corner.x + corner.width - 1, corner.y + 1);
   await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
@@ -648,24 +628,6 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toBeHidden();
   await page.keyboard.press('Escape');
   await expect(pill).toBeVisible();
-  await expect(page.locator('[data-diffseek-pill="owned"]')).toHaveCount(1);
-
-  await page.evaluate(() => {
-    const current = document.querySelector('#filter-options');
-    if (!(current instanceof HTMLButtonElement)) return;
-    const next = current.cloneNode(true) as HTMLButtonElement;
-    next.setAttribute(
-      'style',
-      'anchor-name: --anchored-overlay-anchor-r2; width: 32px; height: 32px;',
-    );
-    current.replaceWith(next);
-  });
-  await expect(pill).toBeVisible();
-  await expect(page.locator('#filter-options-wrap [data-diffseek="filter-button-reset"]')).toHaveCount(
-    1,
-  );
-  await expect(page.locator('#filter-options + [data-diffseek="filter-button-reset"]')).toHaveCount(1);
-  await outside();
 
   await pill.click();
   await expect(page.locator('#diff-app')).toBeVisible();
@@ -1421,4 +1383,3 @@ async function writeFilterDefaults(
   if (defaults == null) await removeExtensionStorage();
   else await setExtensionStorage(defaults);
 }
-

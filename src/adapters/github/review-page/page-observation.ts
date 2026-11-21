@@ -1,3 +1,4 @@
+import { filterResetNeedsRepair } from '../review-view/filter-button-reset';
 import {
   filterMenus,
   filterOptionsCandidateSelector,
@@ -46,29 +47,10 @@ const structuralSelector = [
  * Ignore diff-body churn (line nodes, highlight classes). Coalesce tree and
  * panel structure. Flush viewed/collapse aria and the filter menu immediately.
  */
-const filterResetSelector = '[data-diffseek="filter-button-reset"]';
-
-/** A child-list edit that separates Reset from the Filter options button. */
-function breaksFilterResetAdjacency(record: MutationRecord): boolean {
-  if (record.type !== 'childList') return false;
-  for (const node of [...record.removedNodes, ...record.addedNodes]) {
-    if (node instanceof Element && node.matches(filterResetSelector)) return true;
-  }
-  const target = record.target;
-  if (!(target instanceof Element)) return false;
-  const trigger = [...target.children].find(
-    (child): child is HTMLButtonElement =>
-      child instanceof HTMLButtonElement && isFilterOptionsTrigger(child),
-  );
-  const reset = trigger?.nextElementSibling;
-  if (!trigger || !(reset instanceof Element)) return false;
-  return !reset.matches(filterResetSelector);
-}
-
 export function classifyPageMutations(
   records: MutationRecord[],
 ): { immediate: true } | { coalesce: true } | null {
-  if (records.some(breaksFilterResetAdjacency)) return { immediate: true };
+  if (records.some(filterResetNeedsRepair)) return { immediate: true };
   const native = records.filter(isNativeMutation);
   if (native.length === 0) return null;
   if (native.some((record) => isImmediateRecord(record))) {
