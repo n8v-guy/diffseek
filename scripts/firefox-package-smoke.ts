@@ -49,7 +49,9 @@ function debuggerUrl(stderr: Readable, signal: AbortSignal): Promise<string> {
       if (match?.[1]) resolve(`${match[1]}/session`);
     });
     lines.once('error', reject);
-    lines.once('close', () => reject(new Error('Firefox did not start its WebDriver BiDi listener')));
+    lines.once('close', () => reject(new Error(signal.aborted
+      ? 'Timed out waiting for the Firefox WebDriver BiDi banner'
+      : 'Firefox did not start its WebDriver BiDi listener')));
   });
 }
 
@@ -83,30 +85,44 @@ async function runReview(): Promise<void> {
     });
   }
 
+  function assertVisibility(selectors: string[], visible: boolean): void {
+    for (const selector of selectors) {
+      const element = document.querySelector(selector);
+      if (element == null || (getComputedStyle(element).display !== 'none') !== visible) {
+        throw new Error(`Expected ${selector} to be ${visible ? 'visible' : 'hidden'}`);
+      }
+    }
+  }
+
   const docs = '[id="docs/readme.md"]';
+  const docsElements = [docs, '#diff-viewed'];
   const filteredOut = 'data-diffseek-filtered-out';
   const filteredDocs = `${docs}[${filteredOut}="true"]`;
   const menu = '[data-diffseek="filters"]';
   await waitFor(`${filteredDocs} [data-diffseek-viewed-action]`);
+  assertVisibility(docsElements, false);
   (await waitFor('button[aria-label="Filter options"]')).click();
   (await waitFor(`${menu} [data-filter-kind="viewed"][data-filter-value="true"]`)).click();
   await waitFor(`${docs}:not([${filteredOut}])`);
+  assertVisibility(docsElements, true);
   (await waitFor(`${menu} [data-filter-kind="groups"][data-filter-value="Docs"]`)).click();
   await waitFor(filteredDocs);
-  if (document.getElementById('src/app.ts')?.hasAttribute(filteredOut) !== false) {
-    throw new Error('The Docs filter must leave src/app.ts visible');
-  }
+  assertVisibility(docsElements, false);
+  assertVisibility([`[id="src/app.ts"]:not([${filteredOut}])`, '#diff-app'], true);
 }
 
 async function smoke(socket: WebSocket, archive: string, html: string, signal: AbortSignal): Promise<void> {
-  await once(socket, 'open', { signal });
-
+  let connected = false;
   let id = 0;
   const pending = new Map<number, (reply: Reply) => void>();
   const failure = Promise.withResolvers<never>();
   const abort = () => failure.reject(new Error('Firefox package smoke timed out'));
+  const disconnect = () => failure.reject(new Error(connected
+    ? 'Firefox WebDriver BiDi disconnected'
+    : `Firefox WebDriver BiDi connection failed at ${socket.url}`));
   signal.addEventListener('abort', abort, { once: true });
-  socket.addEventListener('close', () => failure.reject(new Error('Firefox WebDriver BiDi disconnected')));
+  socket.addEventListener('error', disconnect);
+  socket.addEventListener('close', disconnect);
 
   async function send<T = unknown>(method: string, params: object): Promise<T> {
     const command = ++id;
@@ -136,9 +152,14 @@ async function smoke(socket: WebSocket, archive: string, html: string, signal: A
     await Promise.race([exercise(), failure.promise]);
   } finally {
     signal.removeEventListener('abort', abort);
+    socket.removeEventListener('error', disconnect);
+    socket.removeEventListener('close', disconnect);
   }
 
   async function exercise() {
+    await once(socket, 'open', { signal });
+    connected = true;
+
     // Only the recorded page is served. Unmatched HTTP(S) requests fail locally.
     const proxy = '127.0.0.1:1';
     await send('session.new', {

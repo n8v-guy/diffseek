@@ -1363,4 +1363,3 @@ async function writeFilterDefaults(
   if (defaults == null) await removeExtensionStorage();
   else await setExtensionStorage(defaults);
 }
-
