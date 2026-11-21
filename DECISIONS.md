@@ -287,21 +287,25 @@ Store icon the same way.
 the same icons. The main drawing turns to mush below 48 px. **Cost:** The build
 needs resvg's native package, and the store icon is uploaded by hand.
 
-## D019 — Filtered-out diffs are hidden, not collapsed
+## D019 — Filtered-out files are hidden with one attribute, not collapsed
 
-**Decision:** A filtered-out file's diff region gets a DiffSeek attribute that
-the stylesheet hides, as its tree row is. DiffSeek never clicks GitHub's
-collapse control, so a collapse is always the reviewer's own and survives
-filter changes.
+**Decision:** A filtered-out file's tree row and diff region both get the same
+DiffSeek attribute, `data-diffseek-filtered-out`, which the stylesheet hides
+with `display: none !important`. Empty folders are marked the same way.
+Teardown removes the attribute, including from rows later detached from the
+document. DiffSeek does not set the native `hidden` attribute on those rows
+and regions. It never clicks GitHub's collapse control, so a collapse is
+always the reviewer's own and survives filter changes. Menu takeover still
+hides native items with `hidden`.
 
 **Why:** One native click per file, each confirmed before the next, took
 seconds on large pull requests and fought GitHub re-expanding files. The diff
 stream now matches the tree. Only DiffSeek's own attribute is written, so the
-page stays authoritative (D001). **Cost:** A hidden diff stays in the page, and
-GitHub's layout must tolerate regions it did not hide itself. Returning to a
-filtered review, GitHub redraws the tree and panels once, as its files are not
-natively collapsed; the restored live budgets allow that one redraw and its
-pass. Cold, warm, and hot loads keep theirs. That redraw was taken for the
-wins: about 500 fewer lines, a filter click on 400 files settling in 22 ms
-instead of 2110 ms (local fixture, 10 ms per native click), and no click
-storms.
+page stays authoritative (D001). **Cost:** A hidden file stays in the page, and GitHub's layout must tolerate
+rows and regions it did not hide itself. Returning to a filtered review,
+GitHub has been observed to redraw the tree and panels once, as its files
+are not natively collapsed; the restored live budgets allow that one redraw
+and its pass. Cold, warm, and hot loads keep theirs. That redraw was taken
+for the wins: about 500 fewer lines, a filter click on 400 files settling in
+22 ms instead of 2110 ms (local fixture, 10 ms per native click), and no
+click storms.

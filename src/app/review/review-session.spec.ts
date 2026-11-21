@@ -452,9 +452,6 @@ function isDiffseekMutation(record: MutationRecord): boolean {
   }
   if (record.type === 'attributes') {
     const name = record.attributeName ?? '';
-    if (name === 'hidden' && record.target.getAttribute('role') === 'treeitem') {
-      return true;
-    }
     if (name.startsWith('data-diffseek') || name === 'class' && record.target.classList.contains('diffseek-viewed-icon-anchor')) {
       return true;
     }

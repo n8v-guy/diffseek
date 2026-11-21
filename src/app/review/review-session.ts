@@ -239,7 +239,7 @@ export class ReviewSession {
     const firstObservation = !this.metadataWatch.ready;
     const metadataOpportunity =
       consumeMetadataOpportunity(this.metadataWatch, this.options.root) || firstObservation;
-    // Disconnect while writing so our own hidden/dataset toggles do not
+    // Disconnect while writing so our own dataset toggles do not
     // immediately re-schedule another full reconcile during panel storms.
     this.observer.disconnect();
     this.discoveryObserver.disconnect();
@@ -525,7 +525,7 @@ export class ReviewSession {
   }
 
   private clearInjected(): void {
-    this.presenter.reset(this.snapshot);
+    this.presenter.reset(this.options.root);
     this.snapshot = null;
     removeInjected(this.options.root);
   }

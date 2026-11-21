@@ -22,6 +22,13 @@ function excludingConfig() {
   return { snapshot, state, presenter: new ReviewPresenter() };
 }
 
+
+function filteredOut(id: string): boolean {
+  const row = document.getElementById(id);
+  if (row == null) throw new Error(`Missing tree row ${id}`);
+  return row.dataset.diffseekFilteredOut === 'true';
+}
+
 describe('ReviewPresenter', () => {
   beforeEach(() => {
     document.documentElement.innerHTML = fixture;
@@ -42,9 +49,9 @@ describe('ReviewPresenter', () => {
 
     new ReviewPresenter().apply(snapshot, state);
 
-    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
-    expect(document.getElementById('docs')?.hidden).toBe(true);
-    expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
+    expect(filteredOut('docs/readme.md')).toBe(true);
+    expect(filteredOut('docs')).toBe(true);
+    expect(filteredOut('src/app.ts')).toBe(false);
   });
 
   it('hides non-matching tree rows and empty folders', () => {
@@ -58,9 +65,9 @@ describe('ReviewPresenter', () => {
     state.get('groups')?.add('Docs');
     new ReviewPresenter().apply(snapshot, state);
 
-    expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
-    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
-    expect(document.getElementById('docs')?.hidden).toBe(true);
+    expect(filteredOut('src/app.ts')).toBe(false);
+    expect(filteredOut('docs/readme.md')).toBe(true);
+    expect(filteredOut('docs')).toBe(true);
   });
 
   it('hides non-matching diffs without clicking GitHub, then shows them again', () => {
@@ -76,23 +83,23 @@ describe('ReviewPresenter', () => {
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
     ).toBe('true');
 
-    presenter.reset(snapshot);
+    presenter.reset(document);
     expect(
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
     ).toBeUndefined();
     expect(click).not.toHaveBeenCalled();
   });
 
-  it('shows again on teardown only the rows it hid', () => {
+  it('removes its attribute on teardown and leaves GitHub hidden rows alone', () => {
     const { snapshot, state, presenter } = excludingConfig();
     presenter.apply(snapshot, state);
     // GitHub hides a row on its own after the pass.
     const native = document.getElementById('src/app.ts');
     if (native) native.hidden = true;
-    expect(document.getElementById('config/app.json')?.hidden).toBe(true);
-    presenter.reset(snapshot);
+    expect(filteredOut('config/app.json')).toBe(true);
+    presenter.reset(document);
 
-    expect(document.getElementById('config/app.json')?.hidden).toBe(false);
+    expect(filteredOut('config/app.json')).toBe(false);
     expect(native?.hidden).toBe(true);
   });
 
@@ -104,7 +111,7 @@ describe('ReviewPresenter', () => {
 
     presenter.apply(snapshot, state);
 
-    expect(document.getElementById('config/app.json')?.hidden).toBe(true);
+    expect(filteredOut('config/app.json')).toBe(true);
     expect(
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
     ).toBe('true');
@@ -120,7 +127,31 @@ describe('ReviewPresenter', () => {
     presenter.apply(snapshot, state);
 
     expect(snapshot.unavailable.get('docs/readme.md')).toBe('Invalid diff anchor');
-    expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);
-    expect(document.getElementById('docs')?.hidden).toBe(false);
+    expect(filteredOut('docs/readme.md')).toBe(false);
+    expect(filteredOut('docs')).toBe(false);
+  });
+
+  it('clears the marker on a tree that was detached before teardown', () => {
+    const { snapshot, state, presenter } = excludingConfig();
+    presenter.apply(snapshot, state);
+    const tree = snapshot.tree();
+    const host = tree?.parentElement;
+    expect(filteredOut('config/app.json')).toBe(true);
+    tree?.remove();
+    presenter.reset(document);
+    if (tree) host?.append(tree);
+    expect(filteredOut('config/app.json')).toBe(false);
+  });
+
+  it('shows a tree row again when its panel is no longer unique', () => {
+    const { snapshot, state, presenter } = excludingConfig();
+    presenter.apply(snapshot, state);
+    expect(filteredOut('config/app.json')).toBe(true);
+    const region = document.getElementById('diff-config');
+    region?.after(region.cloneNode(true));
+    const next = scanPage(document);
+    if (!next.supported) throw new Error(next.reason);
+    presenter.apply(next, filters());
+    expect(filteredOut('config/app.json')).toBe(false);
   });
 });

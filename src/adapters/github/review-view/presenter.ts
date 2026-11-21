@@ -9,8 +9,8 @@ import type { PageSnapshot } from '../review-page/page-adapter';
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
 export class ReviewPresenter {
-  /** Rows this session hid, so teardown shows only those again. */
-  private readonly hiddenRows = new Set<HTMLElement>();
+  /** Elements this session marked, including any later detached from the document. */
+  private readonly marked = new Set<HTMLElement>();
 
   apply(
     snapshot: SupportedSnapshot,
@@ -24,35 +24,32 @@ export class ReviewPresenter {
     );
 
     for (const file of snapshot.files) {
+      const hide = !matching.has(file.path);
       const treeItem = snapshot.treeItem(file.path);
       const region = snapshot.region(file.path);
-      if (!treeItem || !region) continue;
-      const hide = !matching.has(file.path);
-      this.setHidden(treeItem, hide);
       if (!hide) {
-        if (region.dataset.diffseekFilteredOut != null) {
-          delete region.dataset.diffseekFilteredOut;
-        }
-      } else if (region.dataset.diffseekFilteredOut !== 'true') {
-        region.dataset.diffseekFilteredOut = 'true';
+        if (treeItem) this.setFilteredOut(treeItem, false);
+        if (region) this.setFilteredOut(region, false);
+        continue;
       }
+      if (!treeItem || !region) continue;
+      this.setFilteredOut(treeItem, true);
+      this.setFilteredOut(region, true);
     }
 
     this.updateFolders(snapshot, matching, index);
   }
 
-  reset(snapshot?: SupportedSnapshot | null): void {
-    for (const file of snapshot?.files ?? []) {
-      delete snapshot?.region(file.path)?.dataset.diffseekFilteredOut;
+  reset(root?: ParentNode | null): void {
+    for (const element of this.marked) {
+      delete element.dataset.diffseekFilteredOut;
     }
-    for (const row of this.hiddenRows) row.hidden = false;
-    this.hiddenRows.clear();
-  }
-
-  private setHidden(row: HTMLElement, hide: boolean): void {
-    if (row.hidden !== hide) row.hidden = hide;
-    if (hide) this.hiddenRows.add(row);
-    else this.hiddenRows.delete(row);
+    this.marked.clear();
+    for (const element of root?.querySelectorAll<HTMLElement>(
+      '[data-diffseek-filtered-out]',
+    ) ?? []) {
+      delete element.dataset.diffseekFilteredOut;
+    }
   }
 
   private updateFolders(
@@ -69,7 +66,21 @@ export class ReviewPresenter {
     for (const item of tree?.querySelectorAll<HTMLElement>(
       '[role="treeitem"][id]',
     ) ?? []) {
-      if (!filePaths.has(item.id)) this.setHidden(item, !visible.has(item.id));
+      if (!filePaths.has(item.id)) this.setFilteredOut(item, !visible.has(item.id));
     }
+  }
+
+  private setFilteredOut(element: HTMLElement, hide: boolean): void {
+    if (!hide) {
+      if (element.dataset.diffseekFilteredOut != null) {
+        delete element.dataset.diffseekFilteredOut;
+      }
+      this.marked.delete(element);
+      return;
+    }
+    if (element.dataset.diffseekFilteredOut !== 'true') {
+      element.dataset.diffseekFilteredOut = 'true';
+    }
+    this.marked.add(element);
   }
 }
