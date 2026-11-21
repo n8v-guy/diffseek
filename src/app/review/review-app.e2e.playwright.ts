@@ -551,16 +551,16 @@ test('clears native filters before taking over the menu', async () => {
   ]);
   const resetButton = presentBox(buttonRect);
   const filtersRoot = presentBox(rootRect);
+  const icon = presentBox(iconRect);
+  // Where the icon-only control sat: centered 6 px inside the top-right corner.
+  const cornerOffset = (a: number, b: number) => Math.abs(a - b) <= 2;
   expect({
-    insideMenu:
-      resetButton.x >= filtersRoot.x &&
-      resetButton.x + resetButton.width <= filtersRoot.x + filtersRoot.width &&
-      resetButton.y >= filtersRoot.y,
+    iconAtCorner:
+      cornerOffset(icon.x + icon.width / 2, filtersRoot.x + filtersRoot.width - 6) &&
+      cornerOffset(icon.y + icon.height / 2, filtersRoot.y + 6),
+    labelBeforeIcon: presentBox(labelRect).x < icon.x,
     aboveRows: resetButton.y + resetButton.height <= presentBox(rowRect).y,
-    iconBesideLabel:
-      presentBox(iconRect).x < presentBox(labelRect).x &&
-      presentBox(labelRect).x - presentBox(iconRect).x < 24,
-  }).toEqual({ insideMenu: true, aboveRows: true, iconBesideLabel: true });
+  }).toEqual({ iconAtCorner: true, labelBeforeIcon: true, aboveRows: true });
   await reset.click();
   await expect(menu).toBeVisible();
   await expect(page.locator('#docs\\/readme\\.md')).toBeHidden();

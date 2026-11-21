@@ -214,7 +214,7 @@ function appendResetFilters(
   icon.append(path);
   const label = document.createElement('span');
   label.textContent = 'Reset filters';
-  reset.append(icon, label);
+  reset.append(label, icon);
   reset.addEventListener('click', () => {
     resetTransientExclusions(options.filters, options.filterDefaults);
     options.onChange();
