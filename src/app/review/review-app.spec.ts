@@ -1127,7 +1127,7 @@ describe('fresh filter defaults', () => {
     expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
     expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
-    expect(count('viewed')).toBe('0/1');
+    await until(() => expect(count('viewed')).toBe('0/1'));
     expect(count('generated')).toBe('0/1');
 
     viewed()?.click();
@@ -1189,11 +1189,13 @@ describe('fresh filter defaults', () => {
     ).toBe('mixed');
     expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
-    expect(
-      document.querySelector(
-        '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
-      )?.textContent,
-    ).toBe('1/1');
+    await until(() =>
+      expect(
+        document.querySelector(
+          '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
+        )?.textContent,
+      ).toBe('1/1'),
+    );
     app.stop();
   });
 });
@@ -1632,20 +1634,45 @@ describe('review app interactions', () => {
 
     await nextReconcile(() => {
       const region = document.getElementById('diff-generated');
-      [...(region?.querySelectorAll('button, p') ?? [])]
-        .filter(
-          (element) =>
-            element.textContent.trim() === 'Load Diff' ||
-            element.textContent.includes(
-              'Some generated files are not rendered by default',
-            ),
-        )
-        .forEach((element) => element.remove());
-      if (!region) return;
-      region.replaceWith(region.cloneNode(true));
+      region?.replaceWith(region.cloneNode(true));
     });
 
     expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    app.stop();
+  });
+
+  it("counts GitHub's generated placeholder that streams in, also after Load Diff", async () => {
+    await fakeBrowser.storage.local.set({
+      'diffseek:filter-defaults': { hidden: [], viewed: [] },
+    });
+    openMenu();
+    const app = await reviewApp({ ...metadataSource('') });
+    const generatedCount = () =>
+      document.querySelector(
+        '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
+      )?.textContent;
+    await until(() => expect(document.querySelector('[data-filter-kind="viewed"]')).not.toBeNull());
+    expect(generatedCount()).toBeUndefined();
+
+    // GitHub fills an existing panel with its placeholder; no filter click follows.
+    document.getElementById('diff-config')?.insertAdjacentHTML(
+      'beforeend',
+      `<div id="placeholder"><button>Load Diff</button><span>Some generated files are not rendered by default. Learn more about
+        <a href="https://docs.github.com/github/administering-a-repository/customizing-how-changed-files-appear-on-github">customizing how changed files appear on GitHub.</a></span></div>`,
+    );
+    await until(() => expect(generatedCount()).toBe('1/1'));
+
+    document.getElementById('placeholder')?.replaceWith(document.createElement('table'));
+    await nextReconcile(() =>
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-filter-kind="generated"][data-filter-value="true"]',
+        )
+        ?.click(),
+    );
+
+    expect(document.getElementById('config/app.json')?.hidden).toBe(true);
+    expect(generatedCount()).toBe('0/1');
     app.stop();
   });
 
@@ -1700,7 +1727,7 @@ function manualClock(): { clock: QuietClock; fire: () => void; armed: () => bool
   };
 }
 
-describe('slice focus', () => {
+describe('page position', () => {
   const codeFilter = '[data-filter-kind="groups"][data-filter-value="Code"]';
 
   function treeClicks(): string[] {
@@ -1713,19 +1740,20 @@ describe('slice focus', () => {
     return clicks;
   }
 
-  it('clicks the first shown file after a filter hides files, not after one shows them', async () => {
+  it('does not move the page when a filter hides files or shows them again', async () => {
+    location.hash = '#diff-config';
     const app = await reviewApp({ ...metadataSource('src/** group=Code') });
     await nextReconcile(openMenu);
     const clicks = treeClicks();
 
     await nextReconcile(() => document.querySelector<HTMLElement>(codeFilter)?.click());
-    await until(() => expect(clicks).toEqual(['#diff-viewed']));
-
+    await until(() => expect(document.getElementById('src/app.ts')?.hidden).toBe(true));
     await nextReconcile(() => document.querySelector<HTMLElement>(codeFilter)?.click());
-    await nextReconcile(() =>
-      document.querySelector<HTMLElement>('[data-filter-kind="statuses"][data-filter-value="modified"]')?.click(),
-    );
-    await until(() => expect(clicks).toEqual(['#diff-viewed', '#diff-new']));
+    await until(() => expect(document.getElementById('src/app.ts')?.hidden).toBe(false));
+
+    expect(clicks).toEqual([]);
+    expect(location.hash).toBe('#diff-config');
+    location.hash = '';
     app.stop();
   });
 

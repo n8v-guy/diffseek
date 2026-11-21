@@ -25,6 +25,30 @@ describe('GitHub page mutations', () => {
     expect(classifyPageMutations(noise)).toBeNull();
   });
 
+  it("flushes GitHub's swap to the anchored filter button and a streamed generated placeholder", async () => {
+    document.body.innerHTML = '<span id="label">Filter options</span><div id="bar"><button aria-haspopup="true" aria-labelledby="label"></button></div>';
+    const swapped = await captureMutations(() => {
+      const hydrated = document.createElement('button');
+      hydrated.setAttribute('aria-haspopup', 'true');
+      hydrated.setAttribute('aria-labelledby', 'label');
+      hydrated.setAttribute('style', 'anchor-name: --anchored-overlay-anchor-r1;');
+      document.querySelector('#bar button')?.replaceWith(hydrated);
+    });
+    expect(classifyPageMutations(swapped)).toEqual({ immediate: true });
+
+    const region = document.createElement('div');
+    region.id = 'diff-app';
+    region.setAttribute('role', 'region');
+    document.body.append(region);
+    const placeholder = await captureMutations(() => {
+      region.insertAdjacentHTML(
+        'beforeend',
+        '<div><button>Load Diff</button><span>Some generated files are not rendered by default. <a href="https://docs.github.com/articles/customizing-how-changed-files-appear-on-github">docs</a></span></div>',
+      );
+    });
+    expect(classifyPageMutations(placeholder)).toEqual({ coalesce: true });
+  });
+
   it('flushes viewed aria and filter-menu changes immediately', async () => {
     const button = document.createElement('button');
     button.setAttribute('aria-label', 'Not Viewed');

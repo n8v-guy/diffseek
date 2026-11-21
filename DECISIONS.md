@@ -90,7 +90,10 @@ and a changed menu is patched or rebuilt.
 **Decision:** Reuse GitHub's filter menu but hide its native rows and let
 DiffSeek own all menu contents. If GitHub file filters are already active, use
 GitHub's own clear control before taking over. Viewed writes still use
-GitHub's native controls.
+GitHub's native controls. Reset filters appears in the menu and on GitHub's
+closed filter button only while review-scoped exclusions are active; with
+nothing to reset nothing is shown, and the menu keeps the space so rows stay
+put.
 
 **Why:** One model now owns visibility, counters, selection, and whether a click
 keeps the menu open. This removes native/extension drift without hooking GitHub
@@ -138,7 +141,8 @@ cannot mark are excluded. Notifications say which kind of scope changed (all
 files in a category versus the visible files in a folder) without naming it.
 
 **Why:** The menu icon and the click agree, including files the current
-filters have hidden. The tree stays limited to what is on screen. **Cost:** A
+filters have hidden. Folders stay limited to the active filters, apart from
+the Viewed filter's hiding. **Cost:** A
 menu click can change files the reviewer is not currently looking at.
 
 ## D010 — Fallback labels remain data but not menu noise
@@ -153,16 +157,17 @@ facet cannot be toggled until repository metadata adds another value.
 ## D011 — Missing filter defaults are not an empty preference
 
 **Decision:** With no saved filter defaults, viewed and generated files are
-hidden. A saved record is honored as saved, even when it hides nothing. Reading
-defaults never writes the implicit state.
+hidden and generated files are auto-viewed. A saved record is honored as saved,
+even when it hides nothing. Reading defaults never writes the implicit state.
 
 **Why:** New installs start with less review noise, without a migration that
 overwrites people who already saved a preference, including show everything.
 **Cost:** The implicit default is reapplied every session until a remembered
 row changes. Viewed and generated clicks both cycle show, hide, always hide.
 The fresh always-hide state returns to show on the first click and does not
-mark files viewed. Marking generated files viewed is a separate saved
-auto-view switch, off until the user turns it on. An older saved setting that
+mark files viewed. Marking generated files viewed is a separate saved auto-view
+switch. It is on with no saved record, so new installs auto-view generated
+files, and a saved record keeps the user's choice. An older saved setting that
 hid generated files and marked them viewed reads as always hide plus auto-view.
 
 ## D012 — Notifications are generic and short
@@ -257,21 +262,18 @@ that never goes quiet keeps serving that copy; newly arrived diff paths are
 still read. After one immediate retry, a second failure uses that same
 wait, and a path that arrived during the failure is part of the next try.
 
-## D017 — A narrowing filter click moves to the slice
+## D017 — Filter clicks never move the page
 
-**Decision:** Only the reviewer changes filters, so a page pass whose filters
-differ from the last applied ones and that hides a shown file is their
-narrowing. DiffSeek then clicks the first shown file in GitHub's tree, as the
-reviewer would, and GitHub scrolls its diff into view. The click follows that
-pass's writes. It is skipped when no file is shown, or when that file's diff is
-already on screen. Widening, page loads, streamed files, auto-view, and other
-passes keep the filters as they are and never move the page.
+**Decision:** Filter changes only hide and show files. DiffSeek does not click
+GitHub's tree, navigate, or scroll after a narrowing, so the URL hash stays as
+the reviewer left it.
 
-**Why:** Hiding files (D019) keeps the scroll position, so after "only" the
-slice can start a screen or more away. GitHub's own tree click
-keeps its scrolling, selection, and URL as they would be (D001). **Cost:** A
-narrowing click also moves the reviewer away from a spot deeper in the slice,
-and the URL hash changes to that file.
+**Why:** Clicking the first shown file after "only" moved reviewers away from
+their spot and rewrote the URL hash, which read as a jump. The tree already
+lists the slice, so one reviewer click reaches it with GitHub's own scrolling
+(D001). **Cost:** After a narrowing, the slice can start a screen or more away.
+Hidden panels still change the page height, so the browser may shift the
+scroll offset on its own.
 
 ## D018 — Icons are rendered from SVG at build time
 

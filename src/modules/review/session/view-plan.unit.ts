@@ -26,6 +26,7 @@ function inputs(overrides: Partial<ViewInputs> = {}): ViewInputs {
     filters: emptyFacetExclusions(),
     filterDefaults: { hidden: new Set(), viewed: new Set() },
     generatedDefaultBusy: false,
+    countsSettling: false,
     ...overrides,
   };
 }
@@ -69,6 +70,7 @@ describe('view plan', () => {
   it('changes only the menu when only menu content changes', () => {
     const menuOnly = { page: false, menu: true };
     expect(changes({ generatedDefaultBusy: true })).toEqual(menuOnly);
+    expect(changes({ countsSettling: true })).toEqual(menuOnly);
     expect(changes({ files: [file({ extension: null })] })).toEqual(menuOnly);
     expect(changes({ files: [file({ anchor: 'diff-other' })] })).toEqual(menuOnly);
     expect(changes({ files: [file({ owners: ['@team'] })] })).toEqual(menuOnly);

@@ -22,7 +22,7 @@ export function classifyKeyFor(
     metadata.attributes,
     JSON.stringify(metadata.nestedAttributes),
     files
-      .map((file) => `${file.path}\0${file.status}\0${file.owners.join(',')}`)
+      .map((file) => `${file.path}\0${file.status}\0${file.owners.join(',')}\0${file.generatedOnPage === true ? 'page' : ''}`)
       .join('\n'),
   ].join('\n--\n');
 }

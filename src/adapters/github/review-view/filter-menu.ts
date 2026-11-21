@@ -1,3 +1,4 @@
+import { resetFiltersButton } from './filter-button-reset';
 import {
   applyCheckedState,
   cycleFilterDefault,
@@ -24,6 +25,7 @@ import {
   sectionAllAction,
 } from './filter-shortcuts';
 import {
+  menuCountText,
   menuViewedCounter,
   menuViewedOverlay,
 } from './menu-viewed-action';
@@ -169,6 +171,7 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
       facet: options.facet,
       onViewed,
       paths: options.paths,
+      settling: options.settling === true,
       total: options.total,
       value: options.value,
       viewedCount: options.viewedCount,
@@ -179,7 +182,7 @@ function appendItem(root: HTMLElement, options: MenuRowModel): void {
   } else {
     const counter = document.createElement('span');
     counter.className = 'diffseek-menu-count';
-    counter.textContent = `${options.visible}/${options.total}`;
+    counter.textContent = menuCountText(options);
     row.append(counter);
   }
   root.append(row);
@@ -199,22 +202,9 @@ function appendResetFilters(
     'filters' | 'onChange' | 'filterDefaults'
   >,
 ): void {
-  const reset = document.createElement('button');
-  reset.type = 'button';
-  reset.className = 'diffseek-reset-filters';
-  reset.dataset.resetFilters = 'true';
+  const reset = resetFiltersButton();
   syncResetFilters(reset, options);
   reset.setAttribute('role', 'menuitem');
-  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  icon.dataset.diffseekResetIcon = 'true';
-  icon.setAttribute('aria-hidden', 'true');
-  icon.setAttribute('viewBox', '0 0 16 16');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', 'M3 3v4h4M3.4 6.4A5 5 0 1 1 3 10');
-  icon.append(path);
-  const label = document.createElement('span');
-  label.textContent = 'Reset filters';
-  reset.append(label, icon);
   reset.addEventListener('click', () => {
     // Reset disables itself, so focus moves to the first row first.
     root.querySelector<HTMLButtonElement>('[data-filter-kind]')?.focus();

@@ -42,15 +42,28 @@ request reviews. GitHub remains the review system and visual authority.
 - A menu row derives its count, viewed targets, and viewed indicator from the
   same live projection.
 - A facet containing only its fallback label is omitted from the menu.
-- Category actions normally target visible files; when the viewed facet alone
-  hides matching viewed files, they target those files as a reversible escape.
+- Category rows (owners, groups, formats, change status, generated) base their
+  viewed circle and click on every markable file in the category, ignoring all
+  filters, hidden files included (the badge stays visible/total); folder
+  actions target only files that pass the active filters except the Viewed
+  filter's hiding.
 - Remembered viewed/generated defaults are extension-wide; other exclusions are
   review-scoped.
-- With no saved filter defaults, viewed and generated files are hidden. A saved
-  record wins, even an empty one, and is not rewritten until a remembered row
-  changes.
-- Menu reset is always shown, is enabled only for review-scoped exclusions, and
-  never changes remembered defaults.
+- With no saved filter defaults, viewed and generated files are hidden and
+  generated files are auto-viewed. A saved record wins, even an empty one, and
+  is not rewritten until a remembered row changes.
+- A file is generated when .gitattributes or a built-in rule says so, or when
+  GitHub shows its "not rendered by default" notice; a seen notice is kept
+  after the diff loads.
+- Reset filters shows only while review-scoped exclusions are active and never
+  changes remembered defaults. With nothing to reset the menu shows nothing
+  there, keeps its space so rows do not move, and skips it in keyboard order.
+- While review-scoped exclusions hide files and the menu is closed, the same
+  Reset filters pill sits on the filter button's top-right corner, tethered to
+  GitHub's own CSS anchor name.
+- Menu counts read "…" until the review's first metadata read finishes.
+- GitHub's menu overlay caps the menu at the screen's height and scrolls it;
+  DiffSeek adds no second scroll container.
 - Auto-view acts through GitHub's rendered controls once per file and lets
   normal page observation reconcile the result.
 - Shared tool configuration lives in one place; tool files stay at the root only

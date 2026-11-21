@@ -196,13 +196,29 @@
   padding: 0 0.125rem 0 0.5rem;
 }
 
+/* On GitHub's filter button, the pill takes the menu Reset's corner spot. */
+[data-diffseek='filter-button-reset'] {
+  color: var(--diffseek-foreground);
+  font-family: inherit;
+  position: fixed;
+  right: anchor(right);
+  top: anchor(top);
+  white-space: nowrap;
+}
+
+@supports not (position-anchor: --diffseek) {
+  [data-diffseek='filter-button-reset'] {
+    display: none;
+  }
+}
+
 .diffseek-reset-filters:hover:enabled {
   background: var(--diffseek-hover);
 }
 
+/* Nothing to reset: show nothing, but keep its space so rows do not move. */
 .diffseek-reset-filters:disabled {
-  cursor: default;
-  opacity: 0.55;
+  visibility: hidden;
 }
 
 .diffseek-reset-filters svg {

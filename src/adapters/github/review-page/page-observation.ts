@@ -1,6 +1,8 @@
 import {
   filterMenus,
+  filterOptionsButton,
   filterOptionsLabel,
+  isFilterOptionsTrigger,
   isNativeMutation,
 } from '../review-view/review-ui';
 
@@ -11,6 +13,7 @@ import {
   fileTreeElement,
   fileTreeItemSelector,
   fileTreeSelector,
+  generatedNoticeLinkSelector,
 } from './page-adapter';
 
 const ariaLabelAttribute = 'aria-label';
@@ -36,6 +39,7 @@ const structuralSelector = [
   'button[aria-label="Not Viewed"]',
   'button[aria-label="Collapse file"]',
   'button[aria-label="Expand file"]',
+  generatedNoticeLinkSelector,
 ].join(',');
 
 /**
@@ -94,14 +98,12 @@ export function watchObservationRoots(options: {
     });
     options.observedRoots.add(candidate);
   }
-  const filterButton = options.root.querySelector<HTMLElement>(
-    `button[${ariaLabelAttribute}="${filterOptionsLabel}"]`,
-  );
+  const filterButton = filterOptionsButton(options.root);
   if (filterButton && !options.observedRoots.has(filterButton)) {
     options.observer.observe(filterButton, {
       subtree: true,
       attributes: true,
-      attributeFilter: [ariaLabelAttribute, 'aria-expanded', 'class'],
+      attributeFilter: [ariaLabelAttribute, labelledByAttribute, 'aria-expanded', 'class', 'style'],
     });
     options.observedRoots.add(filterButton);
   }
@@ -210,22 +212,20 @@ function isFilterMenuRecord(record: MutationRecord): boolean {
 function isFilterOptionsButton(target: Element): boolean {
   const button =
     target instanceof HTMLButtonElement ? target : target.closest('button');
-  if (!(button instanceof HTMLButtonElement)) return false;
-  if (button.getAttribute(ariaLabelAttribute) === filterOptionsLabel) return true;
-  const labelledBy = button.getAttribute(labelledByAttribute);
-  if (!labelledBy) return false;
-  return labelledBy.split(/\s+/).some(
-    (id) =>
-      button.ownerDocument.getElementById(id)?.textContent === filterOptionsLabel,
-  );
+  return button instanceof HTMLButtonElement && isFilterOptionsTrigger(button);
 }
 
 function containsFilterMenu(node: Node): boolean {
   if (!(node instanceof Element)) return false;
   if (isFilterMenuElement(node) || node.matches('[role="menu"]')) return true;
+  // GitHub swaps its server-rendered filter button for the interactive one.
+  if (node instanceof HTMLButtonElement) return isFilterOptionsButton(node);
   // Diff panels are large. Only small overlays can be an unlabelled menu shell.
   if (node.childElementCount > overlayChildLimit) return false;
-  return node.querySelector('[role="menu"]') != null;
+  return (
+    node.querySelector('[role="menu"]') != null ||
+    [...node.querySelectorAll('button[aria-haspopup]')].some(isFilterOptionsButton)
+  );
 }
 
 function isTreeContainerRecord(record: MutationRecord): boolean {

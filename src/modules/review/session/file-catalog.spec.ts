@@ -32,6 +32,15 @@ describe('FileCatalog', () => {
     expect(catalog.files()[0]?.viewed).toBe(true);
   });
 
+  it("keeps GitHub's generated notice after the diff loads in its place", () => {
+    const catalog = new FileCatalog();
+    catalog.merge([{ ...file('api/types.pb.go'), generatedOnPage: true }]);
+
+    catalog.merge([file('api/types.pb.go')]);
+
+    expect(catalog.files()[0]?.generatedOnPage).toBe(true);
+  });
+
   it('keeps classification when a later scan emits a capability-less stub', () => {
     const catalog = new FileCatalog();
     catalog.merge([

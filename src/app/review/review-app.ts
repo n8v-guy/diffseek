@@ -86,6 +86,7 @@ export async function startReviewApp(
   };
   const filterDefaults = await dependencies.readFilterDefaults();
   const metadataCommits = new MetadataCommitGuard<RepositoryCache>(writeCache);
+  const settledCounts = new Set<string>();
   const lifecycle = new AbortController();
   let session: ReviewSession | null = null;
   let review: ReviewRef | null = null;
@@ -123,6 +124,7 @@ export async function startReviewApp(
       markFiles: dependencies.markFiles,
       filterDefaults,
       writeFilterDefaults: dependencies.writeFilterDefaults,
+      settledCounts,
     });
     session.start();
   };

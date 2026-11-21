@@ -28,6 +28,8 @@ export type FilterMenuOptions = MenuActions & {
   filters: FilterState;
   filterDefaults?: FilterDefaults;
   generatedDefaultBusy?: boolean;
+  /** Counts read "…" until the first metadata read finishes. */
+  countsSettling?: boolean;
 };
 
 export type MenuRowModel = MenuActions & {
@@ -43,6 +45,7 @@ export type MenuRowModel = MenuActions & {
   onlyValues?: string[];
   filterDefaults?: FilterDefaults;
   disabled?: boolean;
+  settling?: boolean;
 };
 
 export type MenuSectionModel = {
@@ -124,6 +127,7 @@ export function menuRowModels(options: FilterMenuOptions): MenuSectionModel[] {
         value,
         excluded,
         ...(values.length > 1 ? { onlyValues: values } : {}),
+        ...settlingField(options),
         onChange: options.onChange,
         ...(options.onViewed !== undefined ? { onViewed: options.onViewed } : {}),
       });
@@ -133,10 +137,16 @@ export function menuRowModels(options: FilterMenuOptions): MenuSectionModel[] {
   return sections;
 }
 
+function settlingField(options: FilterMenuOptions): { settling?: boolean } {
+  return options.countsSettling === true ? { settling: true } : {};
+}
+
 function sharedRowFields(options: FilterMenuOptions): MenuActions & {
   filterDefaults?: FilterDefaults;
+  settling?: boolean;
 } {
   return {
+    ...settlingField(options),
     onChange: options.onChange,
     ...(options.filterDefaults !== undefined
       ? { filterDefaults: options.filterDefaults }

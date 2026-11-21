@@ -531,9 +531,13 @@ test('clears native filters before taking over the menu', async () => {
   await expect(
     page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Always hidden');
-  const reset = page.locator('[data-reset-filters]');
-  await expect(reset).toHaveText('Reset filters');
-  await expect(reset).toBeDisabled();
+  const reset = page.locator('[data-diffseek="filters"] [data-reset-filters]');
+  // Nothing to reset: nothing shown, and its space stays so rows do not move.
+  await expect(reset).toBeHidden();
+  const filtersBlock = page.locator('[data-diffseek="filters"]');
+  const rowOffset = async () =>
+    presentBox(await viewed.boundingBox()).y - presentBox(await filtersBlock.boundingBox()).y;
+  const rowOffsetWithoutReset = await rowOffset();
   await ownerRow.hover();
   await ownerOnly.click();
   await expect(
@@ -541,7 +545,9 @@ test('clears native filters before taking over the menu', async () => {
       '[data-filter-kind="owners"]:not([data-filter-value="@source"])',
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
-  await expect(reset).toBeEnabled();
+  await expect(reset).toBeVisible();
+  await expect(reset).toHaveText('Reset filters');
+  expect(await rowOffset()).toBe(rowOffsetWithoutReset);
   const [buttonRect, iconRect, labelRect, rootRect, rowRect] = await Promise.all([
     reset.boundingBox(),
     reset.locator('svg').boundingBox(),
@@ -568,7 +574,103 @@ test('clears native filters before taking over the menu', async () => {
   await expect(
     page.locator('[data-filter-kind="owners"][aria-checked="false"]'),
   ).toHaveCount(0);
-  await expect(reset).toBeDisabled();
+  await expect(reset).toBeHidden();
+});
+
+test('puts Reset filters on the closed filter button while filters hide files', async () => {
+  const page = await openPull(14);
+  // GitHub's captured button: named by aria-labelledby, anchored by Primer.
+  await page.evaluate(() => {
+    const button = document.querySelector('button[aria-label="Filter options"]');
+    button?.insertAdjacentHTML('beforebegin', '<span id="filter-options-label" hidden>Filter options</span>');
+    button?.removeAttribute('aria-label');
+    button?.setAttribute('id', 'filter-options');
+    button?.setAttribute('aria-haspopup', 'true');
+    button?.setAttribute('aria-labelledby', 'filter-options-label');
+    button?.setAttribute('style', 'anchor-name: --anchored-overlay-anchor-r1;');
+  });
+  await page.addStyleTag({
+    content: '#filter-options { margin: 40px; width: 32px; height: 32px; }',
+  });
+  await page.getByLabel('Filter options').click();
+  await page.locator('[data-filter-kind="groups"][data-filter-value="Code"]').click();
+  await expect(page.locator('#diff-app')).toBeHidden();
+  const pill = page.locator('[data-diffseek="filter-button-reset"]');
+  await expect(pill).toHaveCount(0);
+
+  await page.evaluate(() => document.querySelector('[role="menu"]')?.remove());
+  await expect(pill).toBeVisible();
+  const button = presentBox(await page.getByLabel('Filter options').boundingBox());
+  const icon = presentBox(await pill.locator('svg').boundingBox());
+  const label = presentBox(await pill.locator('span').boundingBox());
+  // The same spot as in the menu: the icon 6 px inside the top-right corner.
+  const near = (a: number, b: number) => Math.abs(a - b) <= 2;
+  expect({
+    iconAtCorner:
+      near(icon.x + icon.width / 2, button.x + button.width - 6) &&
+      near(icon.y + icon.height / 2, button.y + 6),
+    labelBeforeIcon: label.x < icon.x,
+  }).toEqual({ iconAtCorner: true, labelBeforeIcon: true });
+
+  await pill.click();
+  await expect(page.locator('#diff-app')).toBeVisible();
+  await expect(pill).toHaveCount(0);
+});
+
+test('scrolls a tall menu in GitHub\'s overlay only, down to its last row', async () => {
+  const page = await openPull(15);
+  await page.setViewportSize({ width: 1280, height: 240 });
+  await page.getByLabel('Filter options').click();
+  await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
+  // Primer's overlay: fixed, at most the screen's height, and it scrolls.
+  await page.evaluate(() => {
+    const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
+    const overlay = document.createElement('div');
+    overlay.id = 'overlay';
+    overlay.setAttribute('style', 'position: fixed; top: 40px; left: 0; max-height: 100vh; overflow: auto');
+    menu?.before(overlay);
+    if (menu) overlay.append(menu);
+  });
+  const size = await page.evaluate(() => {
+    const overlay = document.getElementById('overlay');
+    const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
+    return {
+      overlayScrolls: (overlay?.scrollHeight ?? 0) > (overlay?.clientHeight ?? 0),
+      menuScrolls: (menu?.scrollHeight ?? 0) > (menu?.clientHeight ?? 0),
+    };
+  });
+  expect(size).toEqual({ overlayScrolls: true, menuScrolls: false });
+  const last = page.locator('[data-diffseek="filters"] [data-filter-kind]').last();
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  const before = await last.getAttribute('aria-checked');
+  await last.click();
+  await expect(last).not.toHaveAttribute('aria-checked', before ?? '');
+});
+
+test('keeps the pointer inside the row on its way to "only"', async () => {
+  const page = await openPull(16);
+  await page.getByLabel('Filter options').click();
+  const row = page.locator(
+    '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Docs"])',
+  );
+  await row.hover();
+  const item = presentBox(await row.locator('[data-filter-kind]').boundingBox());
+  const only = presentBox(await row.locator('[data-filter-only]').boundingBox());
+  const y = only.y + only.height / 2;
+  const outside = await page.evaluate(
+    ({ from, to, y: line }) => {
+      const target = document.querySelector('[data-filter-kind="groups"][data-filter-value="Docs"]');
+      const docsRow = target?.closest('.diffseek-menu-row');
+      const misses: number[] = [];
+      for (let x = from; x <= to; x += 1) {
+        if (document.elementFromPoint(x, line)?.closest('.diffseek-menu-row') !== docsRow) misses.push(x);
+      }
+      return misses;
+    },
+    { from: Math.round(item.x + item.width / 2), to: Math.round(only.x + only.width / 2), y },
+  );
+  expect(outside).toEqual([]);
 });
 
 test('stays idempotent through a deterministic native-extension action storm', async () => {
@@ -1073,23 +1175,6 @@ test('keeps reconcile passes within budget for cold, warm, and hot loads', async
   await expectReconcilesWithin(page, 'hot', 1);
 });
 
-test('brings the first file of a narrowed slice into view', async () => {
-  const page = await openPull(13);
-  // Tall diffs push later files below the fold, as on a real pull request.
-  await page.addStyleTag({ content: '[role="region"] { min-height: 1200px; }' });
-  const docs = page.locator('#diff-viewed');
-  await expect(docs).not.toBeInViewport();
-
-  await page.getByLabel('Filter options').click();
-  const docsRow = page.locator(
-    '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Docs"])',
-  );
-  await docsRow.hover();
-  await docsRow.locator('[data-filter-only]').click();
-
-  await expect(docs).toBeInViewport();
-});
-
 async function openPull(pull: number, nativeFilter = false): Promise<Page> {
   const page = await context.newPage();
   await page.route(
@@ -1255,7 +1340,7 @@ function instrument(source: string, startsWithNativeFilter = false): string {
         }
         const button = event.target.closest('button');
         if (!button) return;
-        if (button.getAttribute('aria-label') === 'Filter options') {
+        if (button.getAttribute('aria-label') === 'Filter options' || button.id === 'filter-options') {
           if (!document.querySelector('[role="menu"]')) {
             document.body.insertAdjacentHTML(
               'beforeend',

@@ -263,7 +263,7 @@ describe('mountFilterMenu', () => {
     ).toBe(true);
   });
 
-  it('skips a disabled reset in keyboard order and focuses the first row after reset', () => {
+  it('skips a hidden reset in keyboard order and focuses the first row after reset', () => {
     const element = menu();
     const state = filters();
     mountFilterMenu(element, { files, filters: state, onChange: vi.fn() });
@@ -613,6 +613,25 @@ describe('mountFilterMenu focus', () => {
     expect(document.activeElement).toBe(
       [...element.querySelectorAll('[data-diffseek="filters"] button')].at(-1),
     );
+  });
+});
+
+describe('mountFilterMenu page focus', () => {
+  it('leaves page focus and the Home key alone when it remounts', () => {
+    const element = menu();
+    const options = { files, filters: filters(), onChange: vi.fn() };
+    mountFilterMenu(element, options);
+    const page = document.createElement('button');
+    document.body.append(page);
+    page.focus();
+
+    delete element.dataset.diffseekMenuOwned;
+    mountFilterMenu(element, options);
+    page.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+
+    expect(element.querySelector('[data-diffseek="filters"]')).not.toBeNull();
+    expect(document.activeElement).toBe(page);
+    page.remove();
   });
 });
 

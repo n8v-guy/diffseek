@@ -260,7 +260,37 @@ describe('scanPage', () => {
         status: 'modified',
         capabilities: { collapse: true, viewed: false },
       }),
+      expect.objectContaining({
+        path: 'api/types.pb.go',
+        status: 'modified',
+        capabilities: { collapse: true, viewed: true },
+      }),
     ]);
+  });
+
+  it("reads GitHub's generated notice as a page fact, and keeps it in a refresh", () => {
+    document.documentElement.innerHTML = edgeCases;
+
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+
+    expect(
+      snapshot.files.filter((file) => file.generatedOnPage === true).map((file) => file.path),
+    ).toEqual(['api/types.pb.go']);
+
+    const loaded = snapshot.files.map((file) => ({ ...file, generatedOnPage: false }));
+    // Quoted copy, a large-diff placeholder, and diff text are not the notice.
+    const link =
+      '<a href="https://docs.github.com/articles/customizing-how-changed-files-appear-on-github">docs</a>';
+    document.getElementById('diff-binary')?.insertAdjacentHTML(
+      'beforeend',
+      `<div class="comment"><p>Some generated files are not rendered by default. ${link}</p></div>
+      <div><button>Load Diff</button><span>Large diffs are not rendered by default. ${link}</span></div>
+      <table><tr><td>Some generated files are not rendered by default.</td></tr></table>`,
+    );
+    refreshObservedFiles(document, loaded);
+    expect(loaded.find((file) => file.path === 'api/types.pb.go')?.generatedOnPage).toBe(true);
+    expect(loaded.find((file) => file.path === 'assets/logo.bin')?.generatedOnPage).toBe(false);
   });
 
   it('binds a renamed file to its diff by the tree anchor', () => {
