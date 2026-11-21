@@ -7,6 +7,9 @@ export const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
 export const fileTreeItemSelector = '[role="treeitem"]';
 const headerButtonSelector = `${diffHeaderSelector} button`;
 const generatedNotice = 'Some generated files are not rendered by default';
+/** The docs link in GitHub's "Load Diff" placeholder for a generated file. */
+export const generatedNoticeLinkSelector =
+  'a[href*="customizing-how-changed-files-appear-on-github"]';
 
 export function fileTreeElement(root: ParentNode): HTMLElement | null {
   return root.querySelector<HTMLElement>(fileTreeSelector);
@@ -161,16 +164,19 @@ export function refreshObservedFiles(
   }
 }
 
-/** GitHub's own notice in place of a generated file's diff. */
+/**
+ * GitHub's "Load Diff" placeholder for a generated file: the notice with its
+ * docs link, beside the Load Diff button. Quoted text elsewhere does not count.
+ */
 function hasGeneratedNotice(region: HTMLElement): boolean {
-  const notice = region.ownerDocument.evaluate(
-    `.//*[starts-with(normalize-space(text()), '${generatedNotice}')]`,
-    region,
-    null,
-    XPathResult.FIRST_ORDERED_NODE_TYPE,
-    null,
-  ).singleNodeValue;
-  return notice instanceof Element && notice.closest(diffHeaderSelector) == null;
+  const notice = region.querySelector(generatedNoticeLinkSelector)?.parentElement;
+  if (notice == null || notice.closest(diffHeaderSelector) != null) return false;
+  return (
+    notice.textContent.trim().startsWith(generatedNotice) &&
+    [...(notice.parentElement?.children ?? [])].some(
+      (sibling) => sibling instanceof HTMLButtonElement && sibling.textContent.trim() === 'Load Diff',
+    )
+  );
 }
 
 export function bindSnapshot(

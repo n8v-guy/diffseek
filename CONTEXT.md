@@ -58,8 +58,9 @@ request reviews. GitHub remains the review system and visual authority.
 - While review-scoped exclusions hide files and the menu is closed, the same
   Reset filters pill sits on the filter button's top-right corner, tethered to
   GitHub's own CSS anchor name.
-- Menu counts read "…" until the review's first metadata read finishes; the
-  menu is at most the screen's height and scrolls on its own.
+- Menu counts read "…" until the review's first metadata read finishes.
+- GitHub's menu overlay caps the menu at the screen's height and scrolls it;
+  DiffSeek adds no second scroll container.
 - Auto-view acts through GitHub's rendered controls once per file and lets
   normal page observation reconcile the result.
 - Shared tool configuration lives in one place; tool files stay at the root only

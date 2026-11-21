@@ -152,12 +152,20 @@ describe('reconcile strategy', () => {
       [...document.querySelectorAll('.diffseek-menu-count')].map((count) => count.textContent);
     expect(counts().length).toBeGreaterThan(0);
     expect(new Set(counts())).toEqual(new Set(['…']));
+    const added: Node[] = [];
+    const watch = new MutationObserver((records) => {
+      for (const record of records) added.push(...record.addedNodes, ...record.removedNodes);
+    });
+    watch.observe(document.body, { childList: true, subtree: true });
 
     pull.resolve(loaded(cachedText));
     await nextTask();
     await nextFrame();
 
     expect(counts().every((count) => /^\d+\/\d+$/.test(count))).toBe(true);
+    // The settle pass edits the counter text in place: no nodes come or go.
+    watch.disconnect();
+    expect(added).toEqual([]);
     app.stop();
   });
 

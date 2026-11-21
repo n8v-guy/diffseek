@@ -1641,23 +1641,28 @@ describe('review app interactions', () => {
     app.stop();
   });
 
-  it("counts GitHub's generated notice as generated, also after Load Diff", async () => {
+  it("counts GitHub's generated placeholder that streams in, also after Load Diff", async () => {
     await fakeBrowser.storage.local.set({
       'diffseek:filter-defaults': { hidden: [], viewed: [] },
     });
-    document.getElementById('diff-config')?.insertAdjacentHTML(
-      'beforeend',
-      '<p id="generated-notice">Some generated files are not rendered by default.</p>',
-    );
     openMenu();
     const app = await reviewApp({ ...metadataSource('') });
     const generatedCount = () =>
       document.querySelector(
         '.diffseek-menu-row:has([data-filter-kind="generated"][data-filter-value="true"]) .diffseek-menu-count',
       )?.textContent;
+    await until(() => expect(document.querySelector('[data-filter-kind="viewed"]')).not.toBeNull());
+    expect(generatedCount()).toBeUndefined();
+
+    // GitHub fills an existing panel with its placeholder; no filter click follows.
+    document.getElementById('diff-config')?.insertAdjacentHTML(
+      'beforeend',
+      `<div id="placeholder"><button>Load Diff</button><span>Some generated files are not rendered by default. Learn more about
+        <a href="https://docs.github.com/github/administering-a-repository/customizing-how-changed-files-appear-on-github">customizing how changed files appear on GitHub.</a></span></div>`,
+    );
     await until(() => expect(generatedCount()).toBe('1/1'));
 
-    document.getElementById('generated-notice')?.remove();
+    document.getElementById('placeholder')?.replaceWith(document.createElement('table'));
     await nextReconcile(() =>
       document
         .querySelector<HTMLButtonElement>(
@@ -1736,6 +1741,7 @@ describe('page position', () => {
   }
 
   it('does not move the page when a filter hides files or shows them again', async () => {
+    location.hash = '#diff-config';
     const app = await reviewApp({ ...metadataSource('src/** group=Code') });
     await nextReconcile(openMenu);
     const clicks = treeClicks();
@@ -1746,6 +1752,8 @@ describe('page position', () => {
     await until(() => expect(document.getElementById('src/app.ts')?.hidden).toBe(false));
 
     expect(clicks).toEqual([]);
+    expect(location.hash).toBe('#diff-config');
+    location.hash = '';
     app.stop();
   });
 

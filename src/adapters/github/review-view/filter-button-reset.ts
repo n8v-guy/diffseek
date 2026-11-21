@@ -2,7 +2,7 @@ import type { FilterDefaults } from '@diffseek/browser';
 import type { FilterState } from '@diffseek/review';
 
 import { hasTransientExclusions, resetTransientExclusions } from './filter-reset';
-import { filterMenus, filterOptionsLabel } from './review-ui';
+import { cssAnchorName, filterMenus, filterOptionsButton } from './review-ui';
 
 type ResetOptions = {
   filters: FilterState;
@@ -33,13 +33,13 @@ export function resetFiltersButton(): HTMLButtonElement {
 }
 
 /**
- * Shows the pill on the top-right corner of GitHub's closed filter button
+ * Returns whether it added or removed the pill. Shows the pill on the top-right corner of GitHub's closed filter button
  * while review-scoped exclusions hide files. It is tethered with the
  * button's own CSS anchor name, so no GitHub element is written.
  */
-export function syncFilterButtonReset(root: Document, options: ResetOptions): void {
-  const trigger = root.querySelector(`button[aria-label="${filterOptionsLabel}"]`);
-  const anchor = /anchor-name:\s*([^;,\s]+)/.exec(trigger?.getAttribute('style') ?? '')?.[1];
+export function syncFilterButtonReset(root: Document, options: ResetOptions): boolean {
+  const trigger = filterOptionsButton(root);
+  const anchor = trigger && cssAnchorName(trigger);
   let reset = root.querySelector<HTMLButtonElement>(buttonResetSelector);
   if (
     anchor == null ||
@@ -48,8 +48,9 @@ export function syncFilterButtonReset(root: Document, options: ResetOptions): vo
     !hasTransientExclusions(options.filters, options.filterDefaults)
   ) {
     reset?.remove();
-    return;
+    return reset != null;
   }
+  const wrote = reset == null;
   if (!reset) {
     const created = resetFiltersButton();
     created.dataset.diffseek = 'filter-button-reset';
@@ -67,4 +68,5 @@ export function syncFilterButtonReset(root: Document, options: ResetOptions): vo
     reset.dataset.anchor = anchor;
     reset.setAttribute('style', `position-anchor: ${anchor}`);
   }
+  return wrote;
 }

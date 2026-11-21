@@ -316,12 +316,12 @@ export class ReviewSession {
       generatedDefaultBusy,
       countsSettling: countsSettling(this.options.settledCounts, this.options.review.key),
     });
-    trackDiffseekWrites(root, () => syncFilterButtonReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }));
+    const resetMoved = trackDiffseekWrites(root, () => syncFilterButtonReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }));
     const change = changedSurfaces(this.applied, plan);
     this.applied = plan;
     const pageStale = structureChanged || change.page;
     const staleMenus = change.menu ? menus : menus.filter(menuNeedsRemount);
-    if (!pageStale && staleMenus.length === 0 && defaultViewedPaths.length === 0) {
+    if (!resetMoved && !pageStale && staleMenus.length === 0 && defaultViewedPaths.length === 0) {
       this.reattachObservers();
       noteReconcileNoop(root);
       return;

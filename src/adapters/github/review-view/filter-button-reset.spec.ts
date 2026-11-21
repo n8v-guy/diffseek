@@ -14,8 +14,12 @@ function narrowed() {
 
 describe('syncFilterButtonReset', () => {
   beforeEach(() => {
-    document.body.innerHTML =
-      '<button aria-label="Filter options" aria-expanded="false" style="anchor-name: --filter-anchor"></button>';
+    // GitHub's captured markup: the static copy, then the interactive one Primer anchors.
+    document.body.innerHTML = `<span id="static-label">Filter options</span>
+      <button aria-haspopup="true" aria-expanded="false" aria-labelledby="static-label"></button>
+      <span id="live-label">Filter options</span>
+      <button aria-haspopup="true" aria-expanded="false" aria-labelledby="live-label"
+        style="anchor-name: --filter-anchor;"></button>`;
   });
 
   it('tethers a labeled pill to the filter button while review filters hide files', () => {
@@ -44,13 +48,14 @@ describe('syncFilterButtonReset', () => {
     syncFilterButtonReset(document, { filters: emptyFacetExclusions(), onChange: vi.fn() });
     expect(pill()).toBeNull();
 
-    syncFilterButtonReset(document, { filters: narrowed(), onChange: vi.fn() });
-    document.querySelector('button')?.setAttribute('aria-expanded', 'true');
-    syncFilterButtonReset(document, { filters: narrowed(), onChange: vi.fn() });
+    const live = document.querySelector('[aria-labelledby="live-label"]');
+    expect(syncFilterButtonReset(document, { filters: narrowed(), onChange: vi.fn() })).toBe(true);
+    expect(syncFilterButtonReset(document, { filters: narrowed(), onChange: vi.fn() })).toBe(false);
+    live?.setAttribute('aria-expanded', 'true');
+    expect(syncFilterButtonReset(document, { filters: narrowed(), onChange: vi.fn() })).toBe(true);
     expect(pill()).toBeNull();
 
-    document.querySelector('button')?.removeAttribute('style');
-    document.querySelector('button')?.setAttribute('aria-expanded', 'false');
+    live?.remove();
     syncFilterButtonReset(document, { filters: narrowed(), onChange: vi.fn() });
     expect(pill()).toBeNull();
   });

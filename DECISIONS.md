@@ -264,14 +264,15 @@ wait, and a path that arrived during the failure is part of the next try.
 ## D017 — Filter clicks never move the page
 
 **Decision:** Filter changes only hide and show files. DiffSeek does not click
-GitHub's tree or scroll after a narrowing, so the page and the URL hash stay
-where the reviewer left them.
+GitHub's tree, navigate, or scroll after a narrowing, so the URL hash stays as
+the reviewer left it.
 
 **Why:** Clicking the first shown file after "only" moved reviewers away from
 their spot and rewrote the URL hash, which read as a jump. The tree already
 lists the slice, so one reviewer click reaches it with GitHub's own scrolling
-(D001). **Cost:** After a narrowing, the slice can start a screen or more away
-from the current scroll position.
+(D001). **Cost:** After a narrowing, the slice can start a screen or more away.
+Hidden panels still change the page height, so the browser may shift the
+scroll offset on its own.
 
 ## D018 — Icons are rendered from SVG at build time
 

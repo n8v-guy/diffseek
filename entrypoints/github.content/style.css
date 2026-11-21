@@ -47,10 +47,8 @@
 [data-diffseek-menu-owned='true'] {
   box-sizing: border-box;
   display: flow-root;
-  max-height: 100vh;
   max-width: calc(100vw - 0.5rem);
   min-width: 0 !important;
-  overflow: hidden auto;
   padding: 0 !important;
   width: max-content !important;
 }

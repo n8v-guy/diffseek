@@ -579,8 +579,18 @@ test('clears native filters before taking over the menu', async () => {
 
 test('puts Reset filters on the closed filter button while filters hide files', async () => {
   const page = await openPull(14);
+  // GitHub's captured button: named by aria-labelledby, anchored by Primer.
+  await page.evaluate(() => {
+    const button = document.querySelector('button[aria-label="Filter options"]');
+    button?.insertAdjacentHTML('beforebegin', '<span id="filter-options-label" hidden>Filter options</span>');
+    button?.removeAttribute('aria-label');
+    button?.setAttribute('id', 'filter-options');
+    button?.setAttribute('aria-haspopup', 'true');
+    button?.setAttribute('aria-labelledby', 'filter-options-label');
+    button?.setAttribute('style', 'anchor-name: --anchored-overlay-anchor-r1;');
+  });
   await page.addStyleTag({
-    content: 'button[aria-label="Filter options"] { margin: 40px; width: 32px; height: 32px; }',
+    content: '#filter-options { margin: 40px; width: 32px; height: 32px; }',
   });
   await page.getByLabel('Filter options').click();
   await page.locator('[data-filter-kind="groups"][data-filter-value="Code"]').click();
@@ -607,19 +617,35 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toHaveCount(0);
 });
 
-test('keeps a tall menu within the screen with its own scroll', async () => {
+test('scrolls a tall menu in GitHub\'s overlay only, down to its last row', async () => {
   const page = await openPull(15);
   await page.setViewportSize({ width: 1280, height: 240 });
   await page.getByLabel('Filter options').click();
   await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
-  const size = await page.locator('[data-diffseek-menu-owned="true"]').evaluate((menu) => ({
-    client: menu.clientHeight,
-    height: menu.getBoundingClientRect().height,
-    screen: innerHeight,
-    scroll: menu.scrollHeight,
-  }));
-  expect(size.height).toBeLessThanOrEqual(size.screen);
-  expect(size.scroll).toBeGreaterThan(size.client);
+  // Primer's overlay: fixed, at most the screen's height, and it scrolls.
+  await page.evaluate(() => {
+    const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
+    const overlay = document.createElement('div');
+    overlay.id = 'overlay';
+    overlay.setAttribute('style', 'position: fixed; top: 40px; left: 0; max-height: 100vh; overflow: auto');
+    menu?.before(overlay);
+    if (menu) overlay.append(menu);
+  });
+  const size = await page.evaluate(() => {
+    const overlay = document.getElementById('overlay');
+    const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
+    return {
+      overlayScrolls: (overlay?.scrollHeight ?? 0) > (overlay?.clientHeight ?? 0),
+      menuScrolls: (menu?.scrollHeight ?? 0) > (menu?.clientHeight ?? 0),
+    };
+  });
+  expect(size).toEqual({ overlayScrolls: true, menuScrolls: false });
+  const last = page.locator('[data-diffseek="filters"] [data-filter-kind]').last();
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  const before = await last.getAttribute('aria-checked');
+  await last.click();
+  await expect(last).not.toHaveAttribute('aria-checked', before ?? '');
 });
 
 test('keeps the pointer inside the row on its way to "only"', async () => {
@@ -1314,7 +1340,7 @@ function instrument(source: string, startsWithNativeFilter = false): string {
         }
         const button = event.target.closest('button');
         if (!button) return;
-        if (button.getAttribute('aria-label') === 'Filter options') {
+        if (button.getAttribute('aria-label') === 'Filter options' || button.id === 'filter-options') {
           if (!document.querySelector('[role="menu"]')) {
             document.body.insertAdjacentHTML(
               'beforeend',

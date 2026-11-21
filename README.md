@@ -19,7 +19,7 @@ Every file and folder in GitHub's file tree gets a viewed badge. An empty circle
 - Formats, from extensions to aliases (e.g. ts/tsx, cpp/hpp)
 - Viewed, Generated and change status
 
-Every row shows a live count. Hover a row and click "only" to focus; the page stays where you are.
+Every row shows a live count. Hover a row and click "only" to focus; DiffSeek never jumps the page for you.
 
 ![Filter menu: "only" singles out one category](https://github.com/user-attachments/assets/09d088e4-680b-43b7-9c87-32870afa5389)
 

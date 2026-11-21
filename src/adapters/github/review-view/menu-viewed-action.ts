@@ -33,6 +33,14 @@ export function menuCountText(count: MenuCount): string {
   return count.settling === true ? '…' : `${count.visible}/${count.total}`;
 }
 
+/** Edits the counter's text node in place, so a count change adds no nodes. */
+export function syncCountText(counter: HTMLElement, text: string): void {
+  if (counter.textContent === text) return;
+  const node = counter.firstChild;
+  if (node instanceof Text && counter.childNodes.length === 1) node.data = text;
+  else counter.textContent = text;
+}
+
 export function menuViewedCounter(
   options: MenuViewedActionOptions & MenuCount,
 ): HTMLButtonElement {
