@@ -1175,6 +1175,90 @@ test('keeps reconcile passes within budget for cold, warm, and hot loads', async
   await expectReconcilesWithin(page, 'hot', 1);
 });
 
+
+const lightBackground = 'rgb(240, 237, 255)';
+const lightColor = 'rgb(59, 46, 131)';
+const darkBackground = 'rgb(43, 33, 70)';
+const darkColor = 'rgb(230, 220, 255)';
+
+const themeCases = [
+  {
+    name: 'light mode',
+    colorMode: 'light',
+    lightTheme: 'light',
+    darkTheme: 'dark',
+    colorScheme: 'dark',
+    background: lightBackground,
+    color: lightColor,
+  },
+  {
+    name: 'dark mode',
+    colorMode: 'dark',
+    lightTheme: 'light',
+    darkTheme: 'dark',
+    colorScheme: 'light',
+    background: darkBackground,
+    color: darkColor,
+  },
+  {
+    name: 'auto+OS light with light day theme',
+    colorMode: 'auto',
+    lightTheme: 'light',
+    darkTheme: 'dark',
+    colorScheme: 'light',
+    background: lightBackground,
+    color: lightColor,
+  },
+  {
+    name: 'auto+OS dark with light night theme',
+    colorMode: 'auto',
+    lightTheme: 'light',
+    darkTheme: 'light_high_contrast',
+    colorScheme: 'dark',
+    background: lightBackground,
+    color: lightColor,
+  },
+  {
+    name: 'auto+OS dark with dark night theme',
+    colorMode: 'auto',
+    lightTheme: 'light',
+    darkTheme: 'dark_dimmed',
+    colorScheme: 'dark',
+    background: darkBackground,
+    color: darkColor,
+  },
+  {
+    name: 'auto+OS light with dark day theme',
+    colorMode: 'auto',
+    lightTheme: 'dark_dimmed',
+    darkTheme: 'dark',
+    colorScheme: 'light',
+    background: darkBackground,
+    color: darkColor,
+  },
+] as const;
+
+for (const theme of themeCases) {
+  test(`follows GitHub's theme attributes: ${theme.name}`, async () => {
+    const page = await openPull(1);
+    await page.getByLabel('Filter options').click();
+    const filters = page.locator('[data-diffseek="filters"]');
+    await expect(filters).toBeVisible();
+    await page.emulateMedia({
+      colorScheme: theme.colorScheme === 'dark' ? 'light' : 'dark',
+    });
+    await page.evaluate((attrs) => {
+      const root = document.documentElement;
+      root.setAttribute('data-color-mode', attrs.colorMode);
+      root.setAttribute('data-light-theme', attrs.lightTheme);
+      root.setAttribute('data-dark-theme', attrs.darkTheme);
+    }, theme);
+    await page.emulateMedia({ colorScheme: theme.colorScheme });
+    await expect(filters).toHaveCSS('background-color', theme.background);
+    await expect(filters).toHaveCSS('color', theme.color);
+  });
+}
+
 async function openPull(pull: number, nativeFilter = false): Promise<Page> {
   const page = await context.newPage();
   await page.route(
