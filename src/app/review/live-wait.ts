@@ -66,7 +66,7 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
     // panels in, and a file's row is hidden only once its panel is there.
     const treeHidden = (ids: string[] | undefined): boolean => {
       const rows = document.querySelectorAll<HTMLElement>('[role="tree"] [role="treeitem"]:not([aria-expanded])');
-      const hidden = [...rows].filter((row) => row.hidden === true).map((row) => row.id);
+      const hidden = [...rows].filter((row) => row.dataset.diffseekFilteredOut === 'true').map((row) => row.id);
       if (ids) return hidden.join('\n') === ids.join('\n');
       const counts = [
         ...document.querySelectorAll('.diffseek-menu-row:has([data-filter-kind="statuses"]) .diffseek-menu-count'),

@@ -1074,9 +1074,9 @@ test('hides nested generated files across streamed paths and cached revisits', a
     );
     await expect(generatedCount).toHaveText('0/2');
     await expect(page.locator(`[role="treeitem"][id="${generatedPath}"]`))
-      .toHaveAttribute('hidden', '');
+      .toHaveAttribute('data-diffseek-filtered-out', 'true');
     await expect(page.locator(`[role="treeitem"][id="${descendantPath}"]`))
-      .toHaveAttribute('hidden', '');
+      .toHaveAttribute('data-diffseek-filtered-out', 'true');
     await expect(page.locator(`[role="treeitem"][id="${manualPath}"]`))
       .toBeVisible();
     await expect(page.locator(`[role="treeitem"][id="${siblingPath}"]`))
@@ -1101,7 +1101,7 @@ test('hides nested generated files across streamed paths and cached revisits', a
     }, streamedPath);
     await expect(generatedCount).toHaveText('0/3');
     await expect(page.locator(`[role="treeitem"][id="${streamedPath}"]`))
-      .toHaveAttribute('hidden', '');
+      .toHaveAttribute('data-diffseek-filtered-out', 'true');
     await expect(page.locator('#diff-streamed'))
       .toHaveAttribute('data-diffseek-filtered-out', 'true');
 
@@ -1111,7 +1111,7 @@ test('hides nested generated files across streamed paths and cached revisits', a
     await page.getByLabel('Filter options').click();
     await expect(generatedCount).toHaveText('0/2');
     await expect(page.locator(`[role="treeitem"][id="${generatedPath}"]`))
-      .toHaveAttribute('hidden', '');
+      .toHaveAttribute('data-diffseek-filtered-out', 'true');
     await expect(page.locator(`[role="treeitem"][id="${manualPath}"]`))
       .toBeVisible();
     expect(requests).toBe(fetched);

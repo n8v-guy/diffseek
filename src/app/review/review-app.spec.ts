@@ -89,6 +89,12 @@ function installNativeBehavior(): void {
   }
 }
 
+function filteredOut(id: string): boolean {
+  const row = document.getElementById(id);
+  if (row == null) throw new Error(`Missing tree row ${id}`);
+  return row.dataset.diffseekFilteredOut === 'true';
+}
+
 function openMenu(): void {
   document.body.insertAdjacentHTML(
     'beforeend',
@@ -392,7 +398,7 @@ describe('review app lifecycle', () => {
           ?.getAttribute('aria-checked'),
       ).toBe('mixed'),
     );
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(true);
     app.stop();
   });
 
@@ -433,7 +439,7 @@ describe('review app lifecycle', () => {
     );
     codeFilter?.focus();
     await nextReconcile(() => codeFilter?.click());
-    expect(document.getElementById('src/app.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/app.ts')).toBe(true);
     expect(document.activeElement).toMatchObject({
       dataset: {
         filterKind: 'groups',
@@ -456,7 +462,7 @@ describe('review app lifecycle', () => {
       const replacement = tree?.cloneNode(true);
       if (tree != null && replacement != null) tree.replaceWith(replacement);
     });
-    expect(document.getElementById('src/app.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/app.ts')).toBe(true);
     app.stop();
   });
 
@@ -494,7 +500,7 @@ describe('review app lifecycle', () => {
     });
 
     await until(() => {
-      expect(folder.hidden).toBe(false);
+      expect(filteredOut('src')).toBe(false);
       expect(
         document.querySelector(
           '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Code"]) .diffseek-menu-count',
@@ -605,7 +611,7 @@ describe('metadata refresh', () => {
         document.querySelector('[data-filter-kind="generated"][data-filter-value="true"]')?.getAttribute('aria-checked'),
       ).toBe('mixed'),
     );
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(true);
     app.stop();
   });
 
@@ -1085,8 +1091,8 @@ describe('fresh filter defaults', () => {
         .querySelector('[data-filter-kind="viewed"][data-filter-value="true"]')
         ?.getAttribute('aria-checked'),
     ).toBe('mixed');
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
-    expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
+    expect(filteredOut('src/generated.ts')).toBe(true);
+    expect(filteredOut('src/app.ts')).toBe(false);
     expect(
       (await fakeBrowser.storage.local.get('diffseek:filter-defaults'))[
         'diffseek:filter-defaults'
@@ -1124,23 +1130,23 @@ describe('fresh filter defaults', () => {
       expect(generated()?.getAttribute('aria-checked')).toBe('mixed'),
     );
     expect(viewed()?.getAttribute('aria-checked')).toBe('mixed');
-    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
-    expect(document.getElementById('src/app.ts')?.hidden).toBe(false);
+    expect(filteredOut('docs/readme.md')).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(true);
+    expect(filteredOut('src/app.ts')).toBe(false);
     await until(() => expect(count('viewed')).toBe('0/1'));
     expect(count('generated')).toBe('0/1');
 
     viewed()?.click();
     await until(() =>
-      expect(document.getElementById('docs/readme.md')?.hidden).toBe(false),
+      expect(filteredOut('docs/readme.md')).toBe(false),
     );
     expect(viewed()?.getAttribute('aria-checked')).toBe('true');
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(true);
 
     generated()?.click();
     await until(() => {
       expect(generated()?.getAttribute('aria-checked')).toBe('true');
-      expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
+      expect(filteredOut('src/generated.ts')).toBe(false);
     });
     expect(
       document
@@ -1187,8 +1193,8 @@ describe('fresh filter defaults', () => {
         '[data-filter-kind="viewed"][data-filter-value="true"]',
       )?.getAttribute('aria-checked'),
     ).toBe('mixed');
-    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
+    expect(filteredOut('docs/readme.md')).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(false);
     await until(() =>
       expect(
         document.querySelector(
@@ -1226,7 +1232,7 @@ describe('review app interactions', () => {
     await until(() => expect(markFiles).toHaveBeenCalledTimes(2));
     expect(markFiles.mock.calls.flatMap(([, paths]) => paths))
       .toEqual(['src/app.ts', 'src/new.ts']);
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(false);
+    expect(filteredOut('src/generated.ts')).toBe(false);
     app.stop();
   });
 
@@ -1267,7 +1273,7 @@ describe('review app interactions', () => {
         )?.disabled,
       ).toBe(true),
     );
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(true);
     expect(
       document
         .querySelector('[data-diffseek-always-read]')
@@ -1410,7 +1416,7 @@ describe('review app interactions', () => {
       '[data-filter-kind="viewed"][data-filter-value="true"]',
     );
     expect(viewed?.getAttribute('aria-checked')).toBe('mixed');
-    expect(document.getElementById('docs/readme.md')?.hidden).toBe(true);
+    expect(filteredOut('docs/readme.md')).toBe(true);
 
     viewed?.click();
     await until(async () => {
@@ -1419,7 +1425,7 @@ describe('review app interactions', () => {
       ).toEqual({
         'diffseek:filter-defaults': { hidden: [], viewed: [] },
       });
-      expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);
+      expect(filteredOut('docs/readme.md')).toBe(false);
     });
     expect(
       [...document.querySelectorAll('[data-diffseek="snackbar"]')].at(-1)
@@ -1553,14 +1559,14 @@ describe('review app interactions', () => {
         .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
         ?.click(),
     );
-    expect(document.getElementById('src/app.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/app.ts')).toBe(true);
 
     await nextReconcile(() => {
       path = '/octo/repo/pull/2/changes';
       document.body.append(document.createElement('span'));
     });
 
-    expect(document.getElementById('docs/readme.md')?.hidden).toBe(false);
+    expect(filteredOut('docs/readme.md')).toBe(false);
     expect(
       document.querySelector('[data-filter-value="Code"]')?.getAttribute(
         'aria-checked',
@@ -1630,14 +1636,14 @@ describe('review app interactions', () => {
         )
         ?.click(),
     );
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(true);
 
     await nextReconcile(() => {
       const region = document.getElementById('diff-generated');
       region?.replaceWith(region.cloneNode(true));
     });
 
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(true);
     app.stop();
   });
 
@@ -1671,7 +1677,7 @@ describe('review app interactions', () => {
         ?.click(),
     );
 
-    expect(document.getElementById('config/app.json')?.hidden).toBe(true);
+    expect(filteredOut('config/app.json')).toBe(true);
     expect(generatedCount()).toBe('0/1');
     app.stop();
   });
@@ -1689,7 +1695,7 @@ describe('review app interactions', () => {
           ?.click();
       }
     });
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(true);
 
     await nextReconcile(() => {
       const region = document.getElementById('diff-generated');
@@ -1698,7 +1704,7 @@ describe('review app interactions', () => {
       region.replaceWith(region.cloneNode(true));
     });
 
-    expect(document.getElementById('src/generated.ts')?.hidden).toBe(true);
+    expect(filteredOut('src/generated.ts')).toBe(true);
     app.stop();
   });
 });
@@ -1747,9 +1753,9 @@ describe('page position', () => {
     const clicks = treeClicks();
 
     await nextReconcile(() => document.querySelector<HTMLElement>(codeFilter)?.click());
-    await until(() => expect(document.getElementById('src/app.ts')?.hidden).toBe(true));
+    await until(() => expect(filteredOut('src/app.ts')).toBe(true));
     await nextReconcile(() => document.querySelector<HTMLElement>(codeFilter)?.click());
-    await until(() => expect(document.getElementById('src/app.ts')?.hidden).toBe(false));
+    await until(() => expect(filteredOut('src/app.ts')).toBe(false));
 
     expect(clicks).toEqual([]);
     expect(location.hash).toBe('#diff-config');
@@ -1770,7 +1776,7 @@ describe('page position', () => {
       viewed?.setAttribute('aria-label', 'Viewed');
       viewed?.setAttribute('aria-pressed', 'true');
     });
-    await until(() => expect(document.getElementById('src/app.ts')?.hidden).toBe(true));
+    await until(() => expect(filteredOut('src/app.ts')).toBe(true));
     expect(document.getElementById('diff-app')?.dataset.diffseekFilteredOut).toBe('true');
 
     expect(clicks).toEqual([]);

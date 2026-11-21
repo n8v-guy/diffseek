@@ -361,12 +361,12 @@ async function reviewState(page: Page): Promise<ReviewState> {
       ['data-filter-kind', 'data-filter-value', 'aria-checked'].map((name) => item.getAttribute(name)).join(':'),
     ),
     tree: [...document.querySelectorAll<HTMLElement>('[role="tree"][aria-label="File Tree"] [role="treeitem"]')].map(
-      (item) => [item.id, item.hidden === true ? 'hidden' : 'shown', item.getAttribute('aria-expanded')].join(':'),
+      (item) => [item.id, item.dataset.diffseekFilteredOut === 'true' ? 'hidden' : 'shown', item.getAttribute('aria-expanded')].join(':'),
     ),
     hidden: [
       ...document.querySelectorAll<HTMLElement>('[role="tree"][aria-label="File Tree"] [role="treeitem"]:not([aria-expanded])'),
     ]
-      .filter((item) => item.hidden === true)
+      .filter((item) => item.dataset.diffseekFilteredOut === 'true')
       .map((item) => item.id),
   }));
 }
