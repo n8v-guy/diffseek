@@ -196,7 +196,8 @@ const html = await readFile(
 );
 const profile = await mkdtemp(join(tmpdir(), 'diffseek-firefox-'));
 try {
-  const signal = AbortSignal.timeout(45_000);
+  // Firefox on a cold runner can spend most of a minute before BiDi listens.
+  const signal = AbortSignal.timeout(90_000);
   const firefox = spawn(
     'firefox',
     ['--headless', '--profile', profile, '--remote-debugging-port', '0'],
