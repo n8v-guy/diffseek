@@ -133,10 +133,18 @@ export function watchObservationRoots(options: {
 function isWatchedLabelRecord(record: MutationRecord): boolean {
   const root = record.target.ownerDocument;
   const watched = root ? watchedFilterTrigger(root) : null;
-  const ids = new Set(watched?.getAttribute(labelledByAttribute)?.split(/\s+/) ?? []);
+  const ids = new Set(
+    watched?.getAttribute(labelledByAttribute)?.split(/\s+/).filter((id) => id !== '') ?? [],
+  );
   if (ids.size === 0) return false;
-  const element = record.target instanceof Element ? record.target : record.target.parentElement;
-  return element != null && ids.has(element.id);
+  const nodes = [...record.addedNodes, ...record.removedNodes];
+  if (nodes.some((node) => node instanceof Element && ids.has(node.id))) return true;
+  let element = record.target instanceof Element ? record.target : record.target.parentElement;
+  while (element) {
+    if (ids.has(element.id)) return true;
+    element = element.parentElement;
+  }
+  return false;
 }
 
 function sharedRegionParent(

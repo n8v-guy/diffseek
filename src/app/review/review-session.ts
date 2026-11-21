@@ -271,7 +271,7 @@ export class ReviewSession {
       this.classifyKey = '';
       this.treeNode = null;
       this.regionNodes = [];
-      this.clearInjected();
+      this.clearInjected(true);
       if (excludedFacetCount(this.filters) > 0) {
         showUnavailable(root, next.reason);
       }
@@ -314,8 +314,7 @@ export class ReviewSession {
       generatedDefaultBusy,
       countsSettling: countsSettling(this.options.settledCounts, this.options.review.key),
     });
-    if (menus.length > 0) this.sawFilterMenu = true;
-    else if (this.sawFilterMenu) { this.badgeDue = true; this.sawFilterMenu = false; }
+    if (this.sawFilterMenu && menus.length === 0) { this.badgeDue = true; this.sawFilterMenu = false; }
     const badge = trackDiffseekWrites(root, () => syncFilterReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }, this.badgeDue));
     if (badge.placed) this.badgeDue = false;
     const resetMoved = badge.wrote;
@@ -333,6 +332,7 @@ export class ReviewSession {
       if (defaultViewedPaths.length > 0) this.enqueueDefaultViewed(defaultViewedPaths);
       for (const menu of staleMenus) this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
     });
+    this.sawFilterMenu = menus.some((menu) => menu.isConnected && menu.dataset.diffseekMenuOwned === 'true');
     this.reattachObservers();
     this.emitReconciled();
   }
@@ -526,10 +526,10 @@ export class ReviewSession {
     });
   }
 
-  private clearInjected(): void {
+  private clearInjected(keepBadge = false): void {
     this.presenter.reset(this.options.root);
     this.snapshot = null;
-    removeInjected(this.options.root);
+    removeInjected(this.options.root, keepBadge);
   }
 
   private emitReconciled(): void {

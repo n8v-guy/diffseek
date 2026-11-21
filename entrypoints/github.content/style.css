@@ -240,8 +240,9 @@
   z-index: 2;
 }
 
-html[data-diffseek-filtered] :not(body, html):has(> [data-diffseek-filter-trigger][aria-expanded='false']) > [data-diffseek='filter-button-reset'],
-html[data-diffseek-filtered] :not(body, html):has(> [data-diffseek-filter-trigger]:not([aria-expanded])) > [data-diffseek='filter-button-reset'] {
+/* No file tree means the page is unsupported. Keep the node and hide it. */
+html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(body, html):has(> [data-diffseek-filter-trigger][aria-expanded='false']) > [data-diffseek='filter-button-reset'],
+html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(body, html):has(> [data-diffseek-filter-trigger]:not([aria-expanded])) > [data-diffseek='filter-button-reset'] {
   display: flex;
 }
 

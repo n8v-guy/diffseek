@@ -87,6 +87,19 @@ describe('review session stream batching', () => {
     expect(icon()).toBeNull();
     expect(since()).toBe(0);
 
+    const native = document.createElement('ul');
+    native.setAttribute('role', 'menu');
+    native.setAttribute('aria-label', 'Filter options');
+    native.append(Object.assign(document.createElement('li'), { textContent: 'Clear filters' }));
+    native.firstElementChild?.setAttribute('role', 'menuitem');
+    document.body.append(native);
+    await nextTask();
+    const ignored = since();
+    native.remove();
+    await nextTask();
+    expect(icon()).toBeNull();
+    expect(since()).toBe(ignored);
+
     const menu = document.createElement('ul');
     menu.setAttribute('role', 'menu');
     menu.setAttribute('aria-label', 'Filter options');
@@ -134,7 +147,48 @@ describe('review session stream batching', () => {
     label.textContent = 'Filter options';
     await nextTask();
     expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+
+    const inner = document.createElement('span');
+    inner.textContent = 'Other options';
+    label.replaceChildren(inner);
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+    inner.firstChild?.replaceWith('Filter options');
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+
+    const replaced = document.createElement('span');
+    replaced.id = 'live-label';
+    replaced.textContent = 'Other options';
+    label.replaceWith(replaced);
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+    replaced.textContent = 'Filter options';
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
     app.stop();
+  });
+
+  it('keeps a mounted Reset while the file tree is gone', async () => {
+    sessionStorage.setItem('diffseek:filters:octo/repo#1', '{"groups":["Docs"]}');
+    const { app, live, icon } = await openFilterPage();
+    live.setAttribute('style', 'anchor-name: --filter-anchor;');
+    await nextTask();
+    const mounted = icon();
+    expect(mounted).not.toBeNull();
+    expect(document.documentElement.getAttribute('data-diffseek-filtered')).toBe('true');
+
+    document.querySelector('[role="tree"]')?.remove();
+    await nextTask();
+    expect(icon()).toBe(mounted);
+    expect(document.documentElement.getAttribute('data-diffseek-filtered')).toBe('true');
+
+    document.body.insertAdjacentHTML('beforeend', '<ul role="tree" aria-label="File Tree"></ul>');
+    await nextTask();
+    expect(icon()).toBe(mounted);
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+    app.stop();
+    expect(icon()).toBeNull();
   });
 });
 
