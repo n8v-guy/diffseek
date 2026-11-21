@@ -27,14 +27,7 @@ const fixture = await readFile(resolve(root, 'src/adapters/github/review-page/fi
 const instrumented = fixture.replace('<ul role="tree" aria-label="File Tree">', `<ul role="tree" aria-label="File Tree">
 <li id="src" role="treeitem" aria-label="src"><div>src</div></li>
 <li id="docs" role="treeitem" aria-label="docs"><div>docs</div></li>`)
-.replace('</body>', `<script>
-document.addEventListener('click', event => {
- const button = event.target.closest('button');
- if (button?.getAttribute('aria-label') === 'Filter options' && !document.querySelector('[role="menu"]')) {
-  document.body.insertAdjacentHTML('beforeend', '<ul role="menu" aria-label="Filter options"></ul>');
- }
-});
-</script></body>`);
+;
 
 const port = await new Promise<number>((ok, fail) => {
  const server = createServer();
@@ -89,7 +82,7 @@ try {
  await until(async () => await execute(
   'return document.querySelectorAll("[data-diffseek-viewed-action]").length >= 7;',
  ) === true, 'Packaged Firefox extension did not initialize on fixture');
- await execute('document.querySelector(\'[aria-label="Filter options"]\').click();');
+ await execute(`document.querySelector('[aria-label="Filter options"]').click(); document.body.insertAdjacentHTML('beforeend', '<ul role="menu" aria-label="Filter options"></ul>');`);
  await until(async () => await execute(
   'return !!document.querySelector(\'[data-diffseek="filters"]\');',
  ) === true, 'Firefox filter menu did not render');
