@@ -237,14 +237,18 @@ async function measureReview(
   const browserContext = page.context();
   browserContext.on('request', onRequest);
   try {
+    const restored = scenario === 'restored';
+    if (restored) await resetReconcileWrites(page);
     const started = Date.now();
     await navigate();
     await untilDom(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
     const firstRenderSeconds = await renderSeconds(page, started);
-    // GitHub removes and restores panels on these navigations. They start
-    // counting here and later fail on rows back after 500 ms or never back.
-    const inPage = scenario === 'hot' || scenario === 'restored';
-    if (inPage) await resetRedraws(page);
+    // GitHub removes and restores panels on these navigations. Row loss starts
+    // at the first control. Restored reconciles and DOM writes start earlier,
+    // so the badge insert on that navigation is kept.
+    const inPage = scenario === 'hot' || restored;
+    if (scenario === 'hot') await resetRedraws(page);
+    if (restored) await resetRedrawRows(page);
     const menuOpenSeconds = await openFilterMenu(page);
     await untilDom(
       page,
@@ -486,6 +490,16 @@ async function readRedraws(page: Page): Promise<RedrawCounts> {
 async function resetRedraws(page: Page): Promise<void> {
   await page.evaluate(() => {
     document.dispatchEvent(new Event('diffseek-redraw-reset'));
+  });
+}
+
+async function resetReconcileWrites(page: Page): Promise<void> {
+  await resetRedraws(page);
+}
+
+async function resetRedrawRows(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    document.dispatchEvent(new Event('diffseek-redraw-rows-reset'));
   });
 }
 

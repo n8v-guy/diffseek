@@ -7,6 +7,11 @@ const keyPrefix = 'diffseek:filters:';
  * hides the `hidden` default facets. Session storage is per tab, so a fresh
  * tab starts from the defaults.
  */
+/** This tab already stored a selection for the review. */
+export function hasSavedFilterSelection(root: Document, review: string): boolean {
+  return savedSelection(root, review) != null;
+}
+
 export function restoreFilterSelection<Facet extends string>(
   root: Document,
   review: string,

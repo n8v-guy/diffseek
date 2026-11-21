@@ -1,6 +1,11 @@
 import {
+  filterResetNeedsRepair,
+  filterTriggerMark,
+  watchedFilterTrigger,
+} from '../review-view/filter-button-reset';
+import {
   filterMenus,
-  filterOptionsButton,
+  filterOptionsCandidateSelector,
   filterOptionsLabel,
   isFilterOptionsTrigger,
   isNativeMutation,
@@ -49,6 +54,9 @@ const structuralSelector = [
 export function classifyPageMutations(
   records: MutationRecord[],
 ): { immediate: true } | { coalesce: true } | null {
+  if (records.some(filterResetNeedsRepair) || records.some(isWatchedLabelRecord)) {
+    return { immediate: true };
+  }
   const native = records.filter(isNativeMutation);
   if (native.length === 0) return null;
   if (native.some((record) => isImmediateRecord(record))) {
@@ -98,15 +106,45 @@ export function watchObservationRoots(options: {
     });
     options.observedRoots.add(candidate);
   }
-  const filterButton = filterOptionsButton(options.root);
-  if (filterButton && !options.observedRoots.has(filterButton)) {
-    options.observer.observe(filterButton, {
-      subtree: true,
+  // Primer writes anchor-name on the live trigger after the static copy is
+  // already in the page. Watch every candidate so that late style is seen.
+  const watched = watchedFilterTrigger(options.root);
+  const buttons = new Set(
+    options.root.querySelectorAll<HTMLButtonElement>(filterOptionsCandidateSelector),
+  );
+  if (watched) buttons.add(watched);
+  for (const button of buttons) {
+    const named = isFilterOptionsTrigger(button) || button === watched;
+    if (!named || options.observedRoots.has(button)) continue;
+    options.observer.observe(button, {
       attributes: true,
-      attributeFilter: [ariaLabelAttribute, labelledByAttribute, 'aria-expanded', 'class', 'style'],
+      attributeFilter: [ariaLabelAttribute, labelledByAttribute, 'class', 'style'],
     });
-    options.observedRoots.add(filterButton);
+    options.observedRoots.add(button);
   }
+  for (const id of watched?.getAttribute(labelledByAttribute)?.split(/\s+/) ?? []) {
+    const label = options.root.getElementById(id);
+    if (!label || options.observedRoots.has(label)) continue;
+    options.observer.observe(label, { subtree: true, childList: true, characterData: true });
+    options.observedRoots.add(label);
+  }
+}
+
+function isWatchedLabelRecord(record: MutationRecord): boolean {
+  const root = record.target.ownerDocument;
+  const watched = root ? watchedFilterTrigger(root) : null;
+  const ids = new Set(
+    watched?.getAttribute(labelledByAttribute)?.split(/\s+/).filter((id) => id !== '') ?? [],
+  );
+  if (ids.size === 0) return false;
+  const nodes = [...record.addedNodes, ...record.removedNodes];
+  if (nodes.some((node) => node instanceof Element && ids.has(node.id))) return true;
+  let element = record.target instanceof Element ? record.target : record.target.parentElement;
+  while (element) {
+    if (ids.has(element.id)) return true;
+    element = element.parentElement;
+  }
+  return false;
 }
 
 function sharedRegionParent(
@@ -201,6 +239,8 @@ function isFilterMenuRecord(record: MutationRecord): boolean {
   if (record.type === 'attributes') {
     const target = record.target;
     if (!(target instanceof Element)) return false;
+    // Primer's anchor-name arrives as style. Mount handles it outside the pass.
+    if (record.attributeName === 'style' && isFilterOptionsButton(target)) return false;
     return isFilterMenuElement(target) || isFilterOptionsButton(target);
   }
   if (isFilterMenuElement(record.target)) return true;
@@ -212,7 +252,10 @@ function isFilterMenuRecord(record: MutationRecord): boolean {
 function isFilterOptionsButton(target: Element): boolean {
   const button =
     target instanceof HTMLButtonElement ? target : target.closest('button');
-  return button instanceof HTMLButtonElement && isFilterOptionsTrigger(button);
+  return (
+    button instanceof HTMLButtonElement &&
+    (button.hasAttribute(filterTriggerMark) || isFilterOptionsTrigger(button))
+  );
 }
 
 function containsFilterMenu(node: Node): boolean {
@@ -224,7 +267,9 @@ function containsFilterMenu(node: Node): boolean {
   if (node.childElementCount > overlayChildLimit) return false;
   return (
     node.querySelector('[role="menu"]') != null ||
-    [...node.querySelectorAll('button[aria-haspopup]')].some(isFilterOptionsButton)
+    [...node.querySelectorAll(filterOptionsCandidateSelector)].some(
+      isFilterOptionsButton,
+    )
   );
 }
 

@@ -309,3 +309,17 @@ and its pass. Cold, warm, and hot loads keep theirs. That redraw was taken
 for the wins: about 500 fewer lines, a filter click on 400 files settling in
 22 ms instead of 2110 ms (local fixture, 10 ms per native click), and no
 click storms.
+
+## D020 — Prefetch on load; write the filter badge only twice
+
+**Decision:** Metadata is prefetched when the review page loads. DOM writes stay
+minimal. The Filter-button badge is upserted only when sessionStorage restores
+a saved review (a return or an in-page navigation) and when the extension's
+filter menu closes. That upsert counts as a reconcile, so restored and
+navigation counts may be higher. Cold and cold-mark loads do not upsert it
+and keep main's reconcile counts.
+
+**Why:** The page should be ready, and a badge written on every pass showed up
+in cold loads. **Cost:** The badge appears at restore and after the menu
+closes, not on the first cold paint. The restored live budget allows the
+extra reconcile.

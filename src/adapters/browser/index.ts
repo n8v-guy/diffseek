@@ -11,6 +11,7 @@ export {
   type RememberedFilterFacet,
 } from './filter-defaults';
 export {
+  hasSavedFilterSelection,
   restoreFilterSelection,
   saveFilterSelection,
 } from './filter-selection';

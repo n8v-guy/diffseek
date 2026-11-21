@@ -113,7 +113,7 @@ export function defaultLivePerfBudgets(
     scenarios: {
       coldMark: scenarioLimits(env, 'COLD_MARK', { firstRenderSeconds: 6.9, menuOpenSeconds: 5.6, panelsSeconds: 69.7, reconciles: 78, domMutations: 95, treeRebuilds: 0, panelRebuilds: 0 }),
       unmark: scenarioLimits(env, 'UNMARK', { firstRenderSeconds: 12, menuOpenSeconds: 0, panelsSeconds: 12.7, reconciles: 1, domMutations: 2, treeRebuilds: 0, panelRebuilds: 0 }),
-      restored: scenarioLimits(env, 'RESTORED', { firstRenderSeconds: 7.6, menuOpenSeconds: 12.9, panelsSeconds: 77.9, reconciles: 38, domMutations: 17, treeRebuilds: 1, panelRebuilds: 1 }),
+      restored: scenarioLimits(env, 'RESTORED', { firstRenderSeconds: 7.6, menuOpenSeconds: 12.9, panelsSeconds: 77.9, reconciles: 41, domMutations: 18, treeRebuilds: 1, panelRebuilds: 1 }),
     },
   };
 }

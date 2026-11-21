@@ -79,6 +79,117 @@ describe('review session stream batching', () => {
 
     app.stop();
   });
+
+  it('leaves Reset off a cold load and inserts it when the menu closes', async () => {
+    const { app, live, icon, since } = await openFilterPage();
+    live.setAttribute('style', 'anchor-name: --filter-anchor;');
+    await nextTask();
+    expect(icon()).toBeNull();
+    expect(since()).toBe(0);
+
+    const native = document.createElement('ul');
+    native.setAttribute('role', 'menu');
+    native.setAttribute('aria-label', 'Filter options');
+    native.append(Object.assign(document.createElement('li'), { textContent: 'Clear filters' }));
+    native.firstElementChild?.setAttribute('role', 'menuitem');
+    document.body.append(native);
+    await nextTask();
+    const ignored = since();
+    native.remove();
+    await nextTask();
+    expect(icon()).toBeNull();
+    expect(since()).toBe(ignored);
+
+    const menu = document.createElement('ul');
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Filter options');
+    document.body.append(menu);
+    await nextTask();
+    expect(icon()).toBeNull();
+    const opened = since();
+    menu.remove();
+    await nextTask();
+    expect(live.nextElementSibling).toBe(icon());
+    expect(since()).toBe(opened + 1);
+    icon()?.remove();
+    document.querySelector('#diff-app button[aria-label="Not Viewed"]')?.setAttribute('aria-pressed', 'true');
+    await nextTask();
+    expect(icon()).toBeNull();
+    app.stop();
+  });
+
+  it('restores the Reset mark when the trigger name is the only change', async () => {
+    sessionStorage.setItem('diffseek:filters:octo/repo#1', '{"groups":["Docs"]}');
+    const { app, live, icon, since } = await openFilterPage();
+    live.setAttribute('style', 'anchor-name: --filter-anchor;');
+    await nextTask();
+    expect(live.nextElementSibling).toBe(icon());
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+    expect(since()).toBe(1);
+
+    live.setAttribute('aria-label', 'Other options');
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+    const renamed = since();
+
+    live.removeAttribute('aria-label');
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+    expect(live.nextElementSibling).toBe(icon());
+    expect(since()).toBe(renamed + 1);
+
+    live.removeAttribute('style');
+    const label = document.getElementById('live-label');
+    if (!label) throw new Error('missing live label');
+    label.textContent = 'Other options';
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+    label.textContent = 'Filter options';
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+
+    const inner = document.createElement('span');
+    inner.textContent = 'Other options';
+    label.replaceChildren(inner);
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+    inner.firstChild?.replaceWith('Filter options');
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+
+    const replaced = document.createElement('span');
+    replaced.id = 'live-label';
+    replaced.textContent = 'Other options';
+    label.replaceWith(replaced);
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+    replaced.textContent = 'Filter options';
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+    app.stop();
+  });
+
+  it('keeps a mounted Reset while the file tree is gone', async () => {
+    sessionStorage.setItem('diffseek:filters:octo/repo#1', '{"groups":["Docs"]}');
+    const { app, live, icon } = await openFilterPage();
+    live.setAttribute('style', 'anchor-name: --filter-anchor;');
+    await nextTask();
+    const mounted = icon();
+    expect(mounted).not.toBeNull();
+    expect(document.documentElement.getAttribute('data-diffseek-filtered')).toBe('true');
+
+    document.querySelector('[role="tree"]')?.remove();
+    await nextTask();
+    expect(icon()).toBe(mounted);
+    expect(document.documentElement.getAttribute('data-diffseek-filtered')).toBe('true');
+
+    document.body.insertAdjacentHTML('beforeend', '<ul role="tree" aria-label="File Tree"></ul>');
+    await nextTask();
+    expect(icon()).toBe(mounted);
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+    app.stop();
+    expect(icon()).toBeNull();
+  });
 });
 
 describe('reconcile strategy', () => {
@@ -495,6 +606,49 @@ function regionNode(index: number): HTMLElement {
   region.setAttribute('role', 'region');
   region.innerHTML = `<div data-diff-header-wrapper="true"><button aria-label="Collapse file"></button><h3><code>src/file-${index}.ts</code></h3><button aria-label="Not Viewed" aria-pressed="false">Viewed</button></div>`;
   return region;
+}
+
+async function openFilterPage(): Promise<{
+  app: Awaited<ReturnType<typeof startReviewApp>>;
+  live: HTMLButtonElement;
+  icon: () => Element | null;
+  since: () => number;
+}> {
+  document.querySelector('button[aria-label="Filter options"]')?.replaceWith(
+    Object.assign(document.createElement('div'), { id: 'filter-wrap' }),
+  );
+  document.getElementById('filter-wrap')?.insertAdjacentHTML(
+    'beforeend',
+    `<span id="static-label">Filter options</span>
+    <button aria-haspopup="true" aria-expanded="false" aria-labelledby="static-label"></button>
+    <span id="live-label">Filter options</span>
+    <button id="live" aria-haspopup="true" aria-expanded="false" aria-labelledby="live-label"></button>`,
+  );
+  let writes = 0;
+  const countWrite = () => {
+    writes += 1;
+  };
+  document.addEventListener('diffseek-reconciled', countWrite);
+  const app = await startReviewApp({
+    root: document,
+    pathname: () => '/octo/repo/pull/1/changes',
+    readImmediate: async () => emptyMetadata,
+    refreshDefault: async () => ({
+      metadata: emptyMetadata,
+      cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
+      changed: false,
+    }),
+    readPull: async (_review, base) => ({ ...base, changed: false }),
+  });
+  const started = writes;
+  const live = document.getElementById('live');
+  if (!(live instanceof HTMLButtonElement)) throw new Error('missing live trigger');
+  return {
+    app,
+    live,
+    icon: () => document.querySelector('[data-diffseek="filter-button-reset"]'),
+    since: () => writes - started,
+  };
 }
 
 /** Lets observer callbacks queue their pass, then runs the next task. */
