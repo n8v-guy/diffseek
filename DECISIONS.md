@@ -296,4 +296,7 @@ filter changes.
 seconds on large pull requests and fought GitHub re-expanding files. The diff
 stream now matches the tree. Only DiffSeek's own attribute is written, so the
 page stays authoritative (D001). **Cost:** A hidden diff stays in the page, and
-GitHub's layout must tolerate regions it did not hide itself.
+GitHub's layout must tolerate regions it did not hide itself. Returning to a
+filtered review, GitHub redraws the tree and panels once, as its files are not
+natively collapsed; the restored live budgets allow that one redraw and its
+pass. Cold, warm, and hot loads keep theirs.
