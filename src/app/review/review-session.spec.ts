@@ -98,6 +98,10 @@ describe('review session stream batching', () => {
     await nextTask();
     expect(live.nextElementSibling).toBe(icon());
     expect(since()).toBe(opened + 1);
+    icon()?.remove();
+    document.querySelector('#diff-app button[aria-label="Not Viewed"]')?.setAttribute('aria-pressed', 'true');
+    await nextTask();
+    expect(icon()).toBeNull();
     app.stop();
   });
 
@@ -120,6 +124,16 @@ describe('review session stream batching', () => {
     expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
     expect(live.nextElementSibling).toBe(icon());
     expect(since()).toBe(renamed + 1);
+
+    live.removeAttribute('style');
+    const label = document.getElementById('live-label');
+    if (!label) throw new Error('missing live label');
+    label.textContent = 'Other options';
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+    label.textContent = 'Filter options';
+    await nextTask();
+    expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
     app.stop();
   });
 });

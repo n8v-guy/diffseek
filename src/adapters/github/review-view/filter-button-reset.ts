@@ -52,16 +52,17 @@ function syncFilteredAttribute(
   root: Document,
   filters: FilterState,
   filterDefaults?: FilterDefaults,
-): void {
+): boolean {
   const on = hasTransientExclusions(filters, filterDefaults);
   const el = root.documentElement;
   if (on) {
-    if (el.getAttribute(filteredAttribute) !== 'true') {
-      el.setAttribute(filteredAttribute, 'true');
-    }
-    return;
+    if (el.getAttribute(filteredAttribute) === 'true') return false;
+    el.setAttribute(filteredAttribute, 'true');
+    return true;
   }
-  if (el.hasAttribute(filteredAttribute)) el.removeAttribute(filteredAttribute);
+  if (!el.hasAttribute(filteredAttribute)) return false;
+  el.removeAttribute(filteredAttribute);
+  return true;
 }
 
 /**
@@ -70,17 +71,17 @@ function syncFilteredAttribute(
  * Read-only: the observer must not drop the retained node before cleanup.
  */
 function readTrigger(root: Document): HTMLButtonElement | null {
+  const watched = watchedFilterTrigger(root);
+  if (watched && isFilterOptionsTrigger(watched)) return watched;
   const remembered = retainedTrigger.get(root);
-  if (remembered?.isConnected && isFilterOptionsTrigger(remembered)) {
-    return remembered;
-  }
+  if (remembered?.isConnected && isFilterOptionsTrigger(remembered)) return remembered;
   return anchoredFilterTrigger(root);
 }
 
-function remember(root: Document, trigger: HTMLButtonElement | null): void {
+function remember(root: Document, trigger: HTMLButtonElement | null, verified: boolean): void {
   if (trigger) {
     retainedTrigger.set(root, trigger);
-    watchedTrigger.set(root, trigger);
+    if (verified) watchedTrigger.set(root, trigger);
     return;
   }
   retainedTrigger.delete(root);
@@ -166,16 +167,19 @@ function ensureFilterButtonReset(
 ): BadgeWrite {
   const previous = retainedTrigger.get(root);
   const trigger = readTrigger(root);
-  remember(root, trigger);
-  const icon = owned(root);
+  let icon = owned(root);
   const released = previous?.isSameNode(trigger) ? undefined : previous;
   let wrote = discardCopies(root);
   if (clearTriggerMark(released)) wrote = true;
+  const placed = Boolean(
+    trigger?.parentElement && icon?.parentElement?.isSameNode(trigger.parentElement),
+  );
+  remember(root, trigger, placed);
   if (!trigger?.parentElement) {
     if (icon) latestOptions.set(icon, options);
     return { wrote, placed: false };
   }
-  if (icon?.parentElement?.isSameNode(trigger.parentElement)) {
+  if (placed && icon) {
     latestOptions.set(icon, options);
     if (!trigger.hasAttribute(filterTriggerMark)) {
       trigger.setAttribute(filterTriggerMark, '');
@@ -184,15 +188,15 @@ function ensureFilterButtonReset(
     return { wrote, placed: true };
   }
   if (!due) return { wrote, placed: false };
-  if (icon) {
-    latestOptions.set(icon, options);
-    place(icon, trigger);
-    return { wrote: true, placed: true };
+  if (icon) latestOptions.set(icon, options);
+  else {
+    const created = cornerButton();
+    latestOptions.set(created, options);
+    ownedIcon.set(root, created);
+    icon = created;
   }
-  const created = cornerButton();
-  latestOptions.set(created, options);
-  ownedIcon.set(root, created);
-  place(created, trigger);
+  place(icon, trigger);
+  remember(root, trigger, true);
   return { wrote: true, placed: true };
 }
 
@@ -202,6 +206,7 @@ export function syncFilterReset(
   options: ResetOptions,
   due = false,
 ): BadgeWrite {
-  syncFilteredAttribute(root, options.filters, options.filterDefaults);
-  return ensureFilterButtonReset(root, options, due);
+  const attribute = syncFilteredAttribute(root, options.filters, options.filterDefaults);
+  const badge = ensureFilterButtonReset(root, options, due);
+  return { wrote: attribute || badge.wrote, placed: badge.placed };
 }

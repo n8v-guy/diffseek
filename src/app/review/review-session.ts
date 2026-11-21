@@ -314,8 +314,8 @@ export class ReviewSession {
       generatedDefaultBusy,
       countsSettling: countsSettling(this.options.settledCounts, this.options.review.key),
     });
-    if (this.sawFilterMenu && menus.length === 0) this.badgeDue = true;
-    else if (menus.length > 0) this.sawFilterMenu = true;
+    if (menus.length > 0) this.sawFilterMenu = true;
+    else if (this.sawFilterMenu) { this.badgeDue = true; this.sawFilterMenu = false; }
     const badge = trackDiffseekWrites(root, () => syncFilterReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }, this.badgeDue));
     if (badge.placed) this.badgeDue = false;
     const resetMoved = badge.wrote;

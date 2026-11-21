@@ -54,7 +54,9 @@ const structuralSelector = [
 export function classifyPageMutations(
   records: MutationRecord[],
 ): { immediate: true } | { coalesce: true } | null {
-  if (records.some(filterResetNeedsRepair)) return { immediate: true };
+  if (records.some(filterResetNeedsRepair) || records.some(isWatchedLabelRecord)) {
+    return { immediate: true };
+  }
   const native = records.filter(isNativeMutation);
   if (native.length === 0) return null;
   if (native.some((record) => isImmediateRecord(record))) {
@@ -120,6 +122,21 @@ export function watchObservationRoots(options: {
     });
     options.observedRoots.add(button);
   }
+  for (const id of watched?.getAttribute(labelledByAttribute)?.split(/\s+/) ?? []) {
+    const label = options.root.getElementById(id);
+    if (!label || options.observedRoots.has(label)) continue;
+    options.observer.observe(label, { subtree: true, childList: true, characterData: true });
+    options.observedRoots.add(label);
+  }
+}
+
+function isWatchedLabelRecord(record: MutationRecord): boolean {
+  const root = record.target.ownerDocument;
+  const watched = root ? watchedFilterTrigger(root) : null;
+  const ids = new Set(watched?.getAttribute(labelledByAttribute)?.split(/\s+/) ?? []);
+  if (ids.size === 0) return false;
+  const element = record.target instanceof Element ? record.target : record.target.parentElement;
+  return element != null && ids.has(element.id);
 }
 
 function sharedRegionParent(

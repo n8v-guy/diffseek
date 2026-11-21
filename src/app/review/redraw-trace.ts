@@ -91,6 +91,9 @@ export function installRedrawTrace(root: Document): void {
   root.addEventListener('diffseek-redraw-reset', () => {
     resetRedrawTrace(root);
   });
+  root.addEventListener('diffseek-redraw-rows-reset', () => {
+    resetRedrawRows(root);
+  });
   root.addEventListener('diffseek-redraw-settle', () => {
     const current = traces.get(root);
     if (!current) return;
@@ -107,11 +110,31 @@ export function resetRedrawTrace(root: Document): void {
   Object.assign(trace, countsFrom());
   trace.reconcileEntries = 0;
   trace.reconcileNoops = 0;
+  clearRedrawRows(trace);
+  publish(root, trace);
+}
+
+/** Drops row ledgers. Reconciles and DOM writes stay, so a restore keeps them. */
+function resetRedrawRows(root: Document): void {
+  const trace = traces.get(root);
+  if (!trace) return;
+  clearRedrawRows(trace);
+  publish(root, trace);
+}
+
+function clearRedrawRows(trace: Trace): void {
+  trace.treeRebuilds = 0;
+  trace.panelRebuilds = 0;
+  trace.treeRowsRemoved = 0;
+  trace.panelsRemoved = 0;
+  trace.treeRowsReadded = 0;
+  trace.panelsReadded = 0;
+  trace.treeNetLoss = 0;
+  trace.panelNetLoss = 0;
   trace.pendingTree.clear();
   trace.pendingPanels.clear();
   trace.treeSettle = emptyLedger();
   trace.panelSettle = emptyLedger();
-  publish(root, trace);
 }
 
 /**
@@ -279,14 +302,14 @@ function countRebuilt(
   return rebuilt;
 }
 
+const visibilityAttributes = new Set(['data-diffseek-filtered', 'data-diffseek-filter-trigger']);
+
 function countMutations(records: MutationRecord[]): number {
   let count = 0;
   for (const record of records) {
     const target = record.target;
-    if (
-      target instanceof HTMLElement &&
-      target === target.ownerDocument.documentElement
-    ) {
+    if (target instanceof HTMLElement && target === target.ownerDocument.documentElement) {
+      if (record.attributeName != null && visibilityAttributes.has(record.attributeName)) count += 1;
       continue;
     }
     count +=
@@ -301,6 +324,8 @@ function observeStructure(trace: Trace, root: Document): void {
   trace.observer.observe(root.documentElement, {
     childList: true,
     subtree: true,
+    attributes: true,
+    attributeFilter: [...visibilityAttributes],
   });
 }
 
