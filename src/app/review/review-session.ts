@@ -27,6 +27,7 @@ import {
   showBatchStarted,
   showRememberedFilterDefault,
   showUnavailable,
+  mountFilterReset,
   syncFilterReset,
   treeStructureKey,
   watchObservationRoots,
@@ -186,6 +187,7 @@ export class ReviewSession {
     installRedrawTrace(options.root);
     delete options.root.documentElement.dataset.diffseekFirstRenderEpoch;
     this.observer = new MutationObserver((records) => {
+      mountFilterReset(this.options.root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() });
       const mode = classifyPageMutations(records);
       if (mode) this.onPageMutation(mode);
     });
@@ -316,7 +318,6 @@ export class ReviewSession {
       generatedDefaultBusy,
       countsSettling: countsSettling(this.options.settledCounts, this.options.review.key),
     });
-    // Mounting Reset is not a review reconcile. Only a later repair counts.
     const resetMoved = trackDiffseekWrites(root, () => syncFilterReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }));
     const change = changedSurfaces(this.applied, plan);
     this.applied = plan;

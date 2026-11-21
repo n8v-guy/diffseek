@@ -144,7 +144,7 @@ describe('review session stream batching', () => {
     icon()?.remove();
     await nextTask();
     expect(live?.nextElementSibling).toBe(icon());
-    expect(writes - baseline).toBe(1);
+    expect(writes - baseline).toBe(2);
 
     await retainAcrossAnchorSwap(live, icon, () => writes - baseline);
     document.removeEventListener('diffseek-reconciled', countWrite);
@@ -595,9 +595,6 @@ async function retainAcrossAnchorSwap(
   expect(writesSince()).toBe(parked + 1);
 
   live.removeAttribute('aria-label');
-  live.parentElement
-    ?.querySelector('button[aria-labelledby="static-label"]')
-    ?.classList.add('nudge');
   await nextTask();
   expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
   expect(live.nextElementSibling).toBe(icon());

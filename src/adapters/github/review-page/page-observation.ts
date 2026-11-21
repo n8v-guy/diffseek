@@ -1,4 +1,8 @@
-import { filterResetNeedsRepair, filterTriggerMark } from '../review-view/filter-button-reset';
+import {
+  filterResetNeedsRepair,
+  filterTriggerMark,
+  watchedFilterTrigger,
+} from '../review-view/filter-button-reset';
 import {
   filterMenus,
   filterOptionsCandidateSelector,
@@ -102,10 +106,14 @@ export function watchObservationRoots(options: {
   }
   // Primer writes anchor-name on the live trigger after the static copy is
   // already in the page. Watch every candidate so that late style is seen.
-  for (const button of options.root.querySelectorAll<HTMLButtonElement>(
-    filterOptionsCandidateSelector,
-  )) {
-    if (!isFilterOptionsTrigger(button) || options.observedRoots.has(button)) continue;
+  const watched = watchedFilterTrigger(options.root);
+  const buttons = new Set(
+    options.root.querySelectorAll<HTMLButtonElement>(filterOptionsCandidateSelector),
+  );
+  if (watched) buttons.add(watched);
+  for (const button of buttons) {
+    const named = isFilterOptionsTrigger(button) || button === watched;
+    if (!named || options.observedRoots.has(button)) continue;
     options.observer.observe(button, {
       attributes: true,
       attributeFilter: [ariaLabelAttribute, labelledByAttribute, 'class', 'style'],
@@ -206,6 +214,8 @@ function isFilterMenuRecord(record: MutationRecord): boolean {
   if (record.type === 'attributes') {
     const target = record.target;
     if (!(target instanceof Element)) return false;
+    // Primer's anchor-name arrives as style. Mount handles it outside the pass.
+    if (record.attributeName === 'style' && isFilterOptionsButton(target)) return false;
     return isFilterMenuElement(target) || isFilterOptionsButton(target);
   }
   if (isFilterMenuElement(record.target)) return true;
