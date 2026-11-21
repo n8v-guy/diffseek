@@ -1,3 +1,5 @@
+import { collectReviewNodeIds } from '@diffseek/github';
+
 export type RedrawCounts = {
   reconciles: number;
   domMutations: number;
@@ -16,8 +18,6 @@ const massRemoval = 48;
 const readdWindowMs = 100;
 /** Hot loads ignore the mass-removal rule and require each removed row back inside this window. */
 const hotSettleMs = 500;
-const treeSelector = '[role="treeitem"]';
-const panelSelector = '[role="region"][id^="diff-"]';
 
 type SettleLedger = {
   open: Map<string, number>;
@@ -175,15 +175,14 @@ export function readRedrawCounts(root: Document): RedrawCounts {
 function absorb(trace: Trace, records: MutationRecord[]): boolean {
   const before = mutationStamp(trace);
   if (trace.depth > 0) trace.domMutations += countMutations(records);
-  noteRows(trace, records, treeSelector, trace.pendingTree, 'tree');
-  noteRows(trace, records, panelSelector, trace.pendingPanels, 'panel');
+  noteRows(trace, records, trace.pendingTree, 'tree');
+  noteRows(trace, records, trace.pendingPanels, 'panel');
   return mutationStamp(trace) !== before;
 }
 
 function noteRows(
   trace: Trace,
   records: MutationRecord[],
-  selector: string,
   pending: Map<string, number>,
   kind: 'tree' | 'panel',
 ): void {
@@ -192,8 +191,8 @@ function noteRows(
   const added = new Set<string>();
   for (const record of records) {
     if (record.type !== 'childList') continue;
-    for (const node of record.addedNodes) collectIds(node, selector, added);
-    for (const node of record.removedNodes) collectIds(node, selector, removed);
+    for (const node of record.addedNodes) collectReviewNodeIds(node, kind, added);
+    for (const node of record.removedNodes) collectReviewNodeIds(node, kind, removed);
   }
   const rebuilt = countRebuilt(removed, added, pending, now);
   const ledger = kind === 'tree' ? trace.treeSettle : trace.panelSettle;
@@ -278,19 +277,6 @@ function countRebuilt(
     if (now - at > readdWindowMs) pending.delete(id);
   }
   return rebuilt;
-}
-
-function collectIds(node: Node, selector: string, into: Set<string>): void {
-  if (!(node instanceof Element)) return;
-  // The filter menu is not a file tree. Walking it on every open showed up as
-  // longer long tasks and cannot be a tree or diff-panel rebuild.
-  const role = node.getAttribute('role');
-  if (role === 'menu' || role === 'menuitem' || role === 'menuitemcheckbox') return;
-  const rows = [
-    ...(node.matches(selector) ? [node] : []),
-    ...node.querySelectorAll<HTMLElement>(selector),
-  ];
-  for (const row of rows) into.add(row.id);
 }
 
 function countMutations(records: MutationRecord[]): number {

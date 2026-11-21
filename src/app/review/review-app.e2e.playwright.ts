@@ -270,11 +270,10 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
     'aria-live',
     'polite',
   );
-  await expect(
-    page.locator('[data-diffseek="snackbar"]', {
-      hasText: 'Marking visible files in folder viewed…',
-    }),
-  ).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-toast-log',
+    /Marking visible files in folder viewed…/,
+  );
   await expect(page.locator('html')).toHaveAttribute(
     'data-native-click-after-snackbar-paint',
     'true',
@@ -868,6 +867,39 @@ test('hides generated and viewed files and auto-views generated for a fresh inst
   expect(await readStoredFilterDefaults()).toEqual({
     'diffseek:filter-defaults': { hidden: [], viewed: [] },
   });
+});
+
+test('restores review filters on return and starts fresh in a new tab', async () => {
+  const pull = 14;
+  const page = await openPull(pull);
+  const changesUrl = page.url();
+  const listUrl = new URL('/octo/repo/pulls', changesUrl).href;
+  await page.route(listUrl, (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: `<a href="${changesUrl}">Open pull request</a>`,
+    }),
+  );
+  const docsFilter = '[data-filter-kind="groups"][data-filter-value="Docs"]';
+  const docsFile = '[role="treeitem"][id="docs/readme.md"]';
+  const filter = page.locator(docsFilter);
+
+  await page.getByLabel('Filter options').click();
+  await expect(filter).toHaveAttribute('aria-checked', 'true');
+  await filter.click();
+  await expect(page.locator(docsFile)).toBeHidden();
+
+  await page.goto(listUrl);
+  await page.getByRole('link', { name: 'Open pull request' }).click();
+  await expect(page).toHaveURL(changesUrl);
+  await page.getByLabel('Filter options').click();
+  await expect(filter).toHaveAttribute('aria-checked', 'false');
+  await expect(page.locator(docsFile)).toBeHidden();
+
+  const fresh = await openPull(pull);
+  await fresh.getByLabel('Filter options').click();
+  await expect(fresh.locator(docsFilter)).toHaveAttribute('aria-checked', 'true');
+  await expect(fresh.locator(docsFile)).toBeVisible();
 });
 
 test('applies a late gitattributes fetch on a fresh store', async () => {

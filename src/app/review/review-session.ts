@@ -8,6 +8,10 @@ import {
   afterNextPaint,
   autoViewNotice,
   bindSnapshot,
+  classifyPageMutations,
+  diffRegionElements,
+  filteredFileExpanded,
+  fileTreeElement,
   dismissSnackbar,
   filterMenus,
   menuNeedsRemount,
@@ -25,6 +29,7 @@ import {
   showRememberedFilterDefault,
   showUnavailable,
   treeStructureKey,
+  watchObservationRoots,
   type markViewed,
   type PageSnapshot,
   type ReviewRef,
@@ -73,16 +78,13 @@ import {
   cancelPanelReconcile,
   classifyKeyFor,
   classifySnapshot,
-  filteredFileExpanded,
   pageNodesChanged,
   type PanelReconcileSchedule,
   type PanelScheduleOptions,
   queuePanelReconcile,
   refreshViewedState,
   retainNativeOwners,
-  scheduleForMutations,
   syncViewedLabels,
-  watchObservationRoots,
 } from './session-observation';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
@@ -182,20 +184,16 @@ export class ReviewSession {
     installRedrawTrace(options.root);
     delete options.root.documentElement.dataset.diffseekFirstRenderEpoch;
     this.observer = new MutationObserver((records) => {
-      const mode = scheduleForMutations(records);
+      const mode = classifyPageMutations(records);
       if (mode) this.onPageMutation(mode);
     });
     this.discoveryObserver = new MutationObserver((records) => {
-      const mode = scheduleForMutations(records);
+      const mode = classifyPageMutations(records);
       if (!mode) return;
       this.refreshObservationRoots();
       this.onPageMutation(mode);
     });
-    this.discoveryObserver.observe(options.root.body, {
-      childList: true,
-      subtree: true,
-    });
-    this.refreshObservationRoots();
+    this.reattachObservers();
   }
 
   start(): void { this.reconcile(); }
@@ -247,8 +245,8 @@ export class ReviewSession {
     const root = this.options.root;
     const treeKey = treeStructureKey(root);
     const regionKey = regionStructureKey(root);
-    const tree = root.querySelector('[role="tree"][aria-label="File Tree"]');
-    const regions = [...root.querySelectorAll<HTMLElement>('[role="region"][id^="diff-"]')];
+    const tree = fileTreeElement(root);
+    const regions = diffRegionElements(root);
     const structureChanged =
       treeKey !== this.treeKey ||
       regionKey !== this.regionKey ||

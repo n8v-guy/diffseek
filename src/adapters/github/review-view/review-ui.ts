@@ -1,5 +1,6 @@
 import type { FilterDefaultState } from '@diffseek/browser';
 
+import { fileTreeElement } from '../review-page/page-adapter';
 import {
   type ActionResult,
   clearViewedAction,
@@ -8,7 +9,7 @@ import {
 
 /** The one product timer that paces UI: the shortest time a toast stays up. */
 const snackbarMinimumMs = 5_000;
-const filterOptionsLabel = 'Filter options';
+export const filterOptionsLabel = 'Filter options';
 const markFilesFailed = "Couldn't mark files viewed. Try again.";
 
 export function menuNeedsRemount(menu: HTMLElement): boolean {
@@ -370,9 +371,7 @@ function placeStatus(root: Document, status: HTMLElement): void {
   const trigger = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => accessibleName(button) === filterOptionsLabel,
   );
-  const anchor =
-    trigger ??
-    root.querySelector<HTMLElement>('[role="tree"][aria-label="File Tree"]');
+  const anchor = trigger ?? fileTreeElement(root);
   anchor?.after(status);
 }
 

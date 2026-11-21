@@ -6,6 +6,9 @@ invariants), [DECISIONS.md](DECISIONS.md) (settled calls), and
 Code and test locations are
 [config/project.config.ts](config/project.config.ts).
 
+For a read-only review, inspect the requested code and report findings and
+checks. The worktree, commit, and pull request steps apply to code changes.
+
 ## Changes
 
 Keep diffs minimal: change only what the task needs, and prefer removing
@@ -59,7 +62,10 @@ then self-review: gap versus the ask, leaner options, trade-offs.
 Prepare each pull request with a balanced, general-purpose model of your own
 harness. A separate agent then reviews it on the latest Anthropic
 Sonnet-class model, for correctness, regressions, and further cuts toward
-minimalism. The author agent applies that review in a follow-up commit.
+minimalism. If that model is unavailable, use an available independent
+review agent and record the substitution in the pull request. If the harness
+has no independent reviewer, record that and include the self-review. Apply
+any review fixes in a follow-up commit.
 
 A CI failure gets a cause and a prevention. A general review lesson updates
 this guidance. A validation miss updates the automation.

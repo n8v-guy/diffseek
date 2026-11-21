@@ -3,12 +3,14 @@ name: CI
 on:
   push:
     branches: ["**"]
+  pull_request:
 
 permissions:
   contents: read
 
 jobs:
   test:
+    name: test (${{ github.event_name }})
     runs-on: ubuntu-latest
 
     steps:
@@ -22,8 +24,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:ci:full
+      - name: Upload failed fixture browser traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fixture-browser-traces
+          path: test-results/**/trace.zip
+          if-no-files-found: ignore
 
   strict:
+    name: strict (${{ github.event_name }})
     runs-on: ubuntu-latest
 
     steps:
@@ -46,6 +56,7 @@ jobs:
   # workflow_run is a dangerous trigger. Dispatch live end-to-end on main and
   # pass the commit as an input; live and release require that same main SHA.
   start-live:
+    name: start-live (${{ github.event_name }})
     needs: [test, strict]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest

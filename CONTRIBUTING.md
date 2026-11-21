@@ -21,16 +21,40 @@ product module. Shared tool configuration lives in one place.
 
 ## Dev setup, build, and test
 
-DiffSeek is a Chrome Manifest V3 extension built with WXT. It needs current
-Node.js and pnpm (the package manifest pins the versions) and Chrome or
-Chromium. Installing dependencies also prepares the build tool and the git
-hooks. The package scripts cover a dev build, a production build, unit and DOM
-tests, fixture and live end-to-end tests, and the full CI check. Load the
-production build as an unpacked extension in Chrome's developer mode, then open
-a pull request's Files changed page; it uses the existing GitHub session.
+Use Node.js 24 and the pnpm version in [package.json](package.json). From the
+repository root, enable the Corepack shim if you use Corepack, then install.
+
+```sh
+corepack enable pnpm
+pnpm --version
+pnpm install --frozen-lockfile
+```
+
+If Corepack's directory is read-only, pass `--install-directory` with a
+writable directory and put it first on `PATH`. If registry downloads need
+your environment's HTTP proxy, set `NODE_USE_ENV_PROXY=1` for Node.js.
+
+The install prepares WXT and the Git hooks. Use `pnpm dev` for extension
+development, or run `pnpm build` and load `.output/chrome-mv3` as an unpacked
+extension in Chrome. Open a pull request's Files changed page in your existing
+GitHub session.
+
+```sh
+pnpm test:ci
+pnpm exec playwright install --no-shell chromium
+pnpm test:e2e
+```
 
 Unit and DOM tests sit beside the code they protect. Fixture end-to-end tests
-drive the built extension in a browser against recorded GitHub pages.
+drive the built extension against recorded GitHub pages without a login.
+Playwright keeps failure traces under `test-results/`. CI attaches them as
+`fixture-browser-traces`. Open a local or downloaded trace with
+`pnpm exec playwright show-trace <path-to-trace.zip>`.
+
+The pre-push check is `pnpm check:push`. To run the two CI jobs' package checks
+locally, use `pnpm check:ci:full` (which also installs Chromium and its system
+dependencies), then `pnpm build -b firefox` and `pnpm check:strict`. CI also
+checks workflows with actionlint and zizmor.
 
 Live end-to-end tests are opt-in and run against a real test pull request with
 a saved, signed-in GitHub session; a signed-out session never reaches the
@@ -65,12 +89,13 @@ shortly after, so tests open the menu only once the interactive one is there.
 
 ## Release and CI
 
-CI runs on every push; pull requests get CI only. After CI passes on main, live
-end-to-end runs and then the release, in that order for the same commit. The
-release builds the store package and publishes a versioned GitHub release with
-a changelog. Its version comes from the commit count. Live end-to-end can also
-be started by hand on any branch whose head passed CI; only main goes on to a
-release. It needs the signed-in session as a repository secret.
+CI runs on pushes and pull requests, including forks. After CI passes on a
+push to main, live end-to-end runs and then the release for the same commit.
+The release builds the store packages and publishes a versioned GitHub release
+with a changelog. Its version comes from the commit count. Live end-to-end can
+also be started by hand on any branch whose head passed push CI. Only main
+continues to a release. Live end-to-end needs the signed-in session as a
+repository secret.
 
 Publishing to the Chrome Web Store is manual and only from main. It requires
 CI, live end-to-end, and the release to be green for that commit, and it
@@ -97,7 +122,6 @@ what is binary by content, not extension. The pre-commit hook rejects them, and
 because hooks can be skipped, CI checks every file in the tree too.
 
 Git hooks run automatically: before a commit, lint fixes on staged code, the
-repository structure rules, and the binary check; before a push, the full CI
-check (structure, binaries, unused code, types, tests with coverage,
-production dependency audit, and build). CI also runs the stricter lint,
-duplication, dependency, stylesheet, Firefox store, and workflow gates.
+repository structure rules, and the binary check. Before a push, they check
+structure, binaries, unused code, types, tests with coverage, the production
+dependency audit, and the Chrome build.

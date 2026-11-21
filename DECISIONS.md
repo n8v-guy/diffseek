@@ -15,6 +15,8 @@ fixtures and live testing.
 **Decision:** Page observations expose normalized facts and capabilities that
 re-find their controls each time. Presentation and action code never hold page
 selectors or keep references to page elements.
+The adapter classifies GitHub markup mutations. The app schedules the resulting
+reconciliation passes.
 
 **Why:** Knowledge of GitHub's markup and element lifetimes lives in one place.
 **Cost:** The adapter is a high-value seam and needs broad fixtures.

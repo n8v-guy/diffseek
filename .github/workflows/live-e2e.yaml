@@ -40,7 +40,7 @@ jobs:
             echo "Live E2E for ${HEAD_SHA} was dispatched from ${RUN_SHA}." >&2
             exit 1
           fi
-          run=$(gh run list --workflow ci.yaml --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+          run=$(gh run list --workflow ci.yaml --event push --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
           gh run watch "$run" --exit-status
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5

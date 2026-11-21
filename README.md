@@ -25,8 +25,9 @@ Every row shows a live count. Hover a row and click "only" to focus; the diff ju
 
 ## Setup (optional)
 
-CODEOWNERS and .gitattributes are read from the default branch, refreshed daily or every
-third pull request, except a file the pull request itself changes.
+DiffSeek caches the default branch's metadata listing for seven days. If the
+pull request changes a metadata file, DiffSeek uses that version and caches it
+for two days. It refreshes expired copies once the review page goes quiet.
 
 Owners come from CODEOWNERS, read like GitHub does (.github/, root or docs/; last match wins):
 
