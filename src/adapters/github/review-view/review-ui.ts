@@ -37,6 +37,7 @@ export function filterMenus(root: Document): HTMLElement[] {
 }
 
 export function removeInjected(root: Document): void {
+  root.documentElement.removeAttribute('data-diffseek-filtered');
   for (const element of root.querySelectorAll(
     '[data-diffseek="filters"], [data-diffseek="unavailable"], [data-diffseek="snackbars"], [data-diffseek="filter-button-reset"]',
   )) {
@@ -372,9 +373,13 @@ export function isNativeMutation(record: MutationRecord): boolean {
  * copy and swaps in the interactive one, which carries Primer's CSS anchor
  * name; that one wins.
  */
+/** Candidates for GitHub's Filter options trigger, including the static copy. */
+export const filterOptionsCandidateSelector =
+  'button[aria-haspopup], button[aria-label]';
+
 export function filterOptionsButton(root: Document): HTMLButtonElement | null {
   const named = [
-    ...root.querySelectorAll<HTMLButtonElement>('button[aria-haspopup], button[aria-label]'),
+    ...root.querySelectorAll<HTMLButtonElement>(filterOptionsCandidateSelector),
   ].filter(isFilterOptionsTrigger);
   return named.find((button) => cssAnchorName(button) != null) ?? named[0] ?? null;
 }
@@ -384,7 +389,7 @@ export function isFilterOptionsTrigger(button: HTMLButtonElement): boolean {
 }
 
 /** The CSS anchor name Primer sets inline on an overlay's trigger. */
-export function cssAnchorName(element: Element): string | null {
+function cssAnchorName(element: Element): string | null {
   return /anchor-name:\s*([^;,\s]+)/.exec(element.getAttribute('style') ?? '')?.[1] ?? null;
 }
 

@@ -2,7 +2,7 @@ import type { FilterDefaults } from '@diffseek/browser';
 import type { FilterState } from '@diffseek/review';
 
 import { hasTransientExclusions, resetTransientExclusions } from './filter-reset';
-import { cssAnchorName, filterMenus, filterOptionsButton } from './review-ui';
+import { filterOptionsButton } from './review-ui';
 
 type ResetOptions = {
   filters: FilterState;
@@ -11,7 +11,10 @@ type ResetOptions = {
 };
 
 const buttonResetSelector = '[data-diffseek="filter-button-reset"]';
+/** Page-level flag. CSS shows the corner Reset pill while review filters hide files. */
+export const filteredAttribute = 'data-diffseek-filtered';
 const latestOptions = new WeakMap<HTMLButtonElement, ResetOptions>();
+const ownedPills = new WeakSet<HTMLButtonElement>();
 
 /** The "Reset filters" pill: its label, then the reset icon. */
 export function resetFiltersButton(): HTMLButtonElement {
@@ -33,40 +36,82 @@ export function resetFiltersButton(): HTMLButtonElement {
 }
 
 /**
- * Returns whether it added or removed the pill. Shows the pill on the top-right corner of GitHub's closed filter button
- * while review-scoped exclusions hide files. It is tethered with the
- * button's own CSS anchor name, so no GitHub element is written.
+ * Writes `data-diffseek-filtered` on `<html>` only when the review-scoped
+ * exclusion state changes. Visibility of the corner pill is CSS-only.
  */
-export function syncFilterButtonReset(root: Document, options: ResetOptions): boolean {
-  const trigger = filterOptionsButton(root);
-  const anchor = trigger && cssAnchorName(trigger);
-  let reset = root.querySelector<HTMLButtonElement>(buttonResetSelector);
-  if (
-    anchor == null ||
-    trigger?.getAttribute('aria-expanded') === 'true' ||
-    filterMenus(root).length > 0 ||
-    !hasTransientExclusions(options.filters, options.filterDefaults)
-  ) {
-    reset?.remove();
-    return reset != null;
+export function syncFilteredAttribute(
+  root: Document,
+  filters: FilterState,
+  filterDefaults?: FilterDefaults,
+): void {
+  const on = hasTransientExclusions(filters, filterDefaults);
+  const el = root.documentElement;
+  if (on) {
+    if (el.getAttribute(filteredAttribute) !== 'true') {
+      el.setAttribute(filteredAttribute, 'true');
+    }
+    return;
   }
-  const wrote = reset == null;
-  if (!reset) {
-    const created = resetFiltersButton();
-    created.dataset.diffseek = 'filter-button-reset';
-    created.addEventListener('click', () => {
-      const latest = latestOptions.get(created);
+  if (el.hasAttribute(filteredAttribute)) el.removeAttribute(filteredAttribute);
+}
+
+/** The live, listener-owned corner pill, if any. Clones of it are discarded. */
+function ownedPill(root: Document): HTMLButtonElement | null {
+  const node = root.querySelector<HTMLButtonElement>(buttonResetSelector);
+  if (!node) return null;
+  if (ownedPills.has(node)) return node;
+  node.remove();
+  return null;
+}
+
+/**
+ * Returns whether it inserted or moved the pill. Inserts the corner Reset
+ * once as a sibling of GitHub's Filter options button and leaves it there;
+ * re-inserts only if GitHub replaces the wrapper or the trigger. A temporary
+ * gap between the static trigger and the hydrated one does not remove it.
+ */
+export function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean {
+  const trigger = filterOptionsButton(root);
+  const wrapper = trigger?.parentElement;
+  const existing = ownedPill(root);
+  if (!trigger || !wrapper) {
+    if (existing?.isConnected) {
+      latestOptions.set(existing, options);
+      return false;
+    }
+    const wrote = existing != null;
+    existing?.remove();
+    return wrote;
+  }
+  if (existing) {
+    latestOptions.set(existing, options);
+    const moved =
+      existing.parentElement !== wrapper || trigger.nextElementSibling !== existing;
+    if (moved) trigger.after(existing);
+    return moved;
+  }
+  const pill = resetFiltersButton();
+  pill.dataset.diffseek = 'filter-button-reset';
+  pill.addEventListener(
+    'click',
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const latest = latestOptions.get(pill);
       if (!latest) return;
       resetTransientExclusions(latest.filters, latest.filterDefaults);
       latest.onChange();
-    });
-    root.body.append(created);
-    reset = created;
-  }
-  latestOptions.set(reset, options);
-  if (reset.dataset.anchor !== anchor) {
-    reset.dataset.anchor = anchor;
-    reset.setAttribute('style', `position-anchor: ${anchor}`);
-  }
-  return wrote;
+    },
+    true,
+  );
+  ownedPills.add(pill);
+  trigger.after(pill);
+  latestOptions.set(pill, options);
+  return true;
+}
+
+/** Writes the page attribute and keeps one corner Reset pill in the filter wrapper. */
+export function syncFilterReset(root: Document, options: ResetOptions): boolean {
+  syncFilteredAttribute(root, options.filters, options.filterDefaults);
+  return ensureFilterButtonReset(root, options);
 }

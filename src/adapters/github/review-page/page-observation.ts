@@ -1,6 +1,7 @@
 import {
   filterMenus,
   filterOptionsButton,
+  filterOptionsCandidateSelector,
   filterOptionsLabel,
   isFilterOptionsTrigger,
   isNativeMutation,
@@ -103,7 +104,7 @@ export function watchObservationRoots(options: {
     options.observer.observe(filterButton, {
       subtree: true,
       attributes: true,
-      attributeFilter: [ariaLabelAttribute, labelledByAttribute, 'aria-expanded', 'class', 'style'],
+      attributeFilter: [ariaLabelAttribute, labelledByAttribute, 'class', 'style'],
     });
     options.observedRoots.add(filterButton);
   }
@@ -224,7 +225,9 @@ function containsFilterMenu(node: Node): boolean {
   if (node.childElementCount > overlayChildLimit) return false;
   return (
     node.querySelector('[role="menu"]') != null ||
-    [...node.querySelectorAll('button[aria-haspopup]')].some(isFilterOptionsButton)
+    [...node.querySelectorAll(filterOptionsCandidateSelector)].some(
+      isFilterOptionsButton,
+    )
   );
 }
 

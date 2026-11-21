@@ -32,7 +32,7 @@ export {
   type ActionResult,
   type ViewedTarget,
 } from './review-page/viewed-actions';
-export { syncFilterButtonReset } from './review-view/filter-button-reset';
+export { syncFilterReset } from './review-view/filter-button-reset';
 export { mountFilterMenu } from './review-view/filter-menu';
 export { ReviewPresenter } from './review-view/presenter';
 export {
