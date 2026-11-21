@@ -460,30 +460,6 @@ describe('review app lifecycle', () => {
     app.stop();
   });
 
-  it('re-collapses a filtered file after GitHub expands it', async () => {
-    const app = await reviewApp({
-      ...metadataSource('src/** group=Code'),
-    });
-    openMenu();
-    const codeFilter = '[data-filter-kind="groups"][data-filter-value="Code"]';
-    await until(() => expect(document.querySelector(codeFilter)).not.toBeNull());
-    document.querySelector<HTMLElement>(codeFilter)?.click();
-    await until(() =>
-      expect(
-        document.querySelector('#diff-app button[aria-label="Expand file"]'),
-      ).not.toBeNull(),
-    );
-    document
-      .querySelector<HTMLButtonElement>('#diff-app button[aria-label="Expand file"]')
-      ?.setAttribute('aria-label', 'Collapse file');
-    await until(() =>
-      expect(document.querySelector('#diff-app button')?.getAttribute('aria-label')).toBe(
-        'Expand file',
-      ),
-    );
-    app.stop();
-  });
-
   it('keeps a collapsed folder and its known files in the review session', async () => {
     const tree = document.querySelector('[role="tree"]');
     const folder = document.createElement('li');
@@ -1767,11 +1743,7 @@ describe('slice focus', () => {
       viewed?.setAttribute('aria-pressed', 'true');
     });
     await until(() => expect(document.getElementById('src/app.ts')?.hidden).toBe(true));
-    await until(() =>
-      expect(document.querySelector('#diff-app button')?.getAttribute('aria-label')).toBe(
-        'Expand file',
-      ),
-    );
+    expect(document.getElementById('diff-app')?.dataset.diffseekFilteredOut).toBe('true');
 
     expect(clicks).toEqual([]);
     app.stop();

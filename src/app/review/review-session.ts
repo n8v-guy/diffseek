@@ -10,7 +10,6 @@ import {
   bindSnapshot,
   classifyPageMutations,
   diffRegionElements,
-  filteredFileExpanded,
   fileTreeElement,
   dismissSnackbar,
   filterMenus,
@@ -318,11 +317,8 @@ export class ReviewSession {
     const pageStale = structureChanged || change.page;
     const staleMenus = change.menu ? menus : menus.filter(menuNeedsRemount);
     if (!pageStale && staleMenus.length === 0 && defaultViewedPaths.length === 0) {
-      // GitHub expanding a filtered file changes neither key. Re-collapse it.
-      const expanded = filteredFileExpanded(root);
-      if (expanded) this.presenter.apply(catalogSnapshot, this.filters);
       this.reattachObservers();
-      if (!expanded) noteReconcileNoop(root);
+      noteReconcileNoop(root);
       return;
     }
     trackDiffseekWrites(root, () => {

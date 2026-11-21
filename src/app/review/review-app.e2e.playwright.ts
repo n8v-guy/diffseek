@@ -578,46 +578,22 @@ test('stays idempotent through a deterministic native-extension action storm', a
   const code = page.locator(
     '[data-filter-kind="groups"][data-filter-value="Code"]',
   );
+  const app = page.locator('#diff-app');
   await code.click();
-  // Resolve on the events themselves: GitHub expands the file, then DiffSeek
-  // collapses it again.
+  await expect(app).toBeHidden();
+  // GitHub's own collapse toggles stay GitHub's: DiffSeek hides, never clicks.
   await page.evaluate(() => {
-    (window as unknown as { recollapsed: Promise<void> }).recollapsed = new Promise((settle) => {
-      let expanded = false;
-      const observer = new MutationObserver(() => {
-        const label = document.querySelector('#diff-app button')?.getAttribute('aria-label');
-        if (label === 'Collapse file') expanded = true;
-        else if (expanded && label === 'Expand file') {
-          observer.disconnect();
-          settle();
-        }
-      });
-      const root = document.getElementById('diff-app');
-      if (root == null) throw new Error('missing diff app');
-      observer.observe(root, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-        attributeFilter: ['aria-label'],
-      });
-    });
+    document.querySelector<HTMLButtonElement>('#diff-app button[aria-label="Collapse file"]')?.click();
   });
-  await page.locator('#diff-app button[aria-label="Expand file"]').click();
-  await page.evaluate(() => (window as unknown as { recollapsed: Promise<void> }).recollapsed);
-  await expect(
-    page.locator('#diff-app button[aria-label="Expand file"]'),
-  ).toHaveCount(1);
-
+  await expect(app.locator('button[aria-label="Expand file"]')).toHaveCount(1);
   await code.click();
-  await expect(
-    page.locator('#diff-app button[aria-label="Collapse file"]'),
-  ).toHaveCount(1);
-  await page.locator('#diff-app button[aria-label="Collapse file"]').click();
+  await expect(app).toBeVisible();
+  await expect(app.locator('button[aria-label="Expand file"]')).toHaveCount(1);
+  await app.locator('button[aria-label="Expand file"]').click();
   await code.click();
   await code.click();
-  await expect(
-    page.locator('#diff-app button[aria-label="Expand file"]'),
-  ).toHaveCount(1);
+  await expect(app).toBeVisible();
+  await expect(app.locator('button[aria-label="Collapse file"]')).toHaveCount(1);
 
   await page.evaluate(() => {
     const tree = document.querySelector('[role="tree"]');
@@ -1112,7 +1088,6 @@ test('brings the first file of a narrowed slice into view', async () => {
   await docsRow.locator('[data-filter-only]').click();
 
   await expect(docs).toBeInViewport();
-  await expect(page).toHaveURL(/#diff-viewed$/);
 });
 
 async function openPull(pull: number, nativeFilter = false): Promise<Page> {

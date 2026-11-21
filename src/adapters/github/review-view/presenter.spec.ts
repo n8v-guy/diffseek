@@ -22,12 +22,6 @@ function excludingConfig() {
   return { snapshot, state, presenter: new ReviewPresenter() };
 }
 
-function restoreOnClick(button: HTMLButtonElement): void {
-  button.addEventListener('click', () => {
-    button.setAttribute('aria-label', 'Collapse file');
-  });
-}
-
 describe('ReviewPresenter', () => {
   beforeEach(() => {
     document.documentElement.innerHTML = fixture;
@@ -35,18 +29,6 @@ describe('ReviewPresenter', () => {
       'afterbegin',
       '<li id="docs" role="treeitem" aria-label="docs"></li>',
     );
-    for (const button of document.querySelectorAll<HTMLButtonElement>(
-      'button[aria-label="Collapse file"], button[aria-label="Expand file"]',
-    )) {
-      button.addEventListener('click', () => {
-        button.setAttribute(
-          'aria-label',
-          button.getAttribute('aria-label') === 'Collapse file'
-            ? 'Expand file'
-            : 'Collapse file',
-        );
-      });
-    }
   });
 
   it('hides a folder once every file under it is viewed and hidden', () => {
@@ -81,181 +63,27 @@ describe('ReviewPresenter', () => {
     expect(document.getElementById('docs')?.hidden).toBe(true);
   });
 
-  it('collapses and mutes non-matching diffs, then restores its own changes', async () => {
+  it('hides non-matching diffs without clicking GitHub, then shows them again', () => {
+    const collapse = document.querySelector<HTMLButtonElement>(
+      '#diff-config button[aria-label="Collapse file"]',
+    );
+    const click = vi.fn();
+    collapse?.addEventListener('click', click);
     const { snapshot, state, presenter } = excludingConfig();
 
     presenter.apply(snapshot, state);
     expect(
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
     ).toBe('true');
-    expect(
-      document
-        .getElementById('diff-config')
-        ?.querySelector('button')
-        ?.getAttribute('aria-label'),
-    ).toBe('Expand file');
 
     presenter.clear(snapshot);
     expect(
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
     ).toBeUndefined();
-    await untilDom(() => {
-      expect(
-        document
-          .getElementById('diff-config')
-          ?.querySelector('button')
-          ?.getAttribute('aria-label'),
-      ).toBe('Collapse file');
-    });
+    expect(click).not.toHaveBeenCalled();
   });
 
-  it('preserves a file the user had already collapsed', () => {
-    const { snapshot, state, presenter } = excludingConfig();
-    snapshot
-      .collapseControl('config/app.json')
-      ?.setAttribute('aria-label', 'Expand file');
-
-    presenter.apply(snapshot, state);
-    presenter.clear(snapshot);
-
-    expect(
-      document
-        .getElementById('diff-config')
-        ?.querySelector('button')
-        ?.getAttribute('aria-label'),
-    ).toBe('Expand file');
-  });
-
-  it('does not claim a collapse that GitHub failed to apply', () => {
-    const snapshot = scanPage(document);
-    if (!snapshot.supported) throw new Error(snapshot.reason);
-    const collapse = snapshot.collapseControl('config/app.json');
-    if (!collapse) throw new Error('Missing fixture binding');
-    collapse.replaceWith(collapse.cloneNode(true));
-
-    const { snapshot: rescanned, state, presenter } = excludingConfig();
-    presenter.apply(rescanned, state);
-
-    const ignoredButton = rescanned.collapseControl('config/app.json');
-    ignoredButton?.addEventListener('click', () => {
-      ignoredButton.setAttribute(
-        'aria-label',
-        ignoredButton.getAttribute('aria-label') === 'Collapse file'
-          ? 'Expand file'
-          : 'Collapse file',
-      );
-    });
-    ignoredButton?.setAttribute('aria-label', 'Expand file');
-    presenter.clear(rescanned);
-
-    expect(ignoredButton?.getAttribute('aria-label')).toBe('Expand file');
-  });
-
-  it('owns and restores a collapse that GitHub commits asynchronously', async () => {
-    const original = document.querySelector<HTMLButtonElement>(
-      '#diff-config button[aria-label="Collapse file"]',
-    );
-    const delayed = original?.cloneNode(true) as HTMLButtonElement | undefined;
-    if (original == null || delayed == null) throw new Error('missing collapse control');
-    original.replaceWith(delayed);
-    delayed.addEventListener('click', () => {
-      queueMicrotask(() => {
-        delayed.setAttribute(
-          'aria-label',
-          delayed.getAttribute('aria-label') === 'Collapse file'
-            ? 'Expand file'
-            : 'Collapse file',
-        );
-      });
-    });
-    const { snapshot, state, presenter } = excludingConfig();
-
-    presenter.apply(snapshot, state);
-    await Promise.resolve();
-    expect(delayed.getAttribute('aria-label')).toBe('Expand file');
-
-    presenter.clear(snapshot);
-    await untilDom(() => {
-      expect(delayed.getAttribute('aria-label')).toBe('Collapse file');
-    });
-  });
-
-  it('confirms and restores through a GitHub-replaced collapse control', async () => {
-    const original = document.querySelector<HTMLButtonElement>(
-      '#diff-config button[aria-label="Collapse file"]',
-    );
-    const detached = original?.cloneNode(true) as HTMLButtonElement | undefined;
-    if (original == null || detached == null) throw new Error('missing collapse control');
-    original.replaceWith(detached);
-    detached.addEventListener('click', () => {
-      setTimeout(() => {
-        const replacement = detached.cloneNode(true) as HTMLButtonElement;
-        replacement.setAttribute('aria-label', 'Expand file');
-        restoreOnClick(replacement);
-        detached.replaceWith(replacement);
-      }, 0);
-    });
-    const { snapshot, state, presenter } = excludingConfig();
-
-    presenter.apply(snapshot, state);
-    await untilDom(() => {
-      expect(
-        document.querySelector(
-          '#diff-config button[aria-label="Expand file"]',
-        ),
-      ).not.toBeNull();
-    });
-    presenter.clear(snapshot);
-    await untilDom(() => {
-      expect(
-        document.querySelector(
-          '#diff-config button[aria-label="Collapse file"]',
-        ),
-      ).not.toBeNull();
-    });
-  });
-
-  it('reconciles when a user expands an actively filtered file', async () => {
-    const { snapshot, state, presenter } = excludingConfig();
-
-    presenter.apply(snapshot, state);
-    await Promise.resolve();
-    const button = document.querySelector<HTMLButtonElement>(
-      '#diff-config button[aria-label="Expand file"]',
-    );
-    button?.click();
-    expect(button?.getAttribute('aria-label')).toBe('Collapse file');
-
-    presenter.apply(snapshot, state);
-    await untilDom(() => {
-      expect(button?.getAttribute('aria-label')).toBe('Expand file');
-    });
-  });
-
-  it('does not re-click when a filtered file is already collapsed', async () => {
-    const button = document.querySelector<HTMLButtonElement>(
-      '#diff-config button[aria-label="Collapse file"]',
-    );
-    let clicks = 0;
-    button?.addEventListener('click', () => {
-      clicks += 1;
-    });
-
-    const { snapshot, state, presenter } = excludingConfig();
-
-    presenter.apply(snapshot, state);
-    await untilDom(() => {
-      expect(button?.getAttribute('aria-label')).toBe('Expand file');
-    });
-    expect(clicks).toBe(1);
-
-    presenter.apply(snapshot, state);
-    await Promise.resolve();
-    expect(clicks).toBe(1);
-    expect(button?.getAttribute('aria-label')).toBe('Expand file');
-  });
-
-  it('leaves an uncollapsible file visible when filters are active', () => {
+  it('hides a filtered-out file that has no collapse control', () => {
     document
       .querySelector('#diff-config button[aria-label="Collapse file"]')
       ?.remove();
@@ -263,10 +91,10 @@ describe('ReviewPresenter', () => {
 
     presenter.apply(snapshot, state);
 
-    expect(document.getElementById('config/app.json')?.hidden).toBe(false);
+    expect(document.getElementById('config/app.json')?.hidden).toBe(true);
     expect(
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
-    ).toBeUndefined();
+    ).toBe('true');
   });
 
   it('keeps a folder visible when it contains an unavailable descendant', () => {
@@ -283,39 +111,6 @@ describe('ReviewPresenter', () => {
     expect(document.getElementById('docs')?.hidden).toBe(false);
   });
 });
-
-/** Resolves once `check` stops throwing, re-checking on DOM mutations only; the timeout is a failure guard. */
-async function untilDom(check: () => void, guardMs = 4_000): Promise<void> {
-  let lastError: unknown;
-  const passes = () => {
-    try {
-      check();
-      return true;
-    } catch (error) {
-      lastError = error;
-      return false;
-    }
-  };
-  if (passes()) return;
-  await new Promise<void>((resolve, reject) => {
-    const observer = new MutationObserver(() => {
-      if (!passes()) return;
-      observer.disconnect();
-      clearTimeout(timer);
-      resolve();
-    });
-    observer.observe(document, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      characterData: true,
-    });
-    const timer = setTimeout(() => {
-      observer.disconnect();
-      reject(lastError instanceof Error ? lastError : new Error('untilDom: condition never held'));
-    }, guardMs);
-  });
-}
 
 describe('revealFirstShown', () => {
   beforeEach(() => {
@@ -366,16 +161,6 @@ describe('revealFirstShown', () => {
     revealFirstShown(snapshot);
 
     expect(clicks).toEqual([]);
-  });
-
-  it('clicks when a filtered-out header is on screen above that diff', () => {
-    const { snapshot, clicks } = firstShownAfterHidingSource();
-    placeRegion('diff-generated', 0, 40);
-    placeRegion('diff-viewed', 40, 300);
-
-    revealFirstShown(snapshot);
-
-    expect(clicks).toEqual(['#diff-viewed']);
   });
 
   it('does nothing when no file is shown', () => {

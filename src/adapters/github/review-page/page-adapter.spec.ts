@@ -222,8 +222,8 @@ describe('scanPage', () => {
     const snapshot = scanPage(document);
     expect(snapshot.supported).toBe(true);
     if (!snapshot.supported) return;
-    expect(snapshot.files.some((file) => file.path === 'src/app.ts')).toBe(true);
-    expect(snapshot.collapseControl('src/app.ts')).toBeNull();
+    expect(snapshot.files.find((file) => file.path === 'src/app.ts')?.capabilities)
+      .toEqual({ collapse: false, viewed: true });
   });
 
   it('owns live control resolution behind the semantic page interface', () => {
@@ -235,7 +235,6 @@ describe('scanPage', () => {
 
     expect('bindings' in snapshot).toBe(false);
     expect(snapshot.viewedControl('src/app.ts')).toBe(replacement);
-    expect(snapshot.collapseControl('src/app.ts')).not.toBeNull();
     expect(snapshot.treeItem('src/app.ts')?.id).toBe('src/app.ts');
   });
 
@@ -276,7 +275,6 @@ describe('scanPage', () => {
       capabilities: { collapse: true, viewed: false },
     });
     expect(snapshot.region('src/renamed.ts')?.id).toBe('diff-renamed');
-    expect(snapshot.collapseControl('src/renamed.ts')).not.toBeNull();
   });
 
   it('keeps tree structure stable when only regions change', () => {

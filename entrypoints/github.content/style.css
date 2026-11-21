@@ -53,7 +53,8 @@
   width: max-content !important;
 }
 
-[data-diffseek-native-hidden] {
+[data-diffseek-native-hidden],
+[data-diffseek-filtered-out='true'] {
   display: none !important;
 }
 
@@ -260,10 +261,6 @@ span.diffseek-menu-count {
   transform: translateY(-50%);
   width: 1rem;
   z-index: 1;
-}
-
-[data-diffseek-filtered-out='true'] {
-  opacity: 0.55;
 }
 
 .diffseek-viewed-icon-anchor {

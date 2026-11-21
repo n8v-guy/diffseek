@@ -25,7 +25,6 @@ export type PageSnapshot =
       treeItem: (path: string) => HTMLElement | null;
       region: (path: string) => HTMLElement | null;
       viewedControl: (path: string) => HTMLButtonElement | null;
-      collapseControl: (path: string) => HTMLButtonElement | null;
     }
   | {
       supported: false;
@@ -186,15 +185,6 @@ export function bindSnapshot(
         )].find((button) => viewedControlState(button) != null) ?? null
       : null;
   };
-  const collapseControl = (path: string) => {
-    const fileRegion = region(path);
-    return fileRegion
-      ? [...fileRegion.querySelectorAll<HTMLButtonElement>(
-          headerButtonSelector,
-        )].find((button) => fileToggleAction(button) != null) ?? null
-      : null;
-  };
-
   return {
     supported: true,
     files,
@@ -208,7 +198,6 @@ export function bindSnapshot(
     treeItem,
     region,
     viewedControl,
-    collapseControl,
   };
 }
 
@@ -258,7 +247,7 @@ function ownersOf(region: HTMLElement): string[] {
   return [...new Set(tooltip?.match(/@[\w-]+(?:\/[\w-]+)?/g) ?? [])];
 }
 
-export function fileToggleAction(
+function fileToggleAction(
   button: HTMLButtonElement,
 ): 'Collapse file' | 'Expand file' | null {
   const name = controlName(button);
