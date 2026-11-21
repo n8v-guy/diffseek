@@ -571,6 +571,76 @@ test('clears native filters before taking over the menu', async () => {
   await expect(reset).toBeDisabled();
 });
 
+test('puts Reset filters on the closed filter button while filters hide files', async () => {
+  const page = await openPull(14);
+  await page.addStyleTag({
+    content: 'button[aria-label="Filter options"] { margin: 40px; width: 32px; height: 32px; }',
+  });
+  await page.getByLabel('Filter options').click();
+  await page.locator('[data-filter-kind="groups"][data-filter-value="Code"]').click();
+  await expect(page.locator('#diff-app')).toBeHidden();
+  const pill = page.locator('[data-diffseek="filter-button-reset"]');
+  await expect(pill).toHaveCount(0);
+
+  await page.evaluate(() => document.querySelector('[role="menu"]')?.remove());
+  await expect(pill).toBeVisible();
+  const button = presentBox(await page.getByLabel('Filter options').boundingBox());
+  const icon = presentBox(await pill.locator('svg').boundingBox());
+  const label = presentBox(await pill.locator('span').boundingBox());
+  // The same spot as in the menu: the icon 6 px inside the top-right corner.
+  const near = (a: number, b: number) => Math.abs(a - b) <= 2;
+  expect({
+    iconAtCorner:
+      near(icon.x + icon.width / 2, button.x + button.width - 6) &&
+      near(icon.y + icon.height / 2, button.y + 6),
+    labelBeforeIcon: label.x < icon.x,
+  }).toEqual({ iconAtCorner: true, labelBeforeIcon: true });
+
+  await pill.click();
+  await expect(page.locator('#diff-app')).toBeVisible();
+  await expect(pill).toHaveCount(0);
+});
+
+test('keeps a tall menu within the screen with its own scroll', async () => {
+  const page = await openPull(15);
+  await page.setViewportSize({ width: 1280, height: 240 });
+  await page.getByLabel('Filter options').click();
+  await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
+  const size = await page.locator('[data-diffseek-menu-owned="true"]').evaluate((menu) => ({
+    client: menu.clientHeight,
+    height: menu.getBoundingClientRect().height,
+    screen: innerHeight,
+    scroll: menu.scrollHeight,
+  }));
+  expect(size.height).toBeLessThanOrEqual(size.screen);
+  expect(size.scroll).toBeGreaterThan(size.client);
+});
+
+test('keeps the pointer inside the row on its way to "only"', async () => {
+  const page = await openPull(16);
+  await page.getByLabel('Filter options').click();
+  const row = page.locator(
+    '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Docs"])',
+  );
+  await row.hover();
+  const item = presentBox(await row.locator('[data-filter-kind]').boundingBox());
+  const only = presentBox(await row.locator('[data-filter-only]').boundingBox());
+  const y = only.y + only.height / 2;
+  const outside = await page.evaluate(
+    ({ from, to, y: line }) => {
+      const target = document.querySelector('[data-filter-kind="groups"][data-filter-value="Docs"]');
+      const docsRow = target?.closest('.diffseek-menu-row');
+      const misses: number[] = [];
+      for (let x = from; x <= to; x += 1) {
+        if (document.elementFromPoint(x, line)?.closest('.diffseek-menu-row') !== docsRow) misses.push(x);
+      }
+      return misses;
+    },
+    { from: Math.round(item.x + item.width / 2), to: Math.round(only.x + only.width / 2), y },
+  );
+  expect(outside).toEqual([]);
+});
+
 test('stays idempotent through a deterministic native-extension action storm', async () => {
   const page = await openPull(4);
   await page.getByLabel('Filter options').click();
@@ -1071,23 +1141,6 @@ test('keeps reconcile passes within budget for cold, warm, and hot loads', async
     parts.forEach((part, index) => slots[index]?.[0]?.insertBefore(part, slots[index][1]));
   });
   await expectReconcilesWithin(page, 'hot', 1);
-});
-
-test('brings the first file of a narrowed slice into view', async () => {
-  const page = await openPull(13);
-  // Tall diffs push later files below the fold, as on a real pull request.
-  await page.addStyleTag({ content: '[role="region"] { min-height: 1200px; }' });
-  const docs = page.locator('#diff-viewed');
-  await expect(docs).not.toBeInViewport();
-
-  await page.getByLabel('Filter options').click();
-  const docsRow = page.locator(
-    '.diffseek-menu-row:has([data-filter-kind="groups"][data-filter-value="Docs"])',
-  );
-  await docsRow.hover();
-  await docsRow.locator('[data-filter-only]').click();
-
-  await expect(docs).toBeInViewport();
 });
 
 async function openPull(pull: number, nativeFilter = false): Promise<Page> {

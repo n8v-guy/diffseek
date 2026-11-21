@@ -6,7 +6,7 @@ import {
 } from './filter-menu-model';
 import { hasTransientExclusions } from './filter-reset';
 import { onlyFocusApplied } from './filter-shortcuts';
-import { configureViewedAction } from './menu-viewed-action';
+import { configureViewedAction, menuCountText } from './menu-viewed-action';
 
 export const filtersRootSelector = '[data-diffseek="filters"]';
 
@@ -143,7 +143,7 @@ function patchRow(
       value: row.value,
       viewedCount: row.viewedCount,
     };
-    const count = `${row.visible}/${row.total}`;
+    const count = menuCountText(row);
     if (countAction.textContent !== count) countAction.textContent = count;
     configureViewedAction(countAction, actionOptions);
     configureViewedAction(viewedAction, actionOptions);
@@ -151,7 +151,7 @@ function patchRow(
   }
   if (countAction || viewedAction) return false;
   if (counter) {
-    const count = `${row.visible}/${row.total}`;
+    const count = menuCountText(row);
     if (counter.textContent !== count) counter.textContent = count;
     return true;
   }

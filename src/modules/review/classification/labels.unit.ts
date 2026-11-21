@@ -41,6 +41,19 @@ src/app.test.ts linguist-generated
     ]);
   });
 
+  it("labels a file generated when GitHub's page says so, without attributes", () => {
+    const files = [
+      { ...file('api/types.pb.go', '.go'), generatedOnPage: true },
+      file('api/types.go', '.go'),
+    ];
+
+    labelFiles(files, { attributes: [], codeowners: [] });
+
+    expect(files.map((entry) => entry.generated)).toEqual([true, false]);
+    expect(files[0]?.labels).toContainEqual({ facet: 'generated', value: 'true' });
+    expect(files[1]?.labels).toContainEqual({ facet: 'generated', value: 'false' });
+  });
+
   it('falls back to the file extension or No extension', () => {
     const files = [
       file('src/app.ts', '.ts'),

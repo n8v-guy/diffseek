@@ -139,8 +139,25 @@ describe('reconcile strategy', () => {
     await nextTask();
     await nextFrame();
 
-    expect(reconciles.count).toBe(passes);
+    // One menu pass replaces the "…" counts; the page is not written again.
+    expect(reconciles.count).toBe(passes + 1);
     expect(apply).toHaveBeenCalledTimes(applies);
+    app.stop();
+  });
+
+  it('shows "…" counts until the first metadata read finishes', async () => {
+    const pull = deferred<DefaultMetadata>();
+    const { app } = await startWith({ readPull: () => pull.promise });
+    const counts = () =>
+      [...document.querySelectorAll('.diffseek-menu-count')].map((count) => count.textContent);
+    expect(counts().length).toBeGreaterThan(0);
+    expect(new Set(counts())).toEqual(new Set(['…']));
+
+    pull.resolve(loaded(cachedText));
+    await nextTask();
+    await nextFrame();
+
+    expect(counts().every((count) => /^\d+\/\d+$/.test(count))).toBe(true);
     app.stop();
   });
 

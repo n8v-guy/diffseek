@@ -616,6 +616,25 @@ describe('mountFilterMenu focus', () => {
   });
 });
 
+describe('mountFilterMenu page focus', () => {
+  it('leaves page focus and the Home key alone when it remounts', () => {
+    const element = menu();
+    const options = { files, filters: filters(), onChange: vi.fn() };
+    mountFilterMenu(element, options);
+    const page = document.createElement('button');
+    document.body.append(page);
+    page.focus();
+
+    delete element.dataset.diffseekMenuOwned;
+    mountFilterMenu(element, options);
+    page.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+
+    expect(element.querySelector('[data-diffseek="filters"]')).not.toBeNull();
+    expect(document.activeElement).toBe(page);
+    page.remove();
+  });
+});
+
 describe('filter menu in-place patch', () => {
   it('updates counts and viewed actions without replacing the menu root', () => {
     const element = menu();

@@ -27,6 +27,7 @@ import {
   showBatchStarted,
   showRememberedFilterDefault,
   showUnavailable,
+  syncFilterButtonReset,
   treeStructureKey,
   watchObservationRoots,
   type markViewed,
@@ -51,6 +52,7 @@ import {
 import type { DefaultMetadata } from '../metadata/reader';
 
 import { ViewedActionExecutor } from './action-executor';
+import { countsSettling, settleCounts } from './counts-settle';
 import {
   consumeMetadataOpportunity,
   loadSessionMetadata,
@@ -106,6 +108,7 @@ export type ReviewSessionOptions = {
   markFiles: typeof markViewed;
   filterDefaults: FilterDefaults;
   writeFilterDefaults: (defaults: FilterDefaults) => Promise<void>;
+  settledCounts: Set<string>;
 };
 
 export class ReviewSession {
@@ -311,7 +314,9 @@ export class ReviewSession {
       filters: this.filters,
       filterDefaults: this.options.filterDefaults,
       generatedDefaultBusy,
+      countsSettling: countsSettling(this.options.settledCounts, this.options.review.key),
     });
+    trackDiffseekWrites(root, () => syncFilterButtonReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }));
     const change = changedSurfaces(this.applied, plan);
     this.applied = plan;
     const pageStale = structureChanged || change.page;
@@ -323,12 +328,8 @@ export class ReviewSession {
     }
     trackDiffseekWrites(root, () => {
       if (pageStale) this.applyPage(catalogSnapshot);
-      if (defaultViewedPaths.length > 0) {
-        this.enqueueDefaultViewed(defaultViewedPaths);
-      }
-      for (const menu of staleMenus) {
-        this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
-      }
+      if (defaultViewedPaths.length > 0) this.enqueueDefaultViewed(defaultViewedPaths);
+      for (const menu of staleMenus) this.mountMenu(menu, catalogSnapshot, generatedDefaultBusy);
     });
     this.reattachObservers();
     this.emitReconciled();
@@ -429,6 +430,7 @@ export class ReviewSession {
       filters: this.filters,
       filterDefaults: this.options.filterDefaults,
       generatedDefaultBusy,
+      countsSettling: countsSettling(this.options.settledCounts, this.options.review.key),
       onChange: () => this.schedule(),
       onFilterDefaultChange: (_facet, state) =>
         this.rememberFilterDefault(state),
@@ -500,6 +502,7 @@ export class ReviewSession {
         this.classifyKey = '';
       },
       reopen: () => this.reopenStaleMetadata(),
+      finished: () => settleCounts(this.options.settledCounts, this.options.review.key, this.options.root, () => this.schedule({ coalesce: true })),
     });
   }
 

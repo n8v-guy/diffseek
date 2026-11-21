@@ -26,17 +26,21 @@ export function menuViewedOverlay(
   return action;
 }
 
+export type MenuCount = { total: number; visible: number; settling?: boolean };
+
+/** Shown/total, or "…" while the counts can still change on their own. */
+export function menuCountText(count: MenuCount): string {
+  return count.settling === true ? '…' : `${count.visible}/${count.total}`;
+}
+
 export function menuViewedCounter(
-  options: MenuViewedActionOptions & {
-    total: number;
-    visible: number;
-  },
+  options: MenuViewedActionOptions & MenuCount,
 ): HTMLButtonElement {
   const counter = document.createElement('button');
   counter.type = 'button';
   counter.className = 'diffseek-menu-count';
   counter.dataset.diffseekMenuCountAction = 'true';
-  counter.textContent = `${options.visible}/${options.total}`;
+  counter.textContent = menuCountText(options);
   configureViewedAction(counter, options);
   return counter;
 }

@@ -38,7 +38,7 @@ export function filterMenus(root: Document): HTMLElement[] {
 
 export function removeInjected(root: Document): void {
   for (const element of root.querySelectorAll(
-    '[data-diffseek="filters"], [data-diffseek="unavailable"], [data-diffseek="snackbars"]',
+    '[data-diffseek="filters"], [data-diffseek="unavailable"], [data-diffseek="snackbars"], [data-diffseek="filter-button-reset"]',
   )) {
     element.remove();
   }

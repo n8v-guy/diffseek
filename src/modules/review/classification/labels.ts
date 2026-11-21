@@ -67,10 +67,15 @@ const languageLabelSource: LabelSource = {
 };
 
 const generatedLabelSource: LabelSource = {
-  prepare: () => ({ attributes }) => [
-    { facet: 'generated', value: String(attributes.generated) },
+  prepare: () => ({ file, attributes }) => [
+    { facet: 'generated', value: String(isGenerated(file, attributes)) },
   ],
 };
+
+/** Repository attributes, or GitHub's page saying so (D001). */
+function isGenerated(file: FileRecord, attributes: DiffSeekAttributes): boolean {
+  return attributes.generated || file.generatedOnPage === true;
+}
 
 const statusLabelSource: LabelSource = {
   prepare: () => ({ file }) => [{ facet: 'statuses', value: file.status }],
@@ -98,7 +103,7 @@ export function labelFiles(
 
   for (const classifiedFile of classified) {
     const { file, attributes } = classifiedFile;
-    file.generated = attributes.generated;
+    file.generated = isGenerated(file, attributes);
     file.labels = uniqueLabels(
       labelers.flatMap((labels) => labels(classifiedFile)),
     );

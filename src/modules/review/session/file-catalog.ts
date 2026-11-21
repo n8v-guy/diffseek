@@ -18,6 +18,7 @@ export class FileCatalog {
       }
       if (!next.capabilities.viewed) next.viewed = existing.viewed;
       if (next.owners.length === 0) next.owners = [...existing.owners];
+      if (existing.generatedOnPage === true) next.generatedOnPage = true;
       Object.assign(existing, next);
     }
   }

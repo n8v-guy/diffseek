@@ -19,7 +19,7 @@ Every file and folder in GitHub's file tree gets a viewed badge. An empty circle
 - Formats, from extensions to aliases (e.g. ts/tsx, cpp/hpp)
 - Viewed, Generated and change status
 
-Every row shows a live count. Hover a row and click "only" to focus; the diff jumps to the first file left.
+Every row shows a live count. Hover a row and click "only" to focus; the page stays where you are.
 
 ![Filter menu: "only" singles out one category](https://github.com/user-attachments/assets/09d088e4-680b-43b7-9c87-32870afa5389)
 
@@ -36,7 +36,7 @@ Owners come from CODEOWNERS, read like GitHub does (.github/, root or docs/; las
 /db/migrations/   @acme/data
 ```
 
-Generated files are marked in .gitattributes files and start hidden. Rules apply
+Generated files are marked in .gitattributes files, or by GitHub's own "not rendered by default" notice, and start hidden. Rules apply
 relative to each file's directory; deeper files override matching parent rules:
 
 ```gitattributes

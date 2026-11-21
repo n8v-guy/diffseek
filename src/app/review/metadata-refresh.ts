@@ -264,6 +264,8 @@ type SessionMetadataLoad = {
   store: (metadata: RepositoryMetadata) => void;
   /** A tree that arrived during this read still needs metadata. Clears settled. */
   reopen: () => boolean;
+  /** A read finished without an immediate retry, whether or not it succeeded. */
+  finished?: () => void;
 };
 
 export function loadSessionMetadata(load: SessionMetadataLoad): void {
@@ -288,6 +290,7 @@ export function loadSessionMetadata(load: SessionMetadataLoad): void {
         return;
       }
       if (load.reopen()) load.state.pending = true;
+      load.finished?.();
     },
     apply: (metadata) => {
       if (JSON.stringify(load.current()) === JSON.stringify(metadata)) return;

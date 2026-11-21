@@ -8,6 +8,8 @@ export type FileRecord = {
   extension: string | null;
   owners: string[];
   generated: boolean;
+  /** GitHub's page says the diff is generated; kept once seen. */
+  generatedOnPage?: boolean;
   status: ChangeStatus;
   viewed: boolean;
   capabilities: {

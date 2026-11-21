@@ -9,6 +9,7 @@ export type ViewInputs = {
     viewed: ReadonlySet<string>;
   };
   generatedDefaultBusy: boolean;
+  countsSettling: boolean;
 };
 
 /**
@@ -37,6 +38,7 @@ export function planView(inputs: ViewInputs): ViewPlan {
     `hidden:${sortedList(inputs.filterDefaults.hidden)}`,
     `viewed:${sortedList(inputs.filterDefaults.viewed)}`,
     flag(inputs.generatedDefaultBusy),
+    flag(inputs.countsSettling),
     ...files.map((file) => Object.values(file).join('\0')),
   ];
   return { page: page.join('\n'), menu: menu.join('\n') };
@@ -65,6 +67,7 @@ function projectFile(file: FileRecord): Record<keyof FileRecord, string> {
     capabilities: Object.values(capabilities).join('\0'),
     extension: file.extension ?? '',
     generated: flag(file.generated),
+    generatedOnPage: flag(file.generatedOnPage === true),
     labels: file.labels.map(projectLabel).join(','),
     owners: file.owners.join(','),
     path: file.path,

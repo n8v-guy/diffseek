@@ -47,8 +47,10 @@
 [data-diffseek-menu-owned='true'] {
   box-sizing: border-box;
   display: flow-root;
+  max-height: 100vh;
   max-width: calc(100vw - 0.5rem);
   min-width: 0 !important;
+  overflow: hidden auto;
   padding: 0 !important;
   width: max-content !important;
 }
@@ -194,6 +196,22 @@
   height: 1.25rem;
   margin: -0.25rem -0.25rem 0 auto;
   padding: 0 0.125rem 0 0.5rem;
+}
+
+/* On GitHub's filter button, the pill takes the menu Reset's corner spot. */
+[data-diffseek='filter-button-reset'] {
+  color: var(--diffseek-foreground);
+  font-family: inherit;
+  position: fixed;
+  right: anchor(right);
+  top: anchor(top);
+  white-space: nowrap;
+}
+
+@supports not (position-anchor: --diffseek) {
+  [data-diffseek='filter-button-reset'] {
+    display: none;
+  }
 }
 
 .diffseek-reset-filters:hover:enabled {

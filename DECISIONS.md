@@ -153,16 +153,17 @@ facet cannot be toggled until repository metadata adds another value.
 ## D011 — Missing filter defaults are not an empty preference
 
 **Decision:** With no saved filter defaults, viewed and generated files are
-hidden. A saved record is honored as saved, even when it hides nothing. Reading
-defaults never writes the implicit state.
+hidden and generated files are auto-viewed. A saved record is honored as saved,
+even when it hides nothing. Reading defaults never writes the implicit state.
 
 **Why:** New installs start with less review noise, without a migration that
 overwrites people who already saved a preference, including show everything.
 **Cost:** The implicit default is reapplied every session until a remembered
 row changes. Viewed and generated clicks both cycle show, hide, always hide.
 The fresh always-hide state returns to show on the first click and does not
-mark files viewed. Marking generated files viewed is a separate saved
-auto-view switch, off until the user turns it on. An older saved setting that
+mark files viewed. Marking generated files viewed is a separate saved auto-view
+switch. It is on with no saved record, so new installs auto-view generated
+files, and a saved record keeps the user's choice. An older saved setting that
 hid generated files and marked them viewed reads as always hide plus auto-view.
 
 ## D012 — Notifications are generic and short
@@ -257,21 +258,17 @@ that never goes quiet keeps serving that copy; newly arrived diff paths are
 still read. After one immediate retry, a second failure uses that same
 wait, and a path that arrived during the failure is part of the next try.
 
-## D017 — A narrowing filter click moves to the slice
+## D017 — Filter clicks never move the page
 
-**Decision:** Only the reviewer changes filters, so a page pass whose filters
-differ from the last applied ones and that hides a shown file is their
-narrowing. DiffSeek then clicks the first shown file in GitHub's tree, as the
-reviewer would, and GitHub scrolls its diff into view. The click follows that
-pass's writes. It is skipped when no file is shown, or when that file's diff is
-already on screen. Widening, page loads, streamed files, auto-view, and other
-passes keep the filters as they are and never move the page.
+**Decision:** Filter changes only hide and show files. DiffSeek does not click
+GitHub's tree or scroll after a narrowing, so the page and the URL hash stay
+where the reviewer left them.
 
-**Why:** Hiding files (D019) keeps the scroll position, so after "only" the
-slice can start a screen or more away. GitHub's own tree click
-keeps its scrolling, selection, and URL as they would be (D001). **Cost:** A
-narrowing click also moves the reviewer away from a spot deeper in the slice,
-and the URL hash changes to that file.
+**Why:** Clicking the first shown file after "only" moved reviewers away from
+their spot and rewrote the URL hash, which read as a jump. The tree already
+lists the slice, so one reviewer click reaches it with GitHub's own scrolling
+(D001). **Cost:** After a narrowing, the slice can start a screen or more away
+from the current scroll position.
 
 ## D018 — Icons are rendered from SVG at build time
 

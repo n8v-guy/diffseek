@@ -260,7 +260,28 @@ describe('scanPage', () => {
         status: 'modified',
         capabilities: { collapse: true, viewed: false },
       }),
+      expect.objectContaining({
+        path: 'api/types.pb.go',
+        status: 'modified',
+        capabilities: { collapse: true, viewed: true },
+      }),
     ]);
+  });
+
+  it("reads GitHub's generated notice as a page fact, and keeps it in a refresh", () => {
+    document.documentElement.innerHTML = edgeCases;
+
+    const snapshot = scanPage(document);
+    if (!snapshot.supported) throw new Error(snapshot.reason);
+
+    expect(
+      snapshot.files.filter((file) => file.generatedOnPage === true).map((file) => file.path),
+    ).toEqual(['api/types.pb.go']);
+
+    const loaded = snapshot.files.map((file) => ({ ...file, generatedOnPage: false }));
+    refreshObservedFiles(document, loaded);
+    expect(loaded.find((file) => file.path === 'api/types.pb.go')?.generatedOnPage).toBe(true);
+    expect(loaded.find((file) => file.path === 'assets/logo.bin')?.generatedOnPage).toBe(false);
   });
 
   it('binds a renamed file to its diff by the tree anchor', () => {

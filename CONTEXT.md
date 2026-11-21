@@ -46,11 +46,19 @@ request reviews. GitHub remains the review system and visual authority.
   hides matching viewed files, they target those files as a reversible escape.
 - Remembered viewed/generated defaults are extension-wide; other exclusions are
   review-scoped.
-- With no saved filter defaults, viewed and generated files are hidden. A saved
-  record wins, even an empty one, and is not rewritten until a remembered row
-  changes.
+- With no saved filter defaults, viewed and generated files are hidden and
+  generated files are auto-viewed. A saved record wins, even an empty one, and
+  is not rewritten until a remembered row changes.
+- A file is generated when .gitattributes or a built-in rule says so, or when
+  GitHub shows its "not rendered by default" notice; a seen notice is kept
+  after the diff loads.
 - Menu reset is always shown, is enabled only for review-scoped exclusions, and
   never changes remembered defaults.
+- While review-scoped exclusions hide files and the menu is closed, the same
+  Reset filters pill sits on the filter button's top-right corner, tethered to
+  GitHub's own CSS anchor name.
+- Menu counts read "…" until the review's first metadata read finishes; the
+  menu is at most the screen's height and scrolls on its own.
 - Auto-view acts through GitHub's rendered controls once per file and lets
   normal page observation reconcile the result.
 - Shared tool configuration lives in one place; tool files stay at the root only
