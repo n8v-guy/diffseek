@@ -49,7 +49,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec wxt zip -b firefox --config config/wxt.config.ts
       - name: Smoke-test the Firefox package
-        run: node scripts/firefox-package-smoke.ts
+        run: |
+          firefox --version
+          node scripts/firefox-package-smoke.ts
       - run: pnpm check:strict
       - if: ${{ !cancelled() }}
         run: pipx run --spec actionlint-py==1.7.12.25 actionlint

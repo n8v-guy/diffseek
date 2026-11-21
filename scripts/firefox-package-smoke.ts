@@ -39,14 +39,18 @@ async function validatePackage(): Promise<string> {
   return archive;
 }
 
-async function debuggerUrl(stderr: Readable, signal: AbortSignal): Promise<string> {
-  const lines = createInterface({ input: stderr, signal });
-  for await (const line of lines) {
-    const match = /^WebDriver BiDi listening on (ws:\/\/127\.0\.0\.1:\d+)$/.exec(line);
-    if (match?.[1]) return `${match[1]}/session`;
-    console.error(line);
-  }
-  throw new Error('Firefox did not start its WebDriver BiDi listener');
+function debuggerUrl(stderr: Readable, signal: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const lines = createInterface({ input: stderr, signal });
+    stderr.once('close', () => lines.close());
+    lines.on('line', (line) => {
+      console.error(line);
+      const match = /^WebDriver BiDi listening on (ws:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+)$/.exec(line);
+      if (match?.[1]) resolve(`${match[1]}/session`);
+    });
+    lines.once('error', reject);
+    lines.once('close', () => reject(new Error('Firefox did not start its WebDriver BiDi listener')));
+  });
 }
 
 type Reply = { id: number } & (
@@ -183,7 +187,6 @@ try {
   try {
     await once(firefox, 'spawn', { signal });
     const url = await debuggerUrl(firefox.stderr, signal);
-    firefox.stderr.pipe(process.stderr);
     const socket = new WebSocket(url);
     try {
       await smoke(socket, archive, html, signal);
