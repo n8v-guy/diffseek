@@ -227,8 +227,7 @@
   font-family: inherit;
   position: absolute;
   right: 0;
-  /* Above the 2rem trigger so the Filter icon's center stays clickable. */
-  top: -0.5rem;
+  top: -0.5rem; /* above the 2rem trigger so the Filter icon's center stays clickable */
   white-space: nowrap;
   z-index: 2;
 }
