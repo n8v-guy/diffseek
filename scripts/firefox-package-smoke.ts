@@ -82,7 +82,7 @@ try {
  await request('POST', `/session/${session}/url`, {
   url: 'https://github.com/octo/repo/pull/8/changes',
  });
- await execute('document.body.innerHTML = arguments[0]; history.pushState({}, "", "/octo/repo/pull/8/changes"); document.dispatchEvent(new Event("turbo:load"));', [instrumented.match(/<body>([\\s\\S]*)<\\/body>/)?.[1] ?? instrumented]);
+ await execute('document.body.innerHTML = arguments[0]; history.pushState({}, "", "/octo/repo/pull/8/changes"); document.dispatchEvent(new Event("turbo:load"));', [instrumented.split('<body>')[1]?.split('</body>')[0] ?? instrumented]);
  await until(async () => await execute(
   'return document.querySelectorAll("[data-diffseek-viewed-action]").length >= 7;',
  ) === true, 'Packaged Firefox extension did not initialize on fixture');
