@@ -80,9 +80,9 @@ try {
  // The fixture is the same recorded GitHub markup used by Chromium tests.
  // Navigate to the permitted origin, then replace the page with the fixture.
  await request('POST', `/session/${session}/url`, {
-  url: 'https://github.com/octo/repo/pull/8/changes',
+  url: 'https://github.com/microsoft/vscode/pull/1/changes',
  });
- await execute('document.body.innerHTML = arguments[0]; history.pushState({}, "", "/octo/repo/pull/8/changes"); document.dispatchEvent(new Event("turbo:load"));', [instrumented.split('<body>')[1]?.split('</body>')[0] ?? instrumented]);
+ await execute('history.pushState({}, "", "/octo/repo/pull/8/changes"); document.body.innerHTML = arguments[0]; document.dispatchEvent(new Event("turbo:load"));', [instrumented.split('<body>')[1]?.split('</body>')[0] ?? instrumented]);
  await until(async () => await execute(
   'return document.querySelectorAll("[data-diffseek-viewed-action]").length >= 7;',
  ) === true, 'Packaged Firefox extension did not initialize on fixture');
