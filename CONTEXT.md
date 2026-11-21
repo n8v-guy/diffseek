@@ -59,10 +59,10 @@ request reviews. GitHub remains the review system and visual authority.
   changes remembered defaults. With nothing to reset the menu shows nothing
   there, keeps its space so rows do not move, and skips it in keyboard order.
 - While review-scoped exclusions hide files and the menu is closed, a Reset
-  filters icon (the ↺ mark alone: transparent, no border, no text) sits on the
-  filter button's top-right corner, as a sibling in GitHub's wrapper. CSS hides
-  it from `data-diffseek-filtered` on `html` and from the trigger's
-  `aria-expanded` state; the node stays in the wrapper.
+  filters icon (the ↺ mark alone: transparent, no border, no text) sits just
+  outside the filter button's top-right corner, as a sibling in GitHub's
+  wrapper. CSS hides it from `data-diffseek-filtered` on `html` and from the
+  trigger's `aria-expanded` state; the node stays in the wrapper.
 - Menu counts read "…" until the review's first metadata read finishes.
 - GitHub's menu overlay caps the menu at the screen's height and scrolls it;
   DiffSeek adds no second scroll container.

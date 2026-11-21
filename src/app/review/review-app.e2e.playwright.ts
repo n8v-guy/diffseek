@@ -606,8 +606,6 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toHaveCount(1);
   await expect(pill).toBeHidden();
   await expect(root).not.toHaveAttribute('data-diffseek-filtered');
-  await page.screenshot({ path: test.info().outputPath('reset-no-filters.png') });
-  await page.screenshot({ path: test.info().outputPath('reset-page.png'), fullPage: true });
 
   await page.getByLabel('Filter options').click();
   await page.locator('[data-filter-kind="groups"][data-filter-value="Code"]').click();
@@ -616,7 +614,6 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'true');
   await expect(pill).toBeHidden();
   await expect(page.locator('[data-diffseek="filters"] [data-reset-filters]')).toBeVisible();
-  await page.screenshot({ path: test.info().outputPath('reset-menu-open.png') });
 
   await pill.evaluate((element) => {
     element.dataset.diffseekPill = 'owned';
@@ -627,24 +624,25 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toBeVisible();
   await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
   await expect(page.locator('[data-diffseek-pill="owned"]')).toHaveCount(1);
-  const button = presentBox(await page.getByLabel('Filter options').boundingBox());
-  const icon = presentBox(await pill.boundingBox());
-  const iconCenter = { x: icon.x + icon.width / 2, y: icon.y + icon.height / 2 };
-  const corner = { x: button.x + button.width, y: button.y };
-  expect(Math.hypot(iconCenter.x - corner.x, iconCenter.y - corner.y)).toBeLessThan(8);
-  expect(Math.hypot(iconCenter.x - (button.x + button.width / 2), iconCenter.y - (button.y + button.height / 2))).toBeGreaterThan(12);
-  await page.screenshot({ path: test.info().outputPath('reset-filters-on.png') });
-  await page.locator('#filter-options').scrollIntoViewIfNeeded();
-  const hit = await page.evaluate(() => {
-    const trigger = document.querySelector('#filter-options');
-    if (!(trigger instanceof HTMLElement)) return 'missing-trigger';
-    const box = trigger.getBoundingClientRect();
-    const target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-    return target instanceof Element ? (target.closest('#filter-options')?.id ?? target.id) : 'none';
-  });
-  expect(hit).toBe('filter-options');
+  const outside = async () => {
+    await page.locator('#filter-options').scrollIntoViewIfNeeded();
+    const button = presentBox(await page.getByLabel('Filter options').boundingBox());
+    const icon = presentBox(await pill.boundingBox());
+    expect(icon.x).toBeGreaterThanOrEqual(button.x + button.width - 1);
+    expect(icon.y + icon.height).toBeLessThanOrEqual(button.y + 1);
+    const hit = await page.evaluate(() => {
+      const trigger = document.querySelector('#filter-options');
+      if (!(trigger instanceof HTMLElement)) return 'missing-trigger';
+      const box = trigger.getBoundingClientRect();
+      const target = document.elementFromPoint(box.right - 1, box.top + 1);
+      return target instanceof Element ? (target.closest('#filter-options')?.id ?? 'other') : 'none';
+    });
+    expect(hit).toBe('filter-options');
+  };
+  await outside();
 
-  await page.locator('#filter-options').click();
+  const corner = presentBox(await page.locator('#filter-options').boundingBox());
+  await page.mouse.click(corner.x + corner.width - 1, corner.y + 1);
   await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
   await expect(page.locator('#diff-app')).toBeHidden();
   await expect(pill).toBeHidden();
@@ -667,6 +665,7 @@ test('puts Reset filters on the closed filter button while filters hide files', 
     1,
   );
   await expect(page.locator('#filter-options + [data-diffseek="filter-button-reset"]')).toHaveCount(1);
+  await outside();
 
   await pill.click();
   await expect(page.locator('#diff-app')).toBeVisible();

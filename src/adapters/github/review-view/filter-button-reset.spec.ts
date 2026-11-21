@@ -59,17 +59,45 @@ describe('ensureFilterButtonReset', () => {
     expect(pill()?.getAttribute('aria-label')).toBe('Reset filters');
     expect(pill()?.querySelector('span')).toBeNull();
     expect(pill()?.querySelector('svg')).not.toBeNull();
-    expect(pill()?.style.getPropertyValue('position-anchor')).toBe('--filter-anchor');
+    expect(pill()?.getAttribute('style')).toBeNull();
     expect(pill()?.previousElementSibling).toBe(live);
     expect(pill()?.parentElement?.id).toBe('filter-wrap');
   });
 
-  it('does not insert beside a static trigger that has no anchor name', () => {
-    for (const button of document.querySelectorAll('button')) {
-      button.removeAttribute('style');
-    }
-    expect(mount()).toBe(false);
-    expect(pill()).toBeNull();
+  it('mounts beside the static trigger, then moves once when the live one is anchored', () => {
+    const live = present(
+      document.querySelector<HTMLButtonElement>('[aria-labelledby="live-label"]'),
+      'live filter button',
+    );
+    live.removeAttribute('style');
+    const staticButton = document.querySelector('[aria-labelledby="static-label"]');
+    expect(mount()).toBe(true);
+    expect(pill()?.previousElementSibling).toBe(staticButton);
+
+    live.setAttribute('style', 'anchor-name: --filter-anchor;');
+    expect(ensureFilterButtonReset(document, { filters: narrowed(), onChange: vi.fn() })).toBe(
+      true,
+    );
+    expect(pill()?.previousElementSibling).toBe(live);
+    expect(ensureFilterButtonReset(document, { filters: narrowed(), onChange: vi.fn() })).toBe(
+      false,
+    );
+    expect(pill()?.getAttribute('style')).toBeNull();
+  });
+
+  it('does not write when only the trigger anchor name changes', () => {
+    const live = present(
+      document.querySelector<HTMLButtonElement>('[aria-labelledby="live-label"]'),
+      'live filter button',
+    );
+    mount();
+    const icon = present(pill(), 'reset icon');
+    live.setAttribute('style', 'anchor-name: --filter-anchor-2;');
+    expect(ensureFilterButtonReset(document, { filters: narrowed(), onChange: vi.fn() })).toBe(
+      false,
+    );
+    expect(icon.getAttribute('style')).toBeNull();
+    expect(icon.previousElementSibling).toBe(live);
   });
 
   it('shows the pill through the page attribute, and hides it while the menu is open', () => {

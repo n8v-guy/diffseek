@@ -1,6 +1,5 @@
 import {
   filterMenus,
-  filterOptionsButton,
   filterOptionsCandidateSelector,
   filterOptionsLabel,
   isFilterOptionsTrigger,
@@ -47,9 +46,29 @@ const structuralSelector = [
  * Ignore diff-body churn (line nodes, highlight classes). Coalesce tree and
  * panel structure. Flush viewed/collapse aria and the filter menu immediately.
  */
+const filterResetSelector = '[data-diffseek="filter-button-reset"]';
+
+/** A child-list edit that separates Reset from the Filter options button. */
+function breaksFilterResetAdjacency(record: MutationRecord): boolean {
+  if (record.type !== 'childList') return false;
+  for (const node of [...record.removedNodes, ...record.addedNodes]) {
+    if (node instanceof Element && node.matches(filterResetSelector)) return true;
+  }
+  const target = record.target;
+  if (!(target instanceof Element)) return false;
+  const trigger = [...target.children].find(
+    (child): child is HTMLButtonElement =>
+      child instanceof HTMLButtonElement && isFilterOptionsTrigger(child),
+  );
+  const reset = trigger?.nextElementSibling;
+  if (!trigger || !(reset instanceof Element)) return false;
+  return !reset.matches(filterResetSelector);
+}
+
 export function classifyPageMutations(
   records: MutationRecord[],
 ): { immediate: true } | { coalesce: true } | null {
+  if (records.some(breaksFilterResetAdjacency)) return { immediate: true };
   const native = records.filter(isNativeMutation);
   if (native.length === 0) return null;
   if (native.some((record) => isImmediateRecord(record))) {
@@ -99,14 +118,17 @@ export function watchObservationRoots(options: {
     });
     options.observedRoots.add(candidate);
   }
-  const filterButton = filterOptionsButton(options.root);
-  if (filterButton && !options.observedRoots.has(filterButton)) {
-    options.observer.observe(filterButton, {
-      subtree: true,
+  // Primer writes anchor-name on the live trigger after the static copy is
+  // already in the page. Watch every candidate so that late style is seen.
+  for (const button of options.root.querySelectorAll<HTMLButtonElement>(
+    filterOptionsCandidateSelector,
+  )) {
+    if (!isFilterOptionsTrigger(button) || options.observedRoots.has(button)) continue;
+    options.observer.observe(button, {
       attributes: true,
       attributeFilter: [ariaLabelAttribute, labelledByAttribute, 'class', 'style'],
     });
-    options.observedRoots.add(filterButton);
+    options.observedRoots.add(button);
   }
 }
 

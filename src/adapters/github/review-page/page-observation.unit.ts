@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { classifyPageMutations } from './page-observation';
+import { classifyPageMutations, watchObservationRoots } from './page-observation';
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -85,6 +85,40 @@ describe('GitHub page mutations', () => {
       trigger.classList.add('open');
     });
     expect(classifyPageMutations(opened)).toEqual({ immediate: true });
+  });
+
+  it('flushes a gap between the filter button and Reset', async () => {
+    document.body.innerHTML =
+      '<div id="wrap"><button aria-label="Filter options"></button><button data-diffseek="filter-button-reset"></button></div>';
+    const wrap = document.getElementById('wrap');
+    const trigger = wrap?.querySelector('button');
+    const split = await captureMutations(() => {
+      trigger?.after(document.createElement('span'));
+    });
+    expect(classifyPageMutations(split)).toEqual({ immediate: true });
+
+    const removed = await captureMutations(() => {
+      wrap?.querySelector('[data-diffseek="filter-button-reset"]')?.remove();
+    });
+    expect(classifyPageMutations(removed)).toEqual({ immediate: true });
+  });
+
+  it('sees a late anchor-name on the live button while the static copy is first', async () => {
+    document.body.innerHTML =
+      '<span id="static-label">Filter options</span><button aria-haspopup="true" aria-labelledby="static-label"></button><span id="live-label">Filter options</span><button id="live" aria-haspopup="true" aria-labelledby="live-label"></button>';
+    const seen: Element[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.target instanceof Element) seen.push(record.target);
+      }
+    });
+    const observed = new Set<Element>();
+    watchObservationRoots({ root: document, observer, observedRoots: observed });
+    const live = document.getElementById('live');
+    live?.setAttribute('style', 'anchor-name: --anchored-overlay-anchor-r1;');
+    await Promise.resolve();
+    observer.disconnect();
+    expect(seen).toContain(live);
   });
 });
 

@@ -214,12 +214,11 @@
   padding: 0 0.125rem 0 0.5rem;
 }
 
-/*
- * Corner reset: the ↺ only, tethered to the trigger's own anchor-name.
- * Positioning GitHub's wrapper (position/overflow) breaks Primer's popover.
- * The icon's center sits on the trigger's top-right corner, so the trigger's
- * center stays the Filter options hit target.
- */
+/* The hit box sits fully outside the trigger: above its top-right corner. */
+:has(> [data-diffseek='filter-button-reset']):not(body, html) {
+  position: relative;
+}
+
 [data-diffseek='filter-button-reset'] {
   background: transparent;
   border: 0;
@@ -228,22 +227,19 @@
   display: none;
   font-family: inherit;
   height: 1rem;
+  left: 100%;
   margin: 0;
   padding: 0;
-  position: fixed;
-  right: anchor(right);
-  top: anchor(top);
-  transform: translate(50%, -50%);
-  white-space: nowrap;
+  position: absolute;
+  top: 0;
+  transform: translateY(-100%);
   width: 1rem;
   z-index: 2;
 }
 
-@supports (position-anchor: --diffseek) {
-  html[data-diffseek-filtered] button[aria-expanded='false'] + [data-diffseek='filter-button-reset'],
-  html[data-diffseek-filtered] button:not([aria-expanded]) + [data-diffseek='filter-button-reset'] {
-    display: flex;
-  }
+html[data-diffseek-filtered] button[aria-expanded='false'] + [data-diffseek='filter-button-reset'],
+html[data-diffseek-filtered] button:not([aria-expanded]) + [data-diffseek='filter-button-reset'] {
+  display: flex;
 }
 
 [data-diffseek='filter-button-reset']:hover:enabled,

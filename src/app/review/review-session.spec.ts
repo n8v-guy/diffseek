@@ -79,6 +79,34 @@ describe('review session stream batching', () => {
 
     app.stop();
   });
+
+  it('repairs Reset adjacency after a sibling is inserted or the icon is removed', async () => {
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => emptyMetadata,
+      refreshDefault: async () => ({
+        metadata: emptyMetadata,
+        cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
+        changed: false,
+      }),
+      readPull: async (_review, base) => ({ ...base, changed: false }),
+    });
+    const trigger = document.querySelector('button[aria-label="Filter options"]');
+    const icon = () => document.querySelector('[data-diffseek="filter-button-reset"]');
+    expect(trigger?.nextElementSibling).toBe(icon());
+
+    trigger?.after(document.createElement('span'));
+    expect(trigger?.nextElementSibling).not.toBe(icon());
+    await nextTask();
+    expect(trigger?.nextElementSibling).toBe(icon());
+
+    icon()?.remove();
+    expect(icon()).toBeNull();
+    await nextTask();
+    expect(trigger?.nextElementSibling).toBe(icon());
+    app.stop();
+  });
 });
 
 describe('reconcile strategy', () => {
