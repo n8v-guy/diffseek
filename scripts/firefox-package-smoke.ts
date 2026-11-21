@@ -80,14 +80,16 @@ async function runReview(): Promise<void> {
   }
 
   const docs = '[id="docs/readme.md"]';
+  const filteredOut = 'data-diffseek-filtered-out';
+  const filteredDocs = `${docs}[${filteredOut}="true"]`;
   const menu = '[data-diffseek="filters"]';
-  await waitFor(`${docs}[hidden] [data-diffseek-viewed-action]`);
+  await waitFor(`${filteredDocs} [data-diffseek-viewed-action]`);
   (await waitFor('button[aria-label="Filter options"]')).click();
   (await waitFor(`${menu} [data-filter-kind="viewed"][data-filter-value="true"]`)).click();
-  await waitFor(`${docs}:not([hidden])`);
+  await waitFor(`${docs}:not([${filteredOut}])`);
   (await waitFor(`${menu} [data-filter-kind="groups"][data-filter-value="Docs"]`)).click();
-  await waitFor(`${docs}[hidden]`);
-  if (document.getElementById('src/app.ts')?.hidden !== false) {
+  await waitFor(filteredDocs);
+  if (document.getElementById('src/app.ts')?.hasAttribute(filteredOut) !== false) {
     throw new Error('The Docs filter must leave src/app.ts visible');
   }
 }
