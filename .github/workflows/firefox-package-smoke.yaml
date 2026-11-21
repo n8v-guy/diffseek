@@ -24,10 +24,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec wxt zip -b firefox --config config/wxt.config.ts
-      - name: Install Firefox and Selenium
+      - name: Install Firefox and geckodriver
         run: |
           sudo apt-get update
           sudo apt-get install -y firefox
-          python -m pip install --user selenium==4.38.0
+          curl -fsSL https://github.com/mozilla/geckodriver/releases/download/v0.36.0/geckodriver-v0.36.0-linux64.tar.gz | sudo tar -xz -C /usr/local/bin
       - name: Validate Firefox ZIP and smoke-test runtime
-        run: python scripts/firefox-package-smoke.py
+        run: node --experimental-strip-types scripts/firefox-package-smoke.ts
