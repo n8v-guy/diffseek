@@ -76,11 +76,24 @@ describe('ReviewPresenter', () => {
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
     ).toBe('true');
 
-    presenter.clear(snapshot);
+    presenter.reset(snapshot);
     expect(
       document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
     ).toBeUndefined();
     expect(click).not.toHaveBeenCalled();
+  });
+
+  it('shows again on teardown only the rows it hid', () => {
+    const { snapshot, state, presenter } = excludingConfig();
+    presenter.apply(snapshot, state);
+    // GitHub hides a row on its own after the pass.
+    const native = document.getElementById('src/app.ts');
+    if (native) native.hidden = true;
+    expect(document.getElementById('config/app.json')?.hidden).toBe(true);
+    presenter.reset(snapshot);
+
+    expect(document.getElementById('config/app.json')?.hidden).toBe(false);
+    expect(native?.hidden).toBe(true);
   });
 
   it('hides a filtered-out file that has no collapse control', () => {

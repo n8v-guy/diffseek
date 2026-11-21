@@ -32,6 +32,8 @@ function onScreen(region: HTMLElement): boolean {
 }
 
 export class ReviewPresenter {
+  /** Rows this session hid, so teardown shows only those again. */
+  private readonly hiddenRows = new Set<HTMLElement>();
   private shown: Set<string> | null = null;
   private filterKey = '';
 
@@ -51,7 +53,7 @@ export class ReviewPresenter {
       const region = snapshot.region(file.path);
       if (!treeItem || !region) continue;
       const hide = !matching.has(file.path);
-      if (treeItem.hidden !== hide) treeItem.hidden = hide;
+      this.setHidden(treeItem, hide);
       if (!hide) {
         if (region.dataset.diffseekFilteredOut != null) {
           delete region.dataset.diffseekFilteredOut;
@@ -63,20 +65,6 @@ export class ReviewPresenter {
 
     this.updateFolders(snapshot, matching, index);
     this.revealIfNarrowed(snapshot, filters, matching);
-  }
-
-  clear(snapshot: SupportedSnapshot): void {
-    for (const file of snapshot.files) {
-      const treeItem = snapshot.treeItem(file.path);
-      if (treeItem) treeItem.hidden = false;
-      delete snapshot.region(file.path)?.dataset.diffseekFilteredOut;
-    }
-    const tree = snapshot.tree();
-    for (const item of tree?.querySelectorAll<HTMLElement>(
-      '[role="treeitem"][id]',
-    ) ?? []) {
-      item.hidden = false;
-    }
   }
 
   /**
@@ -102,8 +90,18 @@ export class ReviewPresenter {
   }
 
   reset(snapshot?: SupportedSnapshot | null): void {
-    if (snapshot) this.clear(snapshot);
+    for (const file of snapshot?.files ?? []) {
+      delete snapshot?.region(file.path)?.dataset.diffseekFilteredOut;
+    }
+    for (const row of this.hiddenRows) row.hidden = false;
+    this.hiddenRows.clear();
     this.shown = null;
+  }
+
+  private setHidden(row: HTMLElement, hide: boolean): void {
+    if (row.hidden !== hide) row.hidden = hide;
+    if (hide) this.hiddenRows.add(row);
+    else this.hiddenRows.delete(row);
   }
 
   private updateFolders(
@@ -120,9 +118,7 @@ export class ReviewPresenter {
     for (const item of tree?.querySelectorAll<HTMLElement>(
       '[role="treeitem"][id]',
     ) ?? []) {
-      if (filePaths.has(item.id)) continue;
-      const hide = !visible.has(item.id);
-      if (item.hidden !== hide) item.hidden = hide;
+      if (!filePaths.has(item.id)) this.setHidden(item, !visible.has(item.id));
     }
   }
 }
