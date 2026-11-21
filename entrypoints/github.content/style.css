@@ -5,25 +5,43 @@
   --diffseek-hover: #e4dcff;
   --diffseek-badge: #d8ccff;
   --diffseek-accent: #633cbe;
+  --diffseek-dark-background: #2b2146;
+  --diffseek-dark-foreground: #e6dcff;
+  --diffseek-dark-border: #a475f9;
+  --diffseek-dark-hover: #3a2c5e;
+  --diffseek-dark-badge: #4a376f;
+  --diffseek-dark-accent: #d2b8ff;
 }
 
-[data-color-mode='dark'] {
-  --diffseek-background: #2b2146;
-  --diffseek-foreground: #e6dcff;
-  --diffseek-border: #a475f9;
-  --diffseek-hover: #3a2c5e;
-  --diffseek-badge: #4a376f;
-  --diffseek-accent: #d2b8ff;
+[data-color-mode='dark'][data-dark-theme^='dark'],
+[data-color-mode='light'][data-light-theme^='dark'] {
+  --diffseek-background: var(--diffseek-dark-background);
+  --diffseek-foreground: var(--diffseek-dark-foreground);
+  --diffseek-border: var(--diffseek-dark-border);
+  --diffseek-hover: var(--diffseek-dark-hover);
+  --diffseek-badge: var(--diffseek-dark-badge);
+  --diffseek-accent: var(--diffseek-dark-accent);
 }
 
 @media (prefers-color-scheme: dark) {
-  [data-color-mode='auto'] {
-    --diffseek-background: #2b2146;
-    --diffseek-foreground: #e6dcff;
-    --diffseek-border: #a475f9;
-    --diffseek-hover: #3a2c5e;
-    --diffseek-badge: #4a376f;
-    --diffseek-accent: #d2b8ff;
+  [data-color-mode='auto'][data-dark-theme^='dark'] {
+    --diffseek-background: var(--diffseek-dark-background);
+    --diffseek-foreground: var(--diffseek-dark-foreground);
+    --diffseek-border: var(--diffseek-dark-border);
+    --diffseek-hover: var(--diffseek-dark-hover);
+    --diffseek-badge: var(--diffseek-dark-badge);
+    --diffseek-accent: var(--diffseek-dark-accent);
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  [data-color-mode='auto'][data-light-theme^='dark'] {
+    --diffseek-background: var(--diffseek-dark-background);
+    --diffseek-foreground: var(--diffseek-dark-foreground);
+    --diffseek-border: var(--diffseek-dark-border);
+    --diffseek-hover: var(--diffseek-dark-hover);
+    --diffseek-badge: var(--diffseek-dark-badge);
+    --diffseek-accent: var(--diffseek-dark-accent);
   }
 }
 
