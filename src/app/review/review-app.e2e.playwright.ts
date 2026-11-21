@@ -109,7 +109,7 @@ test('replaces the classic review route with the modern experience', async () =>
     await page.route(url, async (route) => {
       await route.fulfill({
         contentType: 'text/html',
-        body: instrument(fixtureSource),
+        body: fixtureSource,
       });
     });
   }
@@ -1064,7 +1064,7 @@ test('hides nested generated files across streamed paths and cached revisits', a
     await page.route('https://github.com/octo/repo/pull/430/changes', async (route) => {
       await route.fulfill({
         contentType: 'text/html',
-        body: instrument(source),
+        body: source,
       });
     });
     await page.goto('https://github.com/octo/repo/pull/430/changes');
@@ -1266,7 +1266,14 @@ async function openPull(pull: number, nativeFilter = false): Promise<Page> {
     async (route) => {
       await route.fulfill({
         contentType: 'text/html',
-        body: instrument(fixtureSource, nativeFilter),
+        body: nativeFilter
+          ? fixtureSource.replace(
+              '</body>',
+              '<ul role="menu" aria-label="Filter options">' +
+                '<li role="none"><button type="button">Clear filters</button></li>' +
+                '</ul></body>',
+            )
+          : fixtureSource,
       });
     },
   );
@@ -1355,103 +1362,4 @@ async function writeFilterDefaults(
 ): Promise<void> {
   if (defaults == null) await removeExtensionStorage();
   else await setExtensionStorage(defaults);
-}
-
-function instrument(source: string, startsWithNativeFilter = false): string {
-  return source
-    .replace(
-      '<ul role="tree" aria-label="File Tree">',
-      `<ul role="tree" aria-label="File Tree">
-      <li id="src" role="treeitem" aria-label="src"><div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-directory-fill"></svg></div><div>src</div></li>
-      <li id="docs" role="treeitem" aria-label="docs"><div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-directory-fill"></svg></div><div>docs</div></li>`,
-    )
-    .replace(
-      '</body>',
-      `${
-        startsWithNativeFilter
-          ? `<ul role="menu" aria-label="Filter options">
-          <li role="none"><button type="button">Clear filters</button></li>
-        </ul>`
-          : ''
-      }
-    <script>
-      // Every toast text ever shown: toasts are replaced or dismissed by
-      // later events, so assertions read the history, not the screen.
-      const toastLog = [];
-      new MutationObserver(() => {
-        for (const toast of document.querySelectorAll('[data-diffseek="snackbar"]')) {
-          if (toastLog.at(-1) === toast.textContent) continue;
-          toastLog.push(toast.textContent);
-          document.documentElement.dataset.toastLog = toastLog.join('\\n');
-        }
-      }).observe(document.documentElement, {
-        childList: true,
-        characterData: true,
-        subtree: true,
-      });
-      document.documentElement.dataset.nativeActions = 'idle';
-      let pendingNativeActions = 0;
-      let nativeJsChecked = true;
-      const commitNativeAction = (action) => {
-        pendingNativeActions += 1;
-        document.documentElement.dataset.nativeActions = 'pending';
-        setTimeout(() => {
-          action();
-          pendingNativeActions -= 1;
-          if (pendingNativeActions === 0) {
-            document.documentElement.dataset.nativeActions = 'idle';
-          }
-        }, Number(document.documentElement.dataset.nativeDelay ?? 10));
-      };
-      document.addEventListener('click', (event) => {
-        const clearNativeFilters = event.target.closest('button');
-        if (clearNativeFilters?.textContent.trim() === 'Clear filters') {
-          document.documentElement.dataset.nativeFilterCleared = 'true';
-          clearNativeFilters.closest('[role="menu"]')?.remove();
-          return;
-        }
-        const nativeFilter = event.target.closest(
-          '[role="menuitemcheckbox"][aria-label=".js"]',
-        );
-        if (nativeFilter) {
-          nativeJsChecked = !nativeJsChecked;
-          nativeFilter.setAttribute(
-            'aria-checked',
-            String(nativeJsChecked),
-          );
-          nativeFilter.closest('[role="menu"]')?.remove();
-          return;
-        }
-        const button = event.target.closest('button');
-        if (!button) return;
-        if (button.getAttribute('aria-label') === 'Filter options' || button.id === 'filter-options') {
-          if (!document.querySelector('[role="menu"]')) {
-            document.body.insertAdjacentHTML(
-              'beforeend',
-              '<ul role="menu" aria-label="Filter options">' +
-                '<li role="menuitemcheckbox" aria-label=".js" aria-checked="' +
-                nativeJsChecked +
-                '">.js</li>' +
-                '<li role="separator">Native separator</li>' +
-                '</ul>',
-            );
-          }
-        } else if (button.getAttribute('aria-label') === 'Collapse file') {
-          commitNativeAction(() => button.setAttribute('aria-label', 'Expand file'));
-        } else if (button.getAttribute('aria-label') === 'Expand file') {
-          commitNativeAction(() => button.setAttribute('aria-label', 'Collapse file'));
-        } else if (button.getAttribute('aria-label') === 'Not Viewed') {
-          commitNativeAction(() => {
-            button.setAttribute('aria-label', 'Viewed');
-            button.setAttribute('aria-pressed', 'true');
-          });
-        } else if (button.getAttribute('aria-label') === 'Viewed') {
-          commitNativeAction(() => {
-            button.setAttribute('aria-label', 'Not Viewed');
-            button.setAttribute('aria-pressed', 'false');
-          });
-        }
-      });
-    </script></body>`,
-    );
 }
