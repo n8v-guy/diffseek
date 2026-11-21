@@ -1,4 +1,4 @@
-import { filterResetNeedsRepair } from '../review-view/filter-button-reset';
+import { filterResetNeedsRepair, filterTriggerMark } from '../review-view/filter-button-reset';
 import {
   filterMenus,
   filterOptionsCandidateSelector,
@@ -217,7 +217,10 @@ function isFilterMenuRecord(record: MutationRecord): boolean {
 function isFilterOptionsButton(target: Element): boolean {
   const button =
     target instanceof HTMLButtonElement ? target : target.closest('button');
-  return button instanceof HTMLButtonElement && isFilterOptionsTrigger(button);
+  return (
+    button instanceof HTMLButtonElement &&
+    (button.hasAttribute(filterTriggerMark) || isFilterOptionsTrigger(button))
+  );
 }
 
 function containsFilterMenu(node: Node): boolean {

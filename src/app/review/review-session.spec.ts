@@ -144,6 +144,8 @@ describe('review session stream batching', () => {
     await nextTask();
     expect(live?.nextElementSibling).toBe(icon());
     expect(writes - baseline).toBe(4);
+
+    await retainAcrossAnchorSwap(live, icon, () => writes - baseline);
     document.removeEventListener('diffseek-reconciled', countWrite);
     app.stop();
   });
@@ -563,6 +565,33 @@ function regionNode(index: number): HTMLElement {
   region.setAttribute('role', 'region');
   region.innerHTML = `<div data-diff-header-wrapper="true"><button aria-label="Collapse file"></button><h3><code>src/file-${index}.ts</code></h3><button aria-label="Not Viewed" aria-pressed="false">Viewed</button></div>`;
   return region;
+}
+
+/** A second anchored trigger must not steal Reset, and a rename drops the mark. */
+async function retainAcrossAnchorSwap(
+  live: HTMLElement | null,
+  icon: () => Element | null,
+  writesSince: () => number,
+): Promise<void> {
+  if (!live) throw new Error('missing live trigger');
+  const other = document.createElement('button');
+  other.setAttribute('aria-label', 'Filter options');
+  other.setAttribute('style', 'anchor-name: --other-anchor;');
+  live.parentElement?.append(other);
+  await nextTask();
+  live.removeAttribute('style');
+  await nextTask();
+  live.setAttribute('style', 'anchor-name: --filter-anchor;');
+  other.removeAttribute('style');
+  await nextTask();
+  expect(live.nextElementSibling).toBe(icon());
+  expect(writesSince()).toBe(4);
+
+  live.setAttribute('aria-label', 'Other options');
+  await nextTask();
+  expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+  expect(other.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+  expect(writesSince()).toBe(5);
 }
 
 /** Lets observer callbacks queue their pass, then runs the next task. */

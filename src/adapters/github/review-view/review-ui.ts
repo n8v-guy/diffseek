@@ -398,7 +398,7 @@ export function isFilterOptionsTrigger(button: HTMLButtonElement): boolean {
 }
 
 /** The CSS anchor name Primer sets inline on an overlay's trigger. */
-export function cssAnchorName(element: Element): string | null {
+function cssAnchorName(element: Element): string | null {
   return /anchor-name:\s*([^;,\s]+)/.exec(element.getAttribute('style') ?? '')?.[1] ?? null;
 }
 

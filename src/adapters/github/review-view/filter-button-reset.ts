@@ -2,7 +2,7 @@ import type { FilterDefaults } from '@diffseek/browser';
 import type { FilterState } from '@diffseek/review';
 
 import { hasTransientExclusions, resetTransientExclusions } from './filter-reset';
-import { anchoredFilterTrigger, cssAnchorName, isFilterOptionsTrigger } from './review-ui';
+import { anchoredFilterTrigger, isFilterOptionsTrigger } from './review-ui';
 
 type ResetOptions = {
   filters: FilterState;
@@ -11,7 +11,8 @@ type ResetOptions = {
 };
 
 const buttonResetSelector = '[data-diffseek="filter-button-reset"]';
-const triggerMark = 'data-diffseek-filter-trigger';
+/** Set on the trigger Reset was mounted beside. CSS shows the icon only next to it. */
+export const filterTriggerMark = 'data-diffseek-filter-trigger';
 /** Page-level flag. CSS shows the corner Reset icon while review filters hide files. */
 const filteredAttribute = 'data-diffseek-filtered';
 const latestOptions = new WeakMap<HTMLButtonElement, ResetOptions>();
@@ -62,21 +63,17 @@ function syncFilteredAttribute(
 }
 
 /**
- * The live trigger, once it has Primer's anchor name. The same node stays
- * the trigger while it is connected and still named, so a later anchor
- * rewrite does not move the icon.
+ * Anchor-name is only how the first trigger is found. The same node stays
+ * the trigger while it is connected and still named Filter options.
  */
 function liveTrigger(root: Document): HTMLButtonElement | null {
   const remembered = retainedTrigger.get(root);
-  if (
-    remembered?.isConnected &&
-    isFilterOptionsTrigger(remembered) &&
-    cssAnchorName(remembered) != null
-  ) {
+  if (remembered?.isConnected && isFilterOptionsTrigger(remembered)) {
     return remembered;
   }
   const next = anchoredFilterTrigger(root);
   if (next) retainedTrigger.set(root, next);
+  else retainedTrigger.delete(root);
   return next;
 }
 
@@ -131,8 +128,15 @@ function cornerButton(): HTMLButtonElement {
 }
 
 function place(icon: HTMLButtonElement, trigger: HTMLButtonElement): void {
-  if (!trigger.hasAttribute(triggerMark)) trigger.setAttribute(triggerMark, '');
+  if (!trigger.hasAttribute(filterTriggerMark)) trigger.setAttribute(filterTriggerMark, '');
   trigger.after(icon);
+}
+
+/** A renamed trigger must not keep showing Reset. */
+function clearTriggerMark(button: HTMLButtonElement | undefined): boolean {
+  if (!button?.isConnected || !button.hasAttribute(filterTriggerMark)) return false;
+  button.removeAttribute(filterTriggerMark);
+  return true;
 }
 
 /**
@@ -141,12 +145,15 @@ function place(icon: HTMLButtonElement, trigger: HTMLButtonElement): void {
  * connected, named, and adjacent.
  */
 function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean {
+  const previous = retainedTrigger.get(root);
   const trigger = liveTrigger(root);
   const icon = owned(root);
-  const removedCopies = discardCopies(root);
+  const released = previous?.isSameNode(trigger) ? undefined : previous;
+  let wrote = discardCopies(root);
+  if (clearTriggerMark(released)) wrote = true;
   if (!trigger?.parentElement) {
     if (icon) latestOptions.set(icon, options);
-    return removedCopies;
+    return wrote;
   }
   if (icon) {
     latestOptions.set(icon, options);
@@ -154,7 +161,7 @@ function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean
       icon.parentElement?.isSameNode(trigger.parentElement) &&
       trigger.nextElementSibling?.isSameNode(icon)
     ) {
-      return removedCopies;
+      return wrote;
     }
     place(icon, trigger);
     return true;
