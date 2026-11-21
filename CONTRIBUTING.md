@@ -93,8 +93,9 @@ CI runs on pushes and pull requests, including forks. After CI passes on a
 push to main, live end-to-end runs and then the release for the same commit.
 The release builds the store packages and publishes a versioned GitHub release
 with a changelog. Its version comes from the commit count. Live end-to-end can
-also be started by hand on any branch whose head passed CI. It needs the
-signed-in session as a repository secret.
+also be started by hand on any branch whose head passed push CI. Only main
+continues to a release. Live end-to-end needs the signed-in session as a
+repository secret.
 
 Publishing to the Chrome Web Store is manual and only from main. It requires
 CI, live end-to-end, and the release to be green for that commit, and it
