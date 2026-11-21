@@ -1,26 +1,30 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { readFile, readdir } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { execFile } from 'node:child_process';
-import { createServer } from 'node:net';
 
 const exec = promisify(execFile);
 const root = resolve(import.meta.dirname, '..');
-const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8')) as unknown;
+assert.ok(typeof pkg === 'object' && pkg !== null && 'version' in pkg && typeof pkg.version === 'string');
 const { stdout } = await exec('git', ['rev-list', '--count', 'HEAD'], { cwd: root });
 const [major, minor] = pkg.version.split('.');
 const expected = `${major}.${minor}.${stdout.trim()}`;
 const zipFiles = (await readdir(resolve(root, '.output'))).filter((name) => name.endsWith('-firefox.zip'));
 assert.equal(zipFiles.length, 1, 'Expected exactly one Firefox ZIP');
-const archive = resolve(root, '.output', zipFiles[0]!);
+const zipFile = zipFiles[0];
+assert.ok(zipFile !== undefined);
+const archive = resolve(root, '.output', zipFile);
 const { stdout: manifestText } = await exec('unzip', ['-p', archive, 'manifest.json']);
-const manifest = JSON.parse(manifestText);
+const manifest = JSON.parse(manifestText) as unknown;
+assert.ok(typeof manifest === 'object' && manifest !== null && 'version' in manifest && typeof manifest.version === 'string' && 'manifest_version' in manifest && 'browser_specific_settings' in manifest);
+const gecko = manifest.browser_specific_settings as { gecko: { id: string } };
 assert.equal(manifest.manifest_version, 3);
 assert.equal(manifest.version, expected, 'Manifest version must match full git history');
-assert.equal(manifest.browser_specific_settings.gecko.id, 'diffseek@n8v.me');
+assert.equal(gecko.gecko.id, 'diffseek@n8v.me');
 await exec('unzip', ['-t', archive]);
 
 const fixture = await readFile(resolve(root, 'src/adapters/github/review-page/fixtures/github-pr.html'), 'utf8');
@@ -34,9 +38,9 @@ const port = await new Promise<number>((ok, fail) => {
  server.once('error', fail);
  server.listen(0, '127.0.0.1', () => {
   const address = server.address();
-  if (!address || typeof address === 'string') return fail(new Error('Missing port'));
-  const port = address.port;
-  server.close(() => ok(port));
+  if (address === null || typeof address === 'string') return fail(new Error('Missing port'));
+  const allocatedPort = address.port;
+  server.close(() => ok(allocatedPort));
  });
 });
 const driver = spawn('geckodriver', ['--port', String(port)], { stdio: 'pipe' });
@@ -78,7 +82,7 @@ try {
  await request('POST', `/session/${session}/url`, {
   url: 'https://github.com/octo/repo/pull/8/changes',
  });
- await execute('document.open(); document.write(arguments[0]); document.close();', [instrumented]);
+ await execute('document.body.innerHTML = arguments[0]; history.pushState({}, "", "/octo/repo/pull/8/changes"); document.dispatchEvent(new Event("turbo:load"));', [instrumented.match(/<body>([\\s\\S]*)<\\/body>/)?.[1] ?? instrumented]);
  await until(async () => await execute(
   'return document.querySelectorAll("[data-diffseek-viewed-action]").length >= 7;',
  ) === true, 'Packaged Firefox extension did not initialize on fixture');
