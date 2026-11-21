@@ -532,7 +532,8 @@ test('clears native filters before taking over the menu', async () => {
     page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Always hidden');
   const reset = page.locator('[data-reset-filters]');
-  await expect(reset).toHaveCount(0);
+  await expect(reset).toHaveText('Reset filters');
+  await expect(reset).toBeDisabled();
   await ownerRow.hover();
   await ownerOnly.click();
   await expect(
@@ -540,29 +541,26 @@ test('clears native filters before taking over the menu', async () => {
       '[data-filter-kind="owners"]:not([data-filter-value="@source"])',
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
-  await expect(reset).toBeVisible();
-  const [buttonRect, rootRect, menuRect] = await Promise.all([
+  await expect(reset).toBeEnabled();
+  const [buttonRect, iconRect, labelRect, rootRect, rowRect] = await Promise.all([
     reset.boundingBox(),
+    reset.locator('svg').boundingBox(),
+    reset.locator('span').boundingBox(),
     page.locator('[data-diffseek="filters"]').boundingBox(),
-    menu.boundingBox(),
+    viewed.boundingBox(),
   ]);
   const resetButton = presentBox(buttonRect);
   const filtersRoot = presentBox(rootRect);
-  const menuBox = presentBox(menuRect);
-  const resetGeometry = {
-    extendsRight:
-      resetButton.x + resetButton.width > filtersRoot.x + filtersRoot.width,
-    extendsTop: resetButton.y < filtersRoot.y,
-    insideMenuRight:
-      resetButton.x + resetButton.width <= menuBox.x + menuBox.width,
-    insideMenuTop: resetButton.y >= menuBox.y,
-  };
-  expect(resetGeometry).toEqual({
-    extendsRight: true,
-    extendsTop: true,
-    insideMenuRight: true,
-    insideMenuTop: true,
-  });
+  expect({
+    insideMenu:
+      resetButton.x >= filtersRoot.x &&
+      resetButton.x + resetButton.width <= filtersRoot.x + filtersRoot.width &&
+      resetButton.y >= filtersRoot.y,
+    aboveRows: resetButton.y + resetButton.height <= presentBox(rowRect).y,
+    iconBesideLabel:
+      presentBox(iconRect).x < presentBox(labelRect).x &&
+      presentBox(labelRect).x - presentBox(iconRect).x < 24,
+  }).toEqual({ insideMenu: true, aboveRows: true, iconBesideLabel: true });
   await reset.click();
   await expect(menu).toBeVisible();
   await expect(page.locator('#docs\\/readme\\.md')).toBeHidden();
@@ -570,7 +568,7 @@ test('clears native filters before taking over the menu', async () => {
   await expect(
     page.locator('[data-filter-kind="owners"][aria-checked="false"]'),
   ).toHaveCount(0);
-  await expect(reset).toHaveCount(0);
+  await expect(reset).toBeDisabled();
 });
 
 test('stays idempotent through a deterministic native-extension action storm', async () => {

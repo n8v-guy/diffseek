@@ -49,8 +49,8 @@ request reviews. GitHub remains the review system and visual authority.
 - With no saved filter defaults, viewed and generated files are hidden. A saved
   record wins, even an empty one, and is not rewritten until a remembered row
   changes.
-- Menu reset appears only for review-scoped exclusions and never changes
-  remembered defaults.
+- Menu reset is always shown, is enabled only for review-scoped exclusions, and
+  never changes remembered defaults.
 - Auto-view acts through GitHub's rendered controls once per file and lets
   normal page observation reconcile the result.
 - Shared tool configuration lives in one place; tool files stay at the root only

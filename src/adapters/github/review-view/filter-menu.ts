@@ -15,11 +15,9 @@ import {
   filtersRootSelector,
   patchFilterMenu,
   syncMenuItemDisabled,
+  syncResetFilters,
 } from './filter-menu-patch';
-import {
-  hasTransientExclusions,
-  resetTransientExclusions,
-} from './filter-reset';
+import { resetTransientExclusions } from './filter-reset';
 import {
   alwaysReadAction,
   itemOnlyAction,
@@ -51,6 +49,7 @@ export function mountFilterMenu(
   const root = document.createElement('li');
   root.dataset.diffseek = 'filters';
   root.setAttribute('role', 'none');
+  appendResetFilters(root, options);
   const content = document.createElement('div');
   content.className = 'diffseek-menu-content';
   root.append(content);
@@ -62,9 +61,6 @@ export function mountFilterMenu(
     }
     appendSeparator(content);
     appendSection(content, block.heading, block.rows);
-  }
-  if (hasTransientExclusions(options.filters, options.filterDefaults)) {
-    appendResetFilters(root, options);
   }
 
   root.addEventListener('keydown', moveFocus);
@@ -207,9 +203,8 @@ function appendResetFilters(
   reset.type = 'button';
   reset.className = 'diffseek-reset-filters';
   reset.dataset.resetFilters = 'true';
-  reset.setAttribute('aria-label', 'Reset filters');
+  syncResetFilters(reset, options);
   reset.setAttribute('role', 'menuitem');
-  reset.title = 'Reset filters';
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   icon.dataset.diffseekResetIcon = 'true';
   icon.setAttribute('aria-hidden', 'true');
@@ -217,7 +212,9 @@ function appendResetFilters(
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', 'M3 3v4h4M3.4 6.4A5 5 0 1 1 3 10');
   icon.append(path);
-  reset.append(icon);
+  const label = document.createElement('span');
+  label.textContent = 'Reset filters';
+  reset.append(icon, label);
   reset.addEventListener('click', () => {
     resetTransientExclusions(options.filters, options.filterDefaults);
     options.onChange();
