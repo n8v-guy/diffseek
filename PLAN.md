@@ -10,7 +10,7 @@ filter and batch-mark without introducing a new review workflow.
 - Integrate only into GitHub's existing file tree, filter menu, diffs, collapse
   controls, and viewed controls.
 - Preserve file order.
-- Hide non-matches in the tree; collapse and mute them in the diff.
+- Hide non-matches in the tree and the diff.
 - Avoid GitHub's internal state and undocumented APIs.
 - Ask only for storage and access to GitHub and its raw file host.
 - Defer user-defined review ordering and browser targets beyond Chrome and Firefox.

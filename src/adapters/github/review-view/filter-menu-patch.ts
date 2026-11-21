@@ -24,6 +24,16 @@ export function syncMenuItemDisabled(
   button.removeAttribute('aria-busy');
 }
 
+export function syncResetFilters(
+  reset: HTMLButtonElement,
+  options: Pick<FilterMenuOptions, 'filters' | 'filterDefaults'>,
+): void {
+  reset.disabled = !hasTransientExclusions(
+    options.filters,
+    options.filterDefaults,
+  );
+}
+
 export function patchFilterMenu(
   menu: HTMLElement,
   options: FilterMenuOptions,
@@ -55,17 +65,13 @@ export function patchFilterMenu(
       return false;
     }
   }
-  const wantsReset = hasTransientExclusions(
-    options.filters,
-    options.filterDefaults,
-  );
-  if (wantsReset !== (root.querySelector('[data-reset-filters]') != null)) {
-    return false;
-  }
+  const reset = root.querySelector<HTMLButtonElement>('[data-reset-filters]');
+  if (!reset) return false;
 
   for (const [index, row] of rows.entries()) {
     if (!patchRow(buttons[index], row)) return false;
   }
+  syncResetFilters(reset, options);
   return true;
 }
 

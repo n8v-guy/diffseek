@@ -8,7 +8,6 @@ import {
   diffHeaderSelector,
   diffRegionElements,
   diffRegionSelector,
-  fileToggleAction,
   fileTreeElement,
   fileTreeItemSelector,
   fileTreeSelector,
@@ -106,16 +105,6 @@ export function watchObservationRoots(options: {
     });
     options.observedRoots.add(filterButton);
   }
-}
-
-/** A filtered-out file GitHub expanded again. Structure and labels stay put. */
-export function filteredFileExpanded(root: Document): boolean {
-  for (const button of root.querySelectorAll<HTMLButtonElement>(
-    '[data-diffseek-filtered-out="true"] button',
-  )) {
-    if (fileToggleAction(button) === 'Collapse file') return true;
-  }
-  return false;
 }
 
 function sharedRegionParent(

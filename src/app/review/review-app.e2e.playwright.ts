@@ -532,7 +532,8 @@ test('clears native filters before taking over the menu', async () => {
     page.locator('[data-diffseek="snackbar"]').last(),
   ).toContainText('Always hidden');
   const reset = page.locator('[data-reset-filters]');
-  await expect(reset).toHaveCount(0);
+  await expect(reset).toHaveText('Reset filters');
+  await expect(reset).toBeDisabled();
   await ownerRow.hover();
   await ownerOnly.click();
   await expect(
@@ -540,29 +541,26 @@ test('clears native filters before taking over the menu', async () => {
       '[data-filter-kind="owners"]:not([data-filter-value="@source"])',
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
-  await expect(reset).toBeVisible();
-  const [buttonRect, rootRect, menuRect] = await Promise.all([
+  await expect(reset).toBeEnabled();
+  const [buttonRect, iconRect, labelRect, rootRect, rowRect] = await Promise.all([
     reset.boundingBox(),
+    reset.locator('svg').boundingBox(),
+    reset.locator('span').boundingBox(),
     page.locator('[data-diffseek="filters"]').boundingBox(),
-    menu.boundingBox(),
+    viewed.boundingBox(),
   ]);
   const resetButton = presentBox(buttonRect);
   const filtersRoot = presentBox(rootRect);
-  const menuBox = presentBox(menuRect);
-  const resetGeometry = {
-    extendsRight:
-      resetButton.x + resetButton.width > filtersRoot.x + filtersRoot.width,
-    extendsTop: resetButton.y < filtersRoot.y,
-    insideMenuRight:
-      resetButton.x + resetButton.width <= menuBox.x + menuBox.width,
-    insideMenuTop: resetButton.y >= menuBox.y,
-  };
-  expect(resetGeometry).toEqual({
-    extendsRight: true,
-    extendsTop: true,
-    insideMenuRight: true,
-    insideMenuTop: true,
-  });
+  const icon = presentBox(iconRect);
+  // Where the icon-only control sat: centered 6 px inside the top-right corner.
+  const cornerOffset = (a: number, b: number) => Math.abs(a - b) <= 2;
+  expect({
+    iconAtCorner:
+      cornerOffset(icon.x + icon.width / 2, filtersRoot.x + filtersRoot.width - 6) &&
+      cornerOffset(icon.y + icon.height / 2, filtersRoot.y + 6),
+    labelBeforeIcon: presentBox(labelRect).x < icon.x,
+    aboveRows: resetButton.y + resetButton.height <= presentBox(rowRect).y,
+  }).toEqual({ iconAtCorner: true, labelBeforeIcon: true, aboveRows: true });
   await reset.click();
   await expect(menu).toBeVisible();
   await expect(page.locator('#docs\\/readme\\.md')).toBeHidden();
@@ -570,7 +568,7 @@ test('clears native filters before taking over the menu', async () => {
   await expect(
     page.locator('[data-filter-kind="owners"][aria-checked="false"]'),
   ).toHaveCount(0);
-  await expect(reset).toHaveCount(0);
+  await expect(reset).toBeDisabled();
 });
 
 test('stays idempotent through a deterministic native-extension action storm', async () => {
@@ -580,46 +578,22 @@ test('stays idempotent through a deterministic native-extension action storm', a
   const code = page.locator(
     '[data-filter-kind="groups"][data-filter-value="Code"]',
   );
+  const app = page.locator('#diff-app');
   await code.click();
-  // Resolve on the events themselves: GitHub expands the file, then DiffSeek
-  // collapses it again.
+  await expect(app).toBeHidden();
+  // GitHub's own collapse toggles stay GitHub's: DiffSeek hides, never clicks.
   await page.evaluate(() => {
-    (window as unknown as { recollapsed: Promise<void> }).recollapsed = new Promise((settle) => {
-      let expanded = false;
-      const observer = new MutationObserver(() => {
-        const label = document.querySelector('#diff-app button')?.getAttribute('aria-label');
-        if (label === 'Collapse file') expanded = true;
-        else if (expanded && label === 'Expand file') {
-          observer.disconnect();
-          settle();
-        }
-      });
-      const root = document.getElementById('diff-app');
-      if (root == null) throw new Error('missing diff app');
-      observer.observe(root, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-        attributeFilter: ['aria-label'],
-      });
-    });
+    document.querySelector<HTMLButtonElement>('#diff-app button[aria-label="Collapse file"]')?.click();
   });
-  await page.locator('#diff-app button[aria-label="Expand file"]').click();
-  await page.evaluate(() => (window as unknown as { recollapsed: Promise<void> }).recollapsed);
-  await expect(
-    page.locator('#diff-app button[aria-label="Expand file"]'),
-  ).toHaveCount(1);
-
+  await expect(app.locator('button[aria-label="Expand file"]')).toHaveCount(1);
   await code.click();
-  await expect(
-    page.locator('#diff-app button[aria-label="Collapse file"]'),
-  ).toHaveCount(1);
-  await page.locator('#diff-app button[aria-label="Collapse file"]').click();
+  await expect(app).toBeVisible();
+  await expect(app.locator('button[aria-label="Expand file"]')).toHaveCount(1);
+  await app.locator('button[aria-label="Expand file"]').click();
   await code.click();
   await code.click();
-  await expect(
-    page.locator('#diff-app button[aria-label="Expand file"]'),
-  ).toHaveCount(1);
+  await expect(app).toBeVisible();
+  await expect(app.locator('button[aria-label="Collapse file"]')).toHaveCount(1);
 
   await page.evaluate(() => {
     const tree = document.querySelector('[role="tree"]');
@@ -1114,7 +1088,6 @@ test('brings the first file of a narrowed slice into view', async () => {
   await docsRow.locator('[data-filter-only]').click();
 
   await expect(docs).toBeInViewport();
-  await expect(page).toHaveURL(/#diff-viewed$/);
 });
 
 async function openPull(pull: number, nativeFilter = false): Promise<Page> {

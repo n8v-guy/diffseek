@@ -23,7 +23,6 @@ export {
 export {
   classifyPageMutations,
   collectReviewNodeIds,
-  filteredFileExpanded,
   watchObservationRoots,
 } from './review-page/page-observation';
 export { nonDefaultBase } from './review-page/base-branch';

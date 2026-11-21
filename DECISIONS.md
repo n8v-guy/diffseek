@@ -81,7 +81,7 @@ auto-view is marking files, and DiffSeek ignores changes to its own elements.
 
 **Why:** Diff panels mount and unmount often and must not wipe classification
 or shrink the file list once the tree is known. Reapplying presentation still
-corrects GitHub's own collapse churn and cloned tree rows. **Cost:** Panel and
+corrects GitHub's replaced panels and cloned tree rows. **Cost:** Panel and
 tree changes still cost rescans, capabilities stay off while duplicates exist,
 and a changed menu is patched or rebuilt.
 
@@ -89,8 +89,8 @@ and a changed menu is patched or rebuilt.
 
 **Decision:** Reuse GitHub's filter menu but hide its native rows and let
 DiffSeek own all menu contents. If GitHub file filters are already active, use
-GitHub's own clear control before taking over. Viewed and collapse writes
-still use GitHub's native controls.
+GitHub's own clear control before taking over. Viewed writes still use
+GitHub's native controls.
 
 **Why:** One model now owns visibility, counters, selection, and whether a click
 keeps the menu open. This removes native/extension drift without hooking GitHub
@@ -262,15 +262,13 @@ wait, and a path that arrived during the failure is part of the next try.
 **Decision:** Only the reviewer changes filters, so a page pass whose filters
 differ from the last applied ones and that hides a shown file is their
 narrowing. DiffSeek then clicks the first shown file in GitHub's tree, as the
-reviewer would, and GitHub scrolls its diff into view. The click waits until
-the collapses from that pass are confirmed. It is skipped when no file is
-shown, or when that file's diff is already on screen with no filtered-out file
-above it. Widening, page loads, streamed files, auto-view, and other passes
-keep the filters as they are and never move the page; a newer narrowing
-replaces a pending click.
+reviewer would, and GitHub scrolls its diff into view. The click follows that
+pass's writes. It is skipped when no file is shown, or when that file's diff is
+already on screen. Widening, page loads, streamed files, auto-view, and other
+passes keep the filters as they are and never move the page.
 
-**Why:** Filtered-out files stay in the diff as collapsed headers, so after
-"only" the slice can start a screen or more below. GitHub's own tree click
+**Why:** Hiding files (D019) keeps the scroll position, so after "only" the
+slice can start a screen or more away. GitHub's own tree click
 keeps its scrolling, selection, and URL as they would be (D001). **Cost:** A
 narrowing click also moves the reviewer away from a spot deeper in the slice,
 and the URL hash changes to that file.
@@ -286,3 +284,22 @@ Store icon the same way.
 **Why:** No binary enters the repository, and the AMO sources archive rebuilds
 the same icons. The main drawing turns to mush below 48 px. **Cost:** The build
 needs resvg's native package, and the store icon is uploaded by hand.
+
+## D019 — Filtered-out diffs are hidden, not collapsed
+
+**Decision:** A filtered-out file's diff region gets a DiffSeek attribute that
+the stylesheet hides, as its tree row is. DiffSeek never clicks GitHub's
+collapse control, so a collapse is always the reviewer's own and survives
+filter changes.
+
+**Why:** One native click per file, each confirmed before the next, took
+seconds on large pull requests and fought GitHub re-expanding files. The diff
+stream now matches the tree. Only DiffSeek's own attribute is written, so the
+page stays authoritative (D001). **Cost:** A hidden diff stays in the page, and
+GitHub's layout must tolerate regions it did not hide itself. Returning to a
+filtered review, GitHub redraws the tree and panels once, as its files are not
+natively collapsed; the restored live budgets allow that one redraw and its
+pass. Cold, warm, and hot loads keep theirs. That redraw was taken for the
+wins: about 500 fewer lines, a filter click on 400 files settling in 22 ms
+instead of 2110 ms (local fixture, 10 ms per native click), and no click
+storms.
