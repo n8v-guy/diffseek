@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <body>
-    <button aria-label="Filter options" aria-expanded="false"></button>
+    <button aria-label="Filter options" aria-expanded="false" style="width: 32px; height: 32px; margin: 40px;"></button>
     <ul role="tree" aria-label="File Tree">
       <li id="src/app.ts" role="treeitem" aria-label="app.ts">
         <div class="tree-item-visual" aria-hidden="true"><svg class="octicon octicon-file-diff"></svg></div>
@@ -125,11 +125,19 @@
           }
         }, Number(document.documentElement.dataset.nativeDelay ?? 10));
       };
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        document.querySelector('[role="menu"]')?.remove();
+        document.querySelector('#filter-options, button[aria-label="Filter options"]')
+          ?.setAttribute('aria-expanded', 'false');
+      });
       document.addEventListener('click', (event) => {
         const clearNativeFilters = event.target.closest('button');
         if (clearNativeFilters?.textContent.trim() === 'Clear filters') {
           document.documentElement.dataset.nativeFilterCleared = 'true';
           clearNativeFilters.closest('[role="menu"]')?.remove();
+          document.querySelector('#filter-options, button[aria-label="Filter options"]')
+            ?.setAttribute('aria-expanded', 'false');
           return;
         }
         const nativeFilter = event.target.closest(
@@ -142,6 +150,8 @@
             String(nativeJsChecked),
           );
           nativeFilter.closest('[role="menu"]')?.remove();
+          document.querySelector('#filter-options, button[aria-label="Filter options"]')
+            ?.setAttribute('aria-expanded', 'false');
           return;
         }
         const button = event.target.closest('button');
@@ -157,6 +167,7 @@
                 '<li role="separator">Native separator</li>' +
                 '</ul>',
             );
+            button.setAttribute('aria-expanded', 'true');
           }
         } else if (button.getAttribute('aria-label') === 'Collapse file') {
           commitNativeAction(() => button.setAttribute('aria-label', 'Expand file'));

@@ -579,42 +579,62 @@ test('clears native filters before taking over the menu', async () => {
 
 test('puts Reset filters on the closed filter button while filters hide files', async () => {
   const page = await openPull(14);
-  // GitHub's captured button: named by aria-labelledby, anchored by Primer.
+  // GitHub's captured button: named by aria-labelledby, in a tight wrapper.
   await page.evaluate(() => {
     const button = document.querySelector('button[aria-label="Filter options"]');
-    button?.insertAdjacentHTML('beforebegin', '<span id="filter-options-label" hidden>Filter options</span>');
-    button?.removeAttribute('aria-label');
-    button?.setAttribute('id', 'filter-options');
-    button?.setAttribute('aria-haspopup', 'true');
-    button?.setAttribute('aria-labelledby', 'filter-options-label');
-    button?.setAttribute('style', 'anchor-name: --anchored-overlay-anchor-r1;');
+    if (!button) return;
+    const wrap = document.createElement('span');
+    wrap.id = 'filter-options-wrap';
+    button.before(wrap);
+    wrap.append(button);
+    button.insertAdjacentHTML(
+      'beforebegin',
+      '<span id="filter-options-label" hidden>Filter options</span>',
+    );
+    button.removeAttribute('aria-label');
+    button.setAttribute('id', 'filter-options');
+    button.setAttribute('aria-haspopup', 'true');
+    button.setAttribute('aria-labelledby', 'filter-options-label');
+    button.setAttribute('style', 'anchor-name: --anchored-overlay-anchor-r1;');
   });
   await page.addStyleTag({
-    content: '#filter-options { margin: 40px; width: 32px; height: 32px; }',
+    content:
+      '#filter-options-wrap { display: inline-block; margin: 40px; } #filter-options { width: 32px; height: 32px; }',
   });
+  const pill = page.locator('[data-diffseek="filter-button-reset"]');
+  const root = page.locator('html');
+  await expect(pill).toHaveCount(1);
+  await expect(pill).toBeHidden();
+  await expect(root).not.toHaveAttribute('data-diffseek-filtered');
+
   await page.getByLabel('Filter options').click();
   await page.locator('[data-filter-kind="groups"][data-filter-value="Code"]').click();
   await expect(page.locator('#diff-app')).toBeHidden();
-  const pill = page.locator('[data-diffseek="filter-button-reset"]');
-  await expect(pill).toHaveCount(0);
+  await expect(root).toHaveAttribute('data-diffseek-filtered', 'true');
+  await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'true');
+  await expect(pill).toBeHidden();
+  await expect(page.locator('[data-diffseek="filters"] [data-reset-filters]')).toBeVisible();
 
-  await page.evaluate(() => document.querySelector('[role="menu"]')?.remove());
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[role="menu"]')).toHaveCount(0);
+  await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'false');
   await expect(pill).toBeVisible();
-  const button = presentBox(await page.getByLabel('Filter options').boundingBox());
-  const icon = presentBox(await pill.locator('svg').boundingBox());
-  const label = presentBox(await pill.locator('span').boundingBox());
-  // The same spot as in the menu: the icon 6 px inside the top-right corner.
-  const near = (a: number, b: number) => Math.abs(a - b) <= 2;
-  expect({
-    iconAtCorner:
-      near(icon.x + icon.width / 2, button.x + button.width - 6) &&
-      near(icon.y + icon.height / 2, button.y + 6),
-    labelBeforeIcon: label.x < icon.x,
-  }).toEqual({ iconAtCorner: true, labelBeforeIcon: true });
+  await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
+  await page.locator('#filter-options').scrollIntoViewIfNeeded();
+  const corner = presentBox(await page.locator('#filter-options').boundingBox());
+  await page.mouse.click(corner.x + corner.width - 1, corner.y + 1);
+  await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
+  await expect(page.locator('#diff-app')).toBeHidden();
+  await expect(pill).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(pill).toBeVisible();
 
   await pill.click();
   await expect(page.locator('#diff-app')).toBeVisible();
-  await expect(pill).toHaveCount(0);
+  await expect(page.locator('[role="menu"]')).toHaveCount(0);
+  await expect(pill).toBeHidden();
+  await expect(pill).toHaveCount(1);
+  await expect(root).not.toHaveAttribute('data-diffseek-filtered');
 });
 
 test('scrolls a tall menu in GitHub\'s overlay only, down to its last row', async () => {

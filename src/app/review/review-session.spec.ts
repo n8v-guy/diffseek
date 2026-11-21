@@ -79,6 +79,76 @@ describe('review session stream batching', () => {
 
     app.stop();
   });
+
+  it('mounts Reset once on the named trigger and does not write through hydration', async () => {
+    document.querySelector('button[aria-label="Filter options"]')?.replaceWith(
+      Object.assign(document.createElement('div'), { id: 'filter-wrap' }),
+    );
+    document.getElementById('filter-wrap')?.insertAdjacentHTML(
+      'beforeend',
+      `<span id="static-label">Filter options</span>
+      <button aria-haspopup="true" aria-expanded="false" aria-labelledby="static-label"></button>
+      <span id="live-label">Filter options</span>
+      <button id="live" aria-haspopup="true" aria-expanded="false" aria-labelledby="live-label"></button>`,
+    );
+    let writes = 0;
+    const countWrite = () => {
+      writes += 1;
+    };
+    document.addEventListener('diffseek-reconciled', countWrite);
+    const app = await startReviewApp({
+      root: document,
+      pathname: () => '/octo/repo/pull/1/changes',
+      readImmediate: async () => emptyMetadata,
+      refreshDefault: async () => ({
+        metadata: emptyMetadata,
+        cache: { files: {}, refreshedAt: 0, pulls: [], overlays: {} },
+        changed: false,
+      }),
+      readPull: async (_review, base) => ({ ...base, changed: false }),
+    });
+    const icon = () => document.querySelector('[data-diffseek="filter-button-reset"]');
+    const live = document.getElementById('live');
+    expect(icon()).toBeNull();
+    const baseline = writes;
+
+    live?.setAttribute('style', 'anchor-name: --filter-anchor;');
+    await nextTask();
+    expect(live?.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(1);
+
+    live?.setAttribute('style', 'anchor-name: --filter-anchor-2;');
+    await nextTask();
+    live?.removeAttribute('style');
+    await nextTask();
+    expect(writes - baseline).toBe(1);
+    expect(live?.nextElementSibling).toBe(icon());
+
+    live?.setAttribute('style', 'anchor-name: --filter-anchor;');
+    live?.after(document.createElement('span'));
+    await nextTask();
+    expect(live?.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(2);
+
+    document.getElementById('filter-wrap')?.append(document.createElement('span'));
+    await nextTask();
+    expect(writes - baseline).toBe(2);
+
+    document.getElementById('filter-wrap')?.append(icon()?.cloneNode(true) ?? '');
+    await nextTask();
+    expect(document.querySelectorAll('[data-diffseek="filter-button-reset"]')).toHaveLength(1);
+    expect(live?.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(3);
+
+    icon()?.remove();
+    await nextTask();
+    expect(live?.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(4);
+
+    await retainAcrossAnchorSwap(live, icon, () => writes - baseline);
+    document.removeEventListener('diffseek-reconciled', countWrite);
+    app.stop();
+  });
 });
 
 describe('reconcile strategy', () => {
@@ -495,6 +565,33 @@ function regionNode(index: number): HTMLElement {
   region.setAttribute('role', 'region');
   region.innerHTML = `<div data-diff-header-wrapper="true"><button aria-label="Collapse file"></button><h3><code>src/file-${index}.ts</code></h3><button aria-label="Not Viewed" aria-pressed="false">Viewed</button></div>`;
   return region;
+}
+
+/** A second anchored trigger must not steal Reset, and a rename drops the mark. */
+async function retainAcrossAnchorSwap(
+  live: HTMLElement | null,
+  icon: () => Element | null,
+  writesSince: () => number,
+): Promise<void> {
+  if (!live) throw new Error('missing live trigger');
+  const other = document.createElement('button');
+  other.setAttribute('aria-label', 'Filter options');
+  other.setAttribute('style', 'anchor-name: --other-anchor;');
+  live.parentElement?.append(other);
+  await nextTask();
+  live.removeAttribute('style');
+  await nextTask();
+  live.setAttribute('style', 'anchor-name: --filter-anchor;');
+  other.removeAttribute('style');
+  await nextTask();
+  expect(live.nextElementSibling).toBe(icon());
+  expect(writesSince()).toBe(4);
+
+  live.setAttribute('aria-label', 'Other options');
+  await nextTask();
+  expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+  expect(other.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
+  expect(writesSince()).toBe(5);
 }
 
 /** Lets observer callbacks queue their pass, then runs the next task. */

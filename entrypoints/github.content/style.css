@@ -214,20 +214,40 @@
   padding: 0 0.125rem 0 0.5rem;
 }
 
-/* On GitHub's filter button, the pill takes the menu Reset's corner spot. */
-[data-diffseek='filter-button-reset'] {
-  color: var(--diffseek-foreground);
-  font-family: inherit;
-  position: fixed;
-  right: anchor(right);
-  top: anchor(top);
-  white-space: nowrap;
+/* Fallback only. :where loses to a class such as position: sticky. */
+:where(:not(body, html):has(> [data-diffseek='filter-button-reset'])) {
+  position: relative;
 }
 
-@supports not (position-anchor: --diffseek) {
-  [data-diffseek='filter-button-reset'] {
-    display: none;
-  }
+[data-diffseek='filter-button-reset'] {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--diffseek-foreground);
+  cursor: pointer;
+  display: none;
+  font-family: inherit;
+  height: 1rem;
+  justify-content: center;
+  left: 100%;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  transform: translateY(-100%);
+  width: 1rem;
+  z-index: 2;
+}
+
+html[data-diffseek-filtered] [data-diffseek-filter-trigger][aria-expanded='false'] + [data-diffseek='filter-button-reset'],
+html[data-diffseek-filtered] [data-diffseek-filter-trigger]:not([aria-expanded]) + [data-diffseek='filter-button-reset'] {
+  display: flex;
+}
+
+[data-diffseek='filter-button-reset']:focus-visible {
+  outline: 2px solid var(--diffseek-accent);
+  outline-offset: 1px;
 }
 
 .diffseek-reset-filters:hover:enabled {
@@ -239,7 +259,8 @@
   visibility: hidden;
 }
 
-.diffseek-reset-filters svg {
+.diffseek-reset-filters svg,
+[data-diffseek='filter-button-reset'] svg {
   fill: none;
   height: 0.875rem;
   stroke: currentcolor;

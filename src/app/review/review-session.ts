@@ -27,7 +27,7 @@ import {
   showBatchStarted,
   showRememberedFilterDefault,
   showUnavailable,
-  syncFilterButtonReset,
+  syncFilterReset,
   treeStructureKey,
   watchObservationRoots,
   type markViewed,
@@ -316,7 +316,7 @@ export class ReviewSession {
       generatedDefaultBusy,
       countsSettling: countsSettling(this.options.settledCounts, this.options.review.key),
     });
-    const resetMoved = trackDiffseekWrites(root, () => syncFilterButtonReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }));
+    const resetMoved = trackDiffseekWrites(root, () => syncFilterReset(root, { filters: this.filters, filterDefaults: this.options.filterDefaults, onChange: () => this.schedule() }));
     const change = changedSurfaces(this.applied, plan);
     this.applied = plan;
     const pageStale = structureChanged || change.page;

@@ -1,6 +1,7 @@
+import { filterResetNeedsRepair, filterTriggerMark } from '../review-view/filter-button-reset';
 import {
   filterMenus,
-  filterOptionsButton,
+  filterOptionsCandidateSelector,
   filterOptionsLabel,
   isFilterOptionsTrigger,
   isNativeMutation,
@@ -49,6 +50,7 @@ const structuralSelector = [
 export function classifyPageMutations(
   records: MutationRecord[],
 ): { immediate: true } | { coalesce: true } | null {
+  if (records.some(filterResetNeedsRepair)) return { immediate: true };
   const native = records.filter(isNativeMutation);
   if (native.length === 0) return null;
   if (native.some((record) => isImmediateRecord(record))) {
@@ -98,14 +100,17 @@ export function watchObservationRoots(options: {
     });
     options.observedRoots.add(candidate);
   }
-  const filterButton = filterOptionsButton(options.root);
-  if (filterButton && !options.observedRoots.has(filterButton)) {
-    options.observer.observe(filterButton, {
-      subtree: true,
+  // Primer writes anchor-name on the live trigger after the static copy is
+  // already in the page. Watch every candidate so that late style is seen.
+  for (const button of options.root.querySelectorAll<HTMLButtonElement>(
+    filterOptionsCandidateSelector,
+  )) {
+    if (!isFilterOptionsTrigger(button) || options.observedRoots.has(button)) continue;
+    options.observer.observe(button, {
       attributes: true,
-      attributeFilter: [ariaLabelAttribute, labelledByAttribute, 'aria-expanded', 'class', 'style'],
+      attributeFilter: [ariaLabelAttribute, labelledByAttribute, 'class', 'style'],
     });
-    options.observedRoots.add(filterButton);
+    options.observedRoots.add(button);
   }
 }
 
@@ -212,7 +217,10 @@ function isFilterMenuRecord(record: MutationRecord): boolean {
 function isFilterOptionsButton(target: Element): boolean {
   const button =
     target instanceof HTMLButtonElement ? target : target.closest('button');
-  return button instanceof HTMLButtonElement && isFilterOptionsTrigger(button);
+  return (
+    button instanceof HTMLButtonElement &&
+    (button.hasAttribute(filterTriggerMark) || isFilterOptionsTrigger(button))
+  );
 }
 
 function containsFilterMenu(node: Node): boolean {
@@ -224,7 +232,9 @@ function containsFilterMenu(node: Node): boolean {
   if (node.childElementCount > overlayChildLimit) return false;
   return (
     node.querySelector('[role="menu"]') != null ||
-    [...node.querySelectorAll('button[aria-haspopup]')].some(isFilterOptionsButton)
+    [...node.querySelectorAll(filterOptionsCandidateSelector)].some(
+      isFilterOptionsButton,
+    )
   );
 }
 
