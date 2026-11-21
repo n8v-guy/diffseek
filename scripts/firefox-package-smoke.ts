@@ -60,7 +60,8 @@ async function until<T>(action: () => Promise<T | false>, message: string): Prom
   try { const result = await action(); if (result !== false) return result; } catch { /* retry */ }
   await delay(500);
  }
- throw new Error(message);
+ const diagnostics = session ? await execute('return {url: location.href, title: document.title, tree: !!document.querySelector(\'[role="tree"]\'), actions: document.querySelectorAll("[data-diffseek-viewed-action]").length, filters: document.querySelectorAll("[data-diffseek]").length, body: document.body?.innerText?.slice(0, 300)};').catch(() => null) : null;
+ throw new Error(`${message}: ${JSON.stringify(diagnostics)}`);
 }
 async function execute(script: string, args: unknown[] = []) {
  return request('POST', `/session/${session}/execute/sync`, { script, args });
