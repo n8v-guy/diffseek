@@ -115,35 +115,36 @@ describe('review session stream batching', () => {
     live?.setAttribute('style', 'anchor-name: --filter-anchor;');
     await nextTask();
     expect(live?.nextElementSibling).toBe(icon());
-    expect(writes - baseline).toBe(1);
+    expect(writes - baseline).toBe(0);
 
     live?.setAttribute('style', 'anchor-name: --filter-anchor-2;');
     await nextTask();
     live?.removeAttribute('style');
     await nextTask();
-    expect(writes - baseline).toBe(1);
+    expect(writes - baseline).toBe(0);
     expect(live?.nextElementSibling).toBe(icon());
 
+    const gap = document.createElement('span');
     live?.setAttribute('style', 'anchor-name: --filter-anchor;');
-    live?.after(document.createElement('span'));
+    live?.after(gap);
     await nextTask();
-    expect(live?.nextElementSibling).toBe(icon());
-    expect(writes - baseline).toBe(2);
+    expect(gap.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(0);
 
     document.getElementById('filter-wrap')?.append(document.createElement('span'));
     await nextTask();
-    expect(writes - baseline).toBe(2);
+    expect(writes - baseline).toBe(0);
 
     document.getElementById('filter-wrap')?.append(icon()?.cloneNode(true) ?? '');
     await nextTask();
     expect(document.querySelectorAll('[data-diffseek="filter-button-reset"]')).toHaveLength(1);
-    expect(live?.nextElementSibling).toBe(icon());
-    expect(writes - baseline).toBe(3);
+    expect(gap.nextElementSibling).toBe(icon());
+    expect(writes - baseline).toBe(1);
 
     icon()?.remove();
     await nextTask();
     expect(live?.nextElementSibling).toBe(icon());
-    expect(writes - baseline).toBe(4);
+    expect(writes - baseline).toBe(1);
 
     await retainAcrossAnchorSwap(live, icon, () => writes - baseline);
     document.removeEventListener('diffseek-reconciled', countWrite);
@@ -585,13 +586,22 @@ async function retainAcrossAnchorSwap(
   other.removeAttribute('style');
   await nextTask();
   expect(live.nextElementSibling).toBe(icon());
-  expect(writesSince()).toBe(4);
+  const parked = writesSince();
 
   live.setAttribute('aria-label', 'Other options');
   await nextTask();
   expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
   expect(other.hasAttribute('data-diffseek-filter-trigger')).toBe(false);
-  expect(writesSince()).toBe(5);
+  expect(writesSince()).toBe(parked + 1);
+
+  live.removeAttribute('aria-label');
+  live.parentElement
+    ?.querySelector('button[aria-labelledby="static-label"]')
+    ?.classList.add('nudge');
+  await nextTask();
+  expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+  expect(live.nextElementSibling).toBe(icon());
+  expect(writesSince()).toBe(parked + 2);
 }
 
 /** Lets observer callbacks queue their pass, then runs the next task. */

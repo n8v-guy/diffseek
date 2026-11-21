@@ -65,16 +65,14 @@ function syncFilteredAttribute(
 /**
  * Anchor-name is only how the first trigger is found. The same node stays
  * the trigger while it is connected and still named Filter options.
+ * Read-only: the observer must not drop the retained node before cleanup.
  */
-function liveTrigger(root: Document): HTMLButtonElement | null {
+function readTrigger(root: Document): HTMLButtonElement | null {
   const remembered = retainedTrigger.get(root);
   if (remembered?.isConnected && isFilterOptionsTrigger(remembered)) {
     return remembered;
   }
-  const next = anchoredFilterTrigger(root);
-  if (next) retainedTrigger.set(root, next);
-  else retainedTrigger.delete(root);
-  return next;
+  return anchoredFilterTrigger(root);
 }
 
 function owned(root: Document): HTMLButtonElement | null {
@@ -96,18 +94,13 @@ function discardCopies(root: Document): boolean {
   return wrote;
 }
 
-/** Child-list edits in the owned wrapper that separate Reset from its trigger. */
+/** The icon was added or removed. A sibling between it and the trigger is not a repair. */
 export function filterResetNeedsRepair(record: MutationRecord): boolean {
   if (record.type !== 'childList') return false;
-  const root = record.target.ownerDocument;
-  if (!root) return false;
-  const icon = owned(root);
   for (const node of [...record.removedNodes, ...record.addedNodes]) {
     if (node instanceof Element && node.matches(buttonResetSelector)) return true;
   }
-  if (!icon?.parentNode?.isSameNode(record.target)) return false;
-  const trigger = liveTrigger(root);
-  return trigger != null && !trigger.nextElementSibling?.isSameNode(icon);
+  return false;
 }
 
 function cornerButton(): HTMLButtonElement {
@@ -140,13 +133,15 @@ function clearTriggerMark(button: HTMLButtonElement | undefined): boolean {
 }
 
 /**
- * Returns whether it changed the DOM. The icon mounts once, beside the
- * anchor-named trigger, and is not written again while that trigger stays
- * connected, named, and adjacent.
+ * Returns whether a review reconcile should count. Mounting, and leaving the
+ * icon where it is when a sibling appears, do not. A move to a new wrapper,
+ * a dropped clone, or a marker change does.
  */
 function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean {
   const previous = retainedTrigger.get(root);
-  const trigger = liveTrigger(root);
+  const trigger = readTrigger(root);
+  if (trigger) retainedTrigger.set(root, trigger);
+  else retainedTrigger.delete(root);
   const icon = owned(root);
   const released = previous?.isSameNode(trigger) ? undefined : previous;
   let wrote = discardCopies(root);
@@ -155,14 +150,16 @@ function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean
     if (icon) latestOptions.set(icon, options);
     return wrote;
   }
+  if (icon?.parentElement?.isSameNode(trigger.parentElement)) {
+    latestOptions.set(icon, options);
+    if (!trigger.hasAttribute(filterTriggerMark)) {
+      trigger.setAttribute(filterTriggerMark, '');
+      wrote = true;
+    }
+    return wrote;
+  }
   if (icon) {
     latestOptions.set(icon, options);
-    if (
-      icon.parentElement?.isSameNode(trigger.parentElement) &&
-      trigger.nextElementSibling?.isSameNode(icon)
-    ) {
-      return wrote;
-    }
     place(icon, trigger);
     return true;
   }
@@ -170,7 +167,7 @@ function ensureFilterButtonReset(root: Document, options: ResetOptions): boolean
   latestOptions.set(created, options);
   ownedIcon.set(root, created);
   place(created, trigger);
-  return true;
+  return wrote;
 }
 
 /** Writes the page attribute and keeps one corner Reset icon beside the live trigger. */
