@@ -50,7 +50,9 @@ export class ReviewPresenter {
       const treeItem = snapshot.treeItem(file.path);
       const region = snapshot.region(file.path);
       if (!treeItem || !region) continue;
-      const hide = !matching.has(file.path);
+      // A file whose diff has not loaded keeps its rows: hiding those made
+      // GitHub redraw the whole tree and every panel on a restored review.
+      const hide = file.capabilities.collapse && !matching.has(file.path);
       if (treeItem.hidden !== hide) treeItem.hidden = hide;
       if (!hide) {
         if (region.dataset.diffseekFilteredOut != null) {
