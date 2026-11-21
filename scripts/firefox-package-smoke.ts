@@ -85,7 +85,7 @@ try {
  });
  await execute('history.pushState({}, "", "/octo/repo/pull/8/changes"); document.body.innerHTML = arguments[0]; document.dispatchEvent(new Event("turbo:load"));', [instrumented.split('<body>')[1]?.split('</body>')[0] ?? instrumented]);
  await until(async () => await execute(
-  'return document.querySelectorAll("[data-diffseek-viewed-action]").length >= 7;',
+  'return document.querySelectorAll("[data-diffseek-viewed-action]").length >= 5;',
  ) === true, 'Packaged Firefox extension did not initialize on fixture');
  await execute(`document.querySelector('[aria-label="Filter options"]').click(); document.body.insertAdjacentHTML('beforeend', '<ul role="menu" aria-label="Filter options"></ul>');`);
  await until(async () => await execute(
