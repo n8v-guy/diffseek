@@ -87,18 +87,21 @@ approach arose from streamed diff and redraw work in
 
 ## 4. Build labels from independent sources
 
-Each observed file gets labels for owner, group, format, viewed, generated, and
-change status. Owner comes from the selected CODEOWNERS rule, or GitHub's owner
-tooltip when no rule matches. Group and language may come from `.gitattributes`;
-otherwise groups use built-in rules and formats use the file extension. Generated
-is true if attributes or a built-in rule say so, **or** GitHub shows its precise
-“not rendered by default” placeholder. A viewed file gets the `viewed=true`
-label. Status comes from the file tree. Sources compose in
+Each observed file gets labels for owner, group, format, generated, and change
+status; a viewed file also gets `viewed=true`. Owner comes from the selected
+CODEOWNERS rule, or GitHub's owner tooltip when no rule matches. Group and
+language may come from `.gitattributes`. If any repository attribute rule sets
+`group` or `linguist-language`, that repository guidance replaces **all**
+built-in group and format rules. Without such guidance, built-in rules apply;
+an unmatched group uses `No groups` and an unmatched format uses the extension.
+Generated is true if attributes or a built-in rule say so, **or** GitHub shows
+its precise “not rendered by default” placeholder. Status comes from the file
+tree. Sources compose in
 [`labels.ts`](src/modules/review/classification/labels.ts), with built-ins in
 [`groups.ts`](src/modules/review/classification/groups.ts) and
 [`bundled-gitattributes.ts`](src/modules/repository-metadata/bundled-gitattributes.ts).
 
-Preserve fallback labels (`No owner`, `No type`, `No extension`) in data, so
+Preserve fallback labels (`No owner`, `No groups`, `No extension`) in data, so
 mixed categories stay filterable. Omit a facet from the menu when its sole
 value is its fallback. This was fixed in
 [`b947760`](https://github.com/n8v-guy/diffseek/commit/b947760) and is D010.
@@ -151,10 +154,11 @@ them. See [`quiet-revalidate.ts`](src/app/review/quiet-revalidate.ts),
 [`commit-guard.ts`](src/modules/repository-metadata/commit-guard.ts), and
 [`bcd271b`](https://github.com/n8v-guy/diffseek/commit/bcd271b).
 
-All background file operations accept a repository, ref, and path rather than
-an arbitrary URL. The extension requires `storage` and hosts on GitHub and its
-raw file domain. The content script asks the service worker to perform these
-reads; [`raw-file.ts`](src/adapters/github/repository-content/raw-file.ts) and
+Raw-file requests accept a repository, ref, and path rather than an arbitrary
+URL. Metadata search accepts a repository, and pull-head lookup accepts a
+repository and pull number. The extension requires `storage` and hosts on
+GitHub and its raw file domain. The content script asks the service worker to
+perform these reads; [`raw-file.ts`](src/adapters/github/repository-content/raw-file.ts) and
 [`wxt.config.ts`](config/wxt.config.ts) show the trust and permission boundary.
 
 ## 6. Use one filter predicate and one projection

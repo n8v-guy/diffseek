@@ -12,7 +12,7 @@ request reviews. GitHub remains the review system and visual authority.
 - **Capability** — a native operation currently available for one observed file.
 - **Label source** — one independently composable classifier for viewed state,
   group, owner, language, generated status, or change status.
-- **Fallback label** — No owner, No type, or No extension, used when
+- **Fallback label** — No owner, No groups, or No extension, used when
   repository metadata supplies no meaningful value for that facet.
 - **Menu takeover** — DiffSeek-owned filter rows inside GitHub's existing menu
   after any active native filters are cleared.
