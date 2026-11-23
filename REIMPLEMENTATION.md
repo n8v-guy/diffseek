@@ -176,7 +176,8 @@ action exposes the same action on its count badge and circle; otherwise its
 count is plain text. “only” appears in a section with multiple values, and
 “all” appears on a section with exclusions. Both work with keyboard focus as
 well as hover, retain the other facets, and keep focus on the corresponding
-control when the menu updates.
+control when the menu updates. Arrow keys move through enabled menu buttons;
+Home and End reach the first and last.
 
 ## 7. Apply the projection without taking over GitHub's review state
 
@@ -193,15 +194,16 @@ tree caused GitHub to rebuild it. The empty/partial/filled visual must also
 have an accessible name and pressed state. Empty is an outline, partial is an
 off-center disc within a ring, and filled is a solid circle with a check.
 Use `aria-pressed="false"`, `"mixed"`, or `"true"` for those states. The
-tree click target occupies the icon corner, leaving the rest of GitHub's
-tree row and navigation behavior intact.
+circle is drawn at the icon corner; delegated clicks within its icon wrapper
+activate the viewed action, while clicks elsewhere in the row retain GitHub's
+navigation behavior.
 
 Keep GitHub's menu overlay and its own screen-height scrolling; do not add a
 second scroll area. Filter rows show a check when included, no mark when
 excluded, and a dash for an extension-wide hidden default. Give the remembered
 rows a tooltip and accessible label that state the current and next cycle
 step. Show the generated row's separate `auto-view` toggle as pressed when on;
-disable its controls while a generated-file batch is in flight. Adapt the
+disable its controls while auto-view work is pending. Adapt the
 extension's colors to GitHub's light, dark, and automatic themes. The closed
 filter button's reset control is a bare reset icon outside its top-right
 corner, visible only while the menu is closed and review-scoped exclusions
@@ -219,7 +221,8 @@ it does not continually enforce viewed state. A generated file with no loaded
 Viewed control remains pending until GitHub supplies one.
 
 Use short, generic status messages for viewed actions and preference changes;
-do not expose repository paths or counts in them. A multi-file action shows
+announce them in a polite live region, and do not expose repository paths or
+counts in them. A multi-file action shows
 progress and then replaces it with its result; a single-file action shows only
 the result. Share one progress message across an auto-view run while files
 stream in. Leave a finished message up for a minimum interval, then dismiss it
