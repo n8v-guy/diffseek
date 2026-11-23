@@ -63,8 +63,9 @@ fixtures and test this boundary against missing, duplicate, renamed, streamed,
 and replaced regions; future GitHub markup still needs live verification.
 
 Keep a path-keyed catalog across short-lived missing panels or empty rescans.
-Preserve labels, known owners, and the fact that GitHub displayed its generated
-notice; refresh viewed state and capabilities from live controls when present.
+Preserve labels, known owners, viewed state when its control is absent, and the
+fact that GitHub displayed its generated notice; refresh viewed state and
+capabilities from live controls when present.
 Changing panels alone must not erase classification. Recompute classification
 when paths, statuses, owners, generated notice, or metadata change.
 
@@ -78,13 +79,17 @@ language may come from `.gitattributes`. If any repository attribute rule sets
 built-in group and format rules. Without such guidance, built-in rules apply;
 an unmatched group uses `No groups` and an unmatched format uses the extension.
 Generated is true if attributes or a built-in rule say so, **or** GitHub shows
-its precise “not rendered by default” placeholder. Status comes from the file
-tree. Compose these sources in one labeling step.
+its precise “not rendered by default” placeholder beside Load Diff. A later
+attribute assignment can clear an earlier generated mark, but cannot clear
+GitHub's observed notice. Status comes from the file tree: added, deleted,
+renamed, or modified. Compose these sources in one labeling step.
 
 Preserve fallback labels (`No owner`, `No groups`, `No extension`) in data, so
 mixed categories stay filterable. Omit a facet from the menu when its sole
 value is its fallback.
 Multiple owners are multiple values of the same facet, not separate files.
+Format labels from repository rules sort before extension labels; other values
+sort by name, with fallback values last.
 
 For repository rules, use one CODEOWNERS location in GitHub's precedence order:
 `.github/CODEOWNERS`, root `CODEOWNERS`, then `docs/CODEOWNERS`. Within that file,
@@ -152,12 +157,26 @@ its badge is still `visible/total`. A folder's circle and click use markable
 descendants passing the active filters **except** the Viewed hiding rule.
 Individual file circles apply to that file. Empty, partial, and filled states
 must derive from the same action scope that a click will use.
+An empty or partial scope marks only its unread files; a filled scope unmarks
+all its markable files. Files without a native Viewed control contribute to
+row totals but never to the action scope.
 
 Only one model may own menu counts and actual visibility. DiffSeek therefore
 clears active native filters before taking over GitHub's menu and restores its
 hidden native items on teardown. Its “only” and “all” shortcuts change just one
-facet. A filter click never scrolls, navigates, changes the URL hash, or
-reorders files.
+facet. A filter click does not programmatically scroll, navigate, change the
+URL hash, or reorder files; hiding panels may still shift the browser's scroll
+offset.
+
+The menu always starts with a Viewed files row, even at zero. Show the Generated
+files row only when generated files exist. Then show Owners, Groups, Formats,
+and Change status in that order when they have values. Rows show
+the number currently visible over their full total. A row with a markable
+action exposes the same action on its count badge and circle; otherwise its
+count is plain text. “only” appears in a section with multiple values, and
+“all” appears on a section with exclusions. Both work with keyboard focus as
+well as hover, retain the other facets, and keep focus on the corresponding
+control when the menu updates.
 
 ## 7. Apply the projection without taking over GitHub's review state
 
@@ -171,7 +190,23 @@ detached nodes, on teardown.
 Draw viewed circles over GitHub's existing icon wrappers with CSS, with a
 small delegated click target. Inserting controls into the React-owned file
 tree caused GitHub to rebuild it. The empty/partial/filled visual must also
-have an accessible name and pressed state.
+have an accessible name and pressed state. Empty is an outline, partial is an
+off-center disc within a ring, and filled is a solid circle with a check.
+Use `aria-pressed="false"`, `"mixed"`, or `"true"` for those states. The
+tree click target occupies the icon corner, leaving the rest of GitHub's
+tree row and navigation behavior intact.
+
+Keep GitHub's menu overlay and its own screen-height scrolling; do not add a
+second scroll area. Filter rows show a check when included, no mark when
+excluded, and a dash for an extension-wide hidden default. Give the remembered
+rows a tooltip and accessible label that state the current and next cycle
+step. Show the generated row's separate `auto-view` toggle as pressed when on;
+disable its controls while a generated-file batch is in flight. Adapt the
+extension's colors to GitHub's light, dark, and automatic themes. The closed
+filter button's reset control is a bare reset icon outside its top-right
+corner, visible only while the menu is closed and review-scoped exclusions
+exist. The menu's Reset filters control keeps its space but is invisible and
+out of keyboard order when there is nothing to reset.
 
 Viewed actions are commands against GitHub's current buttons. Queue commands
 in invocation order; before each file, re-resolve its control and skip if its
@@ -180,7 +215,18 @@ change (or a failure guard if GitHub ignores the click). A user click on a
 native control invalidates a queued command for that file. Cancel the queue on
 session stop. A failed action is reported, not retried in an action storm.
 Auto-view uses the same path once per generated file after metadata settles;
-it does not continually enforce viewed state.
+it does not continually enforce viewed state. A generated file with no loaded
+Viewed control remains pending until GitHub supplies one.
+
+Use short, generic status messages for viewed actions and preference changes;
+do not expose repository paths or counts in them. A multi-file action shows
+progress and then replaces it with its result; a single-file action shows only
+the result. Share one progress message across an auto-view run while files
+stream in. Leave a finished message up for a minimum interval, then dismiss it
+on the reviewer's next click, key press, or wheel scroll. A newer message
+replaces it, and clicking a message dismisses it immediately. Report a partial
+or full batch failure with a short retry prompt; leave the native controls as
+the indication of which files remain unread.
 
 ## 8. Reconcile on meaningful changes, with minimal writes
 
@@ -206,9 +252,12 @@ With no saved defaults, hide viewed and generated files and auto-view generated
 files. A **present** saved record, even an empty one, overrides that implicit
 initial state; reading it does not write it back. The viewed and generated rows
 cycle `Show now` → `Hide now` → `Always hide` → `Show now`.
-“Always hide” is an extension-wide default in local storage. Auto-view is a
-separate saved switch. Other exclusions are review-scoped and saved in that
-tab's session storage, keyed by review, so reload and return restore them while
+“Hide now” affects the current review; “Always hide” is an extension-wide
+default in local storage. A fresh implicit always-hide state advances to Show
+now on its first click. Auto-view is a separate saved switch on the generated
+row; toggling it does not change filter selection. Other exclusions are
+review-scoped and saved in that tab's session storage, keyed by review, so
+reload and return restore them while
 a fresh tab starts from defaults. Reset clears only those review-scoped
 exclusions.
 
