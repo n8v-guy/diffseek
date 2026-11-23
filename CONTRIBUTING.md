@@ -2,7 +2,8 @@
 
 Product language and invariants: [CONTEXT.md](CONTEXT.md). Architecture
 decisions: [DECISIONS.md](DECISIONS.md). The README is the user manual,
-including CODEOWNERS and .gitattributes formats.
+including CODEOWNERS and .gitattributes formats. A from-first-principles
+implementation map is in [REIMPLEMENTATION.md](REIMPLEMENTATION.md).
 
 ## Source architecture
 
