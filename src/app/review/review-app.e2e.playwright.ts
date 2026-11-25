@@ -592,14 +592,18 @@ test('clears native filters before taking over the menu', async () => {
 
 test('puts Reset filters on the closed filter button while filters hide files', async () => {
   const page = await openPull(14);
-  // GitHub's button sits in a wide sticky toolbar. The icon is the next sibling.
+  // GitHub's file-tree header: a tight flex row, search field, then the Filter button.
   await page.evaluate(() => {
     const button = document.querySelector('button[aria-label="Filter options"]');
     if (!button) return;
-    const wrap = document.createElement('span');
+    const wrap = document.createElement('div');
     wrap.id = 'filter-options-wrap';
+    const field = document.createElement('input');
+    field.id = 'filter-files';
+    field.placeholder = 'Filter files...';
+    field.setAttribute('aria-label', 'Filter files');
     button.before(wrap);
-    wrap.append(button);
+    wrap.append(field, button);
     button.insertAdjacentHTML(
       'beforebegin',
       '<span id="filter-options-label" hidden>Filter options</span>',
@@ -613,11 +617,12 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await page.addStyleTag({
     content: `#filter-options-wrap {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      position: sticky;
-      width: 360px;
+      width: 240px;
       margin: 40px;
     }
+    #filter-files { flex: 1 0 200px; height: 32px; box-sizing: border-box; }
     #filter-options { width: 32px; height: 32px; flex: none; }`,
   });
   const pill = page.locator('[data-diffseek="filter-button-reset"]');
@@ -633,19 +638,52 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toBeHidden();
   await expect(page.locator('[data-diffseek="filters"] [data-reset-filters]')).toBeVisible();
 
+  const headerBoxes = () => page.evaluate(() => {
+    const rect = (id: string) => {
+      const el = document.getElementById(id);
+      const box = el?.getBoundingClientRect();
+      if (!box) return null;
+      return {
+        x: Math.round(box.x),
+        y: Math.round(box.y),
+        width: Math.round(box.width),
+        height: Math.round(box.height),
+      };
+    };
+    return {
+      field: rect('filter-files'),
+      button: rect('filter-options'),
+    };
+  });
+  const still = await headerBoxes();
   await page.keyboard.press('Escape');
   await expect(page.locator('[role="menu"]')).toHaveCount(0);
   await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'false');
   await expect(pill).toBeVisible();
   await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
+  const placed = await headerBoxes();
+  expect({
+    fieldX: placed.field?.x,
+    fieldWidth: placed.field?.width,
+    buttonX: placed.button?.x,
+    buttonWidth: placed.button?.width,
+    line: (placed.button?.y ?? 0) - (placed.field?.y ?? 0),
+  }).toEqual({
+    fieldX: still.field?.x,
+    fieldWidth: still.field?.width,
+    buttonX: still.button?.x,
+    buttonWidth: still.button?.width,
+    line: (still.button?.y ?? 0) - (still.field?.y ?? 0),
+  });
   await page.locator('#filter-options').scrollIntoViewIfNeeded();
   const corner = presentBox(await page.locator('#filter-options').boundingBox());
   const iconBox = presentBox(await pill.boundingBox());
-  const beside = iconBox.x - (corner.x + corner.width);
-  expect(beside).toBeGreaterThanOrEqual(2);
-  expect(beside).toBeLessThanOrEqual(6);
-  expect(iconBox.y).toBeGreaterThanOrEqual(corner.y - 1);
-  expect(iconBox.y + iconBox.height).toBeLessThanOrEqual(corner.y + corner.height + 1);
+  const iconMid = iconBox.y + iconBox.height / 2;
+  const buttonMid = corner.y + corner.height / 2;
+  expect(Math.abs(iconMid - buttonMid)).toBeLessThanOrEqual(2);
+  expect(iconBox.x + iconBox.width - corner.x).toBeGreaterThanOrEqual(2);
+  expect(iconBox.x + iconBox.width - corner.x).toBeLessThanOrEqual(6);
+  expect(iconBox.x).toBeLessThan(corner.x);
   await page.mouse.click(corner.x + corner.width - 1, corner.y + 1);
   await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
   await expect(page.locator('#diff-app')).toBeHidden();

@@ -2,7 +2,7 @@ import type { FilterDefaults } from '@diffseek/browser';
 import type { FilterState } from '@diffseek/review';
 
 import { hasTransientExclusions, resetTransientExclusions } from './filter-reset';
-import { anchoredFilterTrigger, isFilterOptionsTrigger } from './review-ui';
+import { anchoredFilterTrigger, cssAnchorName, isFilterOptionsTrigger } from './review-ui';
 
 type ResetOptions = {
   filters: FilterState;
@@ -144,6 +144,8 @@ function cornerButton(): HTMLButtonElement {
 
 function place(icon: HTMLButtonElement, trigger: HTMLButtonElement): void {
   if (!trigger.hasAttribute(filterTriggerMark)) trigger.setAttribute(filterTriggerMark, '');
+  const anchor = cssAnchorName(trigger);
+  if (anchor) icon.style.setProperty('position-anchor', anchor);
   trigger.after(icon);
 }
 
