@@ -546,40 +546,25 @@ test('clears native filters before taking over the menu', async () => {
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
   await expect(reset).toBeVisible();
-  await expect(reset).toHaveText('Reset filters');
+  await expect(reset).toHaveAttribute('aria-label', 'Reset filters');
   expect(await rowOffset()).toBe(rowOffsetWithoutReset);
-  const [buttonRect, iconRect, labelRect, itemRect] = await Promise.all([
-    reset.boundingBox(),
-    reset.locator('svg').boundingBox(),
-    reset.locator('span').boundingBox(),
-    viewed.boundingBox(),
-  ]);
-  const resetButton = presentBox(buttonRect);
-  const icon = presentBox(iconRect);
-  const item = presentBox(itemRect);
-  const pads = await page.evaluate(() => {
-    const pad = (selector: string) => {
-      const el = document.querySelector(selector);
-      if (!el) return '';
+  const rowMetrics = await page.evaluate(() => {
+    const measure = (el: Element) => {
       const style = getComputedStyle(el);
-      return `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`;
+      const box = el.getBoundingClientRect();
+      return {
+        pad: `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`,
+        height: Math.round(box.height),
+      };
     };
-    return {
-      reset: pad('.diffseek-reset-filters'),
-      item: pad('.diffseek-menu-item'),
-    };
+    const items = [...document.querySelectorAll('.diffseek-menu-item')];
+    return { first: measure(items[0]), next: measure(items[1]) };
   });
-  expect({
-    samePadding: pads.reset === pads.item && pads.reset !== '',
-    labelBeforeIcon: presentBox(labelRect).x < icon.x,
-    alignedWithRows: Math.abs(resetButton.x - item.x) <= 1,
-    aboveRows: resetButton.y + resetButton.height <= item.y,
-  }).toEqual({
-    samePadding: true,
-    labelBeforeIcon: true,
-    alignedWithRows: true,
-    aboveRows: true,
-  });
+  expect(rowMetrics.first).toEqual(rowMetrics.next);
+  const menuBox = presentBox(await page.locator('[data-diffseek="filters"]').boundingBox());
+  const badge = presentBox(await reset.boundingBox());
+  expect(Math.abs(badge.x + badge.width / 2 - (menuBox.x + menuBox.width))).toBeLessThanOrEqual(2);
+  expect(Math.abs(badge.y + badge.height / 2 - menuBox.y)).toBeLessThanOrEqual(2);
   await reset.click();
   await expect(menu).toBeVisible();
   await expect(page.locator('#docs\\/readme\\.md')).toBeHidden();
@@ -678,13 +663,9 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await page.locator('#filter-options').scrollIntoViewIfNeeded();
   const corner = presentBox(await page.locator('#filter-options').boundingBox());
   const iconBox = presentBox(await pill.boundingBox());
-  const iconMid = iconBox.y + iconBox.height / 2;
-  const buttonMid = corner.y + corner.height / 2;
-  expect(Math.abs(iconMid - buttonMid)).toBeLessThanOrEqual(2);
-  expect(iconBox.x + iconBox.width - corner.x).toBeGreaterThanOrEqual(2);
-  expect(iconBox.x + iconBox.width - corner.x).toBeLessThanOrEqual(6);
-  expect(iconBox.x).toBeLessThan(corner.x);
-  await page.mouse.click(corner.x + corner.width - 1, corner.y + 1);
+  expect(Math.abs(iconBox.x + iconBox.width / 2 - (corner.x + corner.width))).toBeLessThanOrEqual(2);
+  expect(Math.abs(iconBox.y + iconBox.height / 2 - corner.y)).toBeLessThanOrEqual(2);
+  await page.mouse.click(corner.x + 4, corner.y + corner.height - 4);
   await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
   await expect(page.locator('#diff-app')).toBeHidden();
   await expect(pill).toBeHidden();
