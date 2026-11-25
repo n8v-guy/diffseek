@@ -575,12 +575,12 @@ test('clears native filters before taking over the menu', async () => {
   expect(rowMetrics.first).toEqual(rowMetrics.next);
   const menuBox = presentBox(await page.locator('[data-diffseek="filters"]').boundingBox());
   const badge = presentBox(await reset.boundingBox());
-  const intoMenuX = menuBox.x + menuBox.width - (badge.x + badge.width / 2);
+  const rightDelta = badge.x + badge.width - (menuBox.x + menuBox.width);
   const intoMenuY = badge.y + badge.height / 2 - menuBox.y;
-  expect(intoMenuX).toBeGreaterThanOrEqual(2);
-  expect(intoMenuX).toBeLessThanOrEqual(8);
-  expect(intoMenuY).toBeGreaterThanOrEqual(2);
-  expect(intoMenuY).toBeLessThanOrEqual(8);
+  expect(rightDelta).toBeGreaterThan(-1.5);
+  expect(rightDelta).toBeLessThan(1.5);
+  expect(intoMenuY).toBeGreaterThanOrEqual(1);
+  expect(intoMenuY).toBeLessThanOrEqual(4);
   expect(await reset.evaluate((el) => {
     const box = el.getBoundingClientRect();
     const inset = Math.min(box.height / 2, 8);
@@ -692,10 +692,10 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   const iconBox = presentBox(await pill.boundingBox());
   const intoButtonX = corner.x + corner.width - (iconBox.x + iconBox.width / 2);
   const intoButtonY = iconBox.y + iconBox.height / 2 - corner.y;
-  expect(intoButtonX).toBeGreaterThanOrEqual(2);
-  expect(intoButtonX).toBeLessThanOrEqual(8);
-  expect(intoButtonY).toBeGreaterThanOrEqual(2);
-  expect(intoButtonY).toBeLessThanOrEqual(8);
+  expect(intoButtonX).toBeGreaterThanOrEqual(1);
+  expect(intoButtonX).toBeLessThanOrEqual(3);
+  expect(intoButtonY).toBeGreaterThanOrEqual(1);
+  expect(intoButtonY).toBeLessThanOrEqual(3);
   expect(await pill.evaluate((el) => {
     const box = el.getBoundingClientRect();
     const inset = Math.min(box.height / 2, 6);
@@ -719,6 +719,64 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toBeHidden();
   await expect(pill).toHaveCount(1);
   await expect(root).not.toHaveAttribute('data-diffseek-filtered');
+});
+
+test('keeps Reset filters visible when a short viewport constrains the menu', async () => {
+  const page = await openPull(18);
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.getByLabel('Filter options').click();
+  const ownerRow = page.locator(
+    '.diffseek-menu-row:has([data-filter-kind="owners"][data-filter-value="@source"])',
+  );
+  await ownerRow.hover();
+  await ownerRow.locator('[data-filter-only]').click();
+  const reset = page.locator('[data-diffseek="filters"] [data-reset-filters]');
+  await expect(reset).toBeVisible();
+  await expect(reset).toHaveText('Reset filters');
+  await page.evaluate(() => {
+    const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
+    const section = document.querySelector(
+      '.diffseek-menu-section:has([data-filter-kind="owners"])',
+    );
+    const row = section?.querySelector('.diffseek-menu-row');
+    if (section && row) {
+      for (let i = 0; i < 30; i += 1) section.append(row.cloneNode(true));
+    }
+    if (!menu) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'short-overlay';
+    overlay.setAttribute(
+      'style',
+      'position: fixed; top: 0; left: 8px; max-height: 100vh; overflow: auto',
+    );
+    menu.before(overlay);
+    overlay.append(menu);
+  });
+  const visible = () => reset.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const inset = Math.min(box.height / 2, 8);
+    const points: [number, number][] = [
+      [box.x + inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + 3],
+      [box.x + box.width - inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + box.height - 3],
+    ];
+    const overlay = document.getElementById('short-overlay');
+    return {
+      inView: box.y >= -1
+        && box.x >= -1
+        && box.y + box.height <= window.innerHeight + 1
+        && box.x + box.width <= window.innerWidth + 1,
+      hit: points.every(([x, y]) => el.contains(document.elementFromPoint(x, y))),
+      scrolls: (overlay?.scrollHeight ?? 0) > (overlay?.clientHeight ?? 0),
+    };
+  });
+  expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
+  await page.evaluate(() => {
+    const overlay = document.getElementById('short-overlay');
+    if (overlay) overlay.scrollTop = overlay.scrollHeight;
+  });
+  expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
 });
 
 test('scrolls a tall menu in GitHub\'s overlay only, down to its last row', async () => {

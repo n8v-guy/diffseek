@@ -194,7 +194,7 @@
   box-shadow: inset 0 0 0 1px var(--diffseek-accent);
 }
 
-/* Pill centered on the menu corner, nudged in. Fixed so the menu scrollport does not clip it. */
+/* Right edge on the menu corner, a little above the top, and inside the viewport. */
 [data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters] {
   align-items: center;
   background: var(--diffseek-background);
@@ -214,8 +214,8 @@
   padding: 0 0.5rem;
   position: fixed;
   position-anchor: --diffseek-filters;
-  top: anchor(top);
-  translate: calc(-50% - 4px) calc(-50% + 4px);
+  top: max(0px, calc(anchor(top) - 8px));
+  translate: -100% 0;
   white-space: nowrap;
   width: max-content;
   z-index: 2;
@@ -238,7 +238,7 @@
   padding: 0;
   position: absolute;
   top: anchor(top);
-  translate: calc(-50% - 4px) calc(-50% + 4px);
+  translate: calc(-50% - 2px) calc(-50% + 2px);
   width: 1rem;
   z-index: 2;
 }
