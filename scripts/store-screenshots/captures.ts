@@ -143,7 +143,7 @@ export async function onlySplit(page: Page): Promise<OnlySplitCapture> {
   await expectOnlyAllHovered(page);
   const afterCrop = halfCrop(await menu.boundingBox(), afterClip);
   const allBox = await outBox(ownersAll, afterClip, afterCrop, 640);
-  // The restore icon in the menu's top right corner brings every section back.
+  // Reset filters, on the menu's first row, brings every section back.
   const resetBox = await outBox(menu.locator('[data-reset-filters]'), afterClip, afterCrop, 640);
   const afterShot = await shoot(page, afterClip);
   return { beforeShot, afterShot, beforeCrop, afterCrop, onlyBox, allBox, resetBox };

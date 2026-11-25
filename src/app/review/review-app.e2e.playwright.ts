@@ -548,25 +548,38 @@ test('clears native filters before taking over the menu', async () => {
   await expect(reset).toBeVisible();
   await expect(reset).toHaveText('Reset filters');
   expect(await rowOffset()).toBe(rowOffsetWithoutReset);
-  const [buttonRect, iconRect, labelRect, rootRect, rowRect] = await Promise.all([
+  const [buttonRect, iconRect, labelRect, itemRect] = await Promise.all([
     reset.boundingBox(),
     reset.locator('svg').boundingBox(),
     reset.locator('span').boundingBox(),
-    page.locator('[data-diffseek="filters"]').boundingBox(),
     viewed.boundingBox(),
   ]);
   const resetButton = presentBox(buttonRect);
-  const filtersRoot = presentBox(rootRect);
   const icon = presentBox(iconRect);
-  // Where the icon-only control sat: centered 6 px inside the top-right corner.
-  const cornerOffset = (a: number, b: number) => Math.abs(a - b) <= 2;
+  const item = presentBox(itemRect);
+  const pads = await page.evaluate(() => {
+    const pad = (selector: string) => {
+      const el = document.querySelector(selector);
+      if (!el) return '';
+      const style = getComputedStyle(el);
+      return `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`;
+    };
+    return {
+      reset: pad('.diffseek-reset-filters'),
+      item: pad('.diffseek-menu-item'),
+    };
+  });
   expect({
-    iconAtCorner:
-      cornerOffset(icon.x + icon.width / 2, filtersRoot.x + filtersRoot.width - 6) &&
-      cornerOffset(icon.y + icon.height / 2, filtersRoot.y + 6),
+    samePadding: pads.reset === pads.item && pads.reset !== '',
     labelBeforeIcon: presentBox(labelRect).x < icon.x,
-    aboveRows: resetButton.y + resetButton.height <= presentBox(rowRect).y,
-  }).toEqual({ iconAtCorner: true, labelBeforeIcon: true, aboveRows: true });
+    alignedWithRows: Math.abs(resetButton.x - item.x) <= 1,
+    aboveRows: resetButton.y + resetButton.height <= item.y,
+  }).toEqual({
+    samePadding: true,
+    labelBeforeIcon: true,
+    alignedWithRows: true,
+    aboveRows: true,
+  });
   await reset.click();
   await expect(menu).toBeVisible();
   await expect(page.locator('#docs\\/readme\\.md')).toBeHidden();
@@ -579,7 +592,7 @@ test('clears native filters before taking over the menu', async () => {
 
 test('puts Reset filters on the closed filter button while filters hide files', async () => {
   const page = await openPull(14);
-  // GitHub's captured button: named by aria-labelledby, in a tight wrapper.
+  // GitHub's button sits in a wide sticky toolbar. The icon is the next sibling.
   await page.evaluate(() => {
     const button = document.querySelector('button[aria-label="Filter options"]');
     if (!button) return;
@@ -598,8 +611,14 @@ test('puts Reset filters on the closed filter button while filters hide files', 
     button.setAttribute('style', 'anchor-name: --anchored-overlay-anchor-r1;');
   });
   await page.addStyleTag({
-    content:
-      '#filter-options-wrap { display: inline-block; margin: 40px; } #filter-options { width: 32px; height: 32px; }',
+    content: `#filter-options-wrap {
+      display: flex;
+      align-items: center;
+      position: sticky;
+      width: 360px;
+      margin: 40px;
+    }
+    #filter-options { width: 32px; height: 32px; flex: none; }`,
   });
   const pill = page.locator('[data-diffseek="filter-button-reset"]');
   const root = page.locator('html');
@@ -621,6 +640,12 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
   await page.locator('#filter-options').scrollIntoViewIfNeeded();
   const corner = presentBox(await page.locator('#filter-options').boundingBox());
+  const iconBox = presentBox(await pill.boundingBox());
+  const beside = iconBox.x - (corner.x + corner.width);
+  expect(beside).toBeGreaterThanOrEqual(2);
+  expect(beside).toBeLessThanOrEqual(6);
+  expect(iconBox.y).toBeGreaterThanOrEqual(corner.y - 1);
+  expect(iconBox.y + iconBox.height).toBeLessThanOrEqual(corner.y + corner.height + 1);
   await page.mouse.click(corner.x + corner.width - 1, corner.y + 1);
   await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
   await expect(page.locator('#diff-app')).toBeHidden();

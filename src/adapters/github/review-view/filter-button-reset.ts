@@ -13,7 +13,7 @@ type ResetOptions = {
 const buttonResetSelector = '[data-diffseek="filter-button-reset"]';
 /** Set on the trigger Reset was mounted beside. CSS shows the icon only next to it. */
 export const filterTriggerMark = 'data-diffseek-filter-trigger';
-/** Page-level flag. CSS shows the corner Reset icon while review filters hide files. */
+/** Page-level flag. CSS shows the Reset icon beside the closed filter button. */
 const filteredAttribute = 'data-diffseek-filtered';
 const latestOptions = new WeakMap<HTMLButtonElement, ResetOptions>();
 const retainedTrigger = new WeakMap<Document, HTMLButtonElement>();
@@ -46,7 +46,7 @@ export function resetFiltersButton(): HTMLButtonElement {
 
 /**
  * Writes `data-diffseek-filtered` on `<html>` only when the review-scoped
- * exclusion state changes. Visibility of the corner icon is CSS-only.
+ * exclusion state changes. Visibility of the icon is CSS-only.
  */
 function syncFilteredAttribute(
   root: Document,
@@ -200,7 +200,7 @@ function ensureFilterButtonReset(
   return { wrote: true, placed: true };
 }
 
-/** Writes the page attribute. Inserts the corner icon only when `due`. */
+/** Writes the page attribute. Inserts the icon only when `due`. */
 export function syncFilterReset(
   root: Document,
   options: ResetOptions,
