@@ -546,7 +546,10 @@ test('clears native filters before taking over the menu', async () => {
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
   await expect(reset).toBeVisible();
-  await expect(reset).toHaveText('Reset filters');
+  const resetLabel = reset.locator('span');
+  await expect(resetLabel).toBeHidden();
+  await expect(reset).toHaveAttribute('aria-label', 'Reset filters');
+  await expect(reset).toHaveAttribute('title', 'Reset filters');
   expect(await rowOffset()).toBe(rowOffsetWithoutReset);
   await page.evaluate(() => {
     const owned = document.querySelector('[data-diffseek-menu-owned="true"]');
@@ -592,6 +595,37 @@ test('clears native filters before taking over the menu', async () => {
     ];
     return points.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
   })).toBe(true);
+  const viewedCount = page.locator(
+    '.diffseek-menu-row:has([data-filter-kind="viewed"][data-filter-value="true"]) .diffseek-menu-count',
+  );
+  const countBox = presentBox(await viewedCount.boundingBox());
+  expect(await page.evaluate(({ x, y }) => (
+    document.elementFromPoint(x, y)?.closest('[data-reset-filters]') == null
+  ), {
+    x: countBox.x + countBox.width / 2,
+    y: countBox.y + countBox.height / 2,
+  })).toBe(true);
+  await expect(reset).toHaveCSS('background-image', /radial-gradient/);
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--bgColor-default', 'rgb(1, 2, 3)');
+  });
+  await expect(reset).toHaveCSS('background-image', /rgb\(1,\s*2,\s*3\)/);
+  await expect(reset).toHaveCSS('border-top-style', 'none');
+  const collapsed = presentBox(await reset.boundingBox());
+  await reset.hover();
+  await expect(resetLabel).toBeVisible();
+  await expect(resetLabel).toHaveText('Reset filters');
+  await expect(reset).toHaveCSS('border-top-style', 'solid');
+  const expanded = presentBox(await reset.boundingBox());
+  expect(expanded.x).toBeLessThan(collapsed.x);
+  expect(expanded.width).toBeGreaterThan(collapsed.width);
+  expect(Math.abs(
+    expanded.x + expanded.width - (collapsed.x + collapsed.width),
+  )).toBeLessThan(1.5);
+  await page.mouse.move(0, 0);
+  await expect(resetLabel).toBeHidden();
+  await reset.evaluate((el) => el.focus({ focusVisible: true }));
+  await expect(resetLabel).toBeVisible();
   await reset.click();
   await expect(menu).toBeVisible();
   await expect(page.locator('#docs\\/readme\\.md')).toBeHidden();
@@ -673,6 +707,12 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'false');
   await expect(pill).toBeVisible();
   await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
+  await expect(pill).toHaveAttribute('title', 'Reset filters');
+  await expect(pill).toHaveCSS('background-image', /radial-gradient/);
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--bgColor-default', 'rgb(1, 2, 3)');
+  });
+  await expect(pill).toHaveCSS('background-image', /rgb\(1,\s*2,\s*3\)/);
   const placed = await headerBoxes();
   expect({
     fieldX: placed.field?.x,
@@ -732,7 +772,9 @@ test('keeps Reset filters visible when a short viewport constrains the menu', as
   await ownerRow.locator('[data-filter-only]').click();
   const reset = page.locator('[data-diffseek="filters"] [data-reset-filters]');
   await expect(reset).toBeVisible();
-  await expect(reset).toHaveText('Reset filters');
+  await expect(reset.locator('span')).toBeHidden();
+  await expect(reset).toHaveAttribute('aria-label', 'Reset filters');
+  await expect(reset).toHaveAttribute('title', 'Reset filters');
   await page.evaluate(() => {
     const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
     const section = document.querySelector(
@@ -772,10 +814,19 @@ test('keeps Reset filters visible when a short viewport constrains the menu', as
     };
   });
   expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
+  await reset.hover();
+  await expect(reset.locator('span')).toBeVisible();
+  await expect(reset.locator('span')).toHaveText('Reset filters');
+  expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
   await page.evaluate(() => {
     const overlay = document.getElementById('short-overlay');
     if (overlay) overlay.scrollTop = overlay.scrollHeight;
   });
+  await reset.hover();
+  expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
+  await page.mouse.move(0, 0);
+  await reset.evaluate((el) => el.focus({ focusVisible: true }));
+  await expect(reset.locator('span')).toBeVisible();
   expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
 });
 

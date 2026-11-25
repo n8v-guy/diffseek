@@ -307,6 +307,7 @@ describe('mountFilterMenu', () => {
     );
     expect(reset?.textContent).toBe('Reset filters');
     expect(reset?.getAttribute('aria-label')).toBe('Reset filters');
+    expect(reset?.title).toBe('Reset filters');
     expect(reset?.disabled).toBe(false);
     expect(
       reset?.querySelector('svg[data-diffseek-reset-icon]'),
