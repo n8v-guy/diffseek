@@ -32,14 +32,16 @@ function resetIcon(): SVGSVGElement {
   return icon;
 }
 
-/** Menu badge: the reset icon, named for assistive tech. */
+/** Menu badge: label, then the reset icon. */
 export function resetFiltersButton(): HTMLButtonElement {
   const reset = document.createElement('button');
   reset.type = 'button';
   reset.className = 'diffseek-reset-filters';
   reset.dataset.resetFilters = 'true';
   reset.setAttribute('aria-label', 'Reset filters');
-  reset.append(resetIcon());
+  const label = document.createElement('span');
+  label.textContent = 'Reset filters';
+  reset.append(label, resetIcon());
   return reset;
 }
 

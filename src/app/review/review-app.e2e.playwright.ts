@@ -546,8 +546,17 @@ test('clears native filters before taking over the menu', async () => {
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
   await expect(reset).toBeVisible();
-  await expect(reset).toHaveAttribute('aria-label', 'Reset filters');
+  await expect(reset).toHaveText('Reset filters');
   expect(await rowOffset()).toBe(rowOffsetWithoutReset);
+  await page.evaluate(() => {
+    const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
+    if (!menu || menu.parentElement?.id === 'menu-clip') return;
+    const overlay = document.createElement('div');
+    overlay.id = 'menu-clip';
+    overlay.style.cssText = 'overflow: auto; max-height: 480px;';
+    menu.before(overlay);
+    overlay.append(menu);
+  });
   const rowMetrics = await page.evaluate(() => {
     const measure = (el: Element) => {
       const style = getComputedStyle(el);
@@ -566,8 +575,21 @@ test('clears native filters before taking over the menu', async () => {
   expect(rowMetrics.first).toEqual(rowMetrics.next);
   const menuBox = presentBox(await page.locator('[data-diffseek="filters"]').boundingBox());
   const badge = presentBox(await reset.boundingBox());
-  expect(Math.abs(badge.x + badge.width / 2 - (menuBox.x + menuBox.width))).toBeLessThanOrEqual(2);
-  expect(Math.abs(badge.y + badge.height / 2 - menuBox.y)).toBeLessThanOrEqual(2);
+  const intoMenuX = menuBox.x + menuBox.width - (badge.x + badge.width / 2);
+  const intoMenuY = badge.y + badge.height / 2 - menuBox.y;
+  expect(intoMenuX).toBeGreaterThanOrEqual(2);
+  expect(intoMenuX).toBeLessThanOrEqual(8);
+  expect(intoMenuY).toBeGreaterThanOrEqual(2);
+  expect(intoMenuY).toBeLessThanOrEqual(8);
+  expect(await reset.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const points: [number, number][] = [
+      [box.x + 2, box.y + 2],
+      [box.x + box.width / 2, box.y + box.height / 2],
+      [box.x + box.width - 2, box.y + box.height - 2],
+    ];
+    return points.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+  })).toBe(true);
   await reset.click();
   await expect(menu).toBeVisible();
   await expect(page.locator('#docs\\/readme\\.md')).toBeHidden();
@@ -666,8 +688,21 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await page.locator('#filter-options').scrollIntoViewIfNeeded();
   const corner = presentBox(await page.locator('#filter-options').boundingBox());
   const iconBox = presentBox(await pill.boundingBox());
-  expect(Math.abs(iconBox.x + iconBox.width / 2 - (corner.x + corner.width))).toBeLessThanOrEqual(2);
-  expect(Math.abs(iconBox.y + iconBox.height / 2 - corner.y)).toBeLessThanOrEqual(2);
+  const intoButtonX = corner.x + corner.width - (iconBox.x + iconBox.width / 2);
+  const intoButtonY = iconBox.y + iconBox.height / 2 - corner.y;
+  expect(intoButtonX).toBeGreaterThanOrEqual(2);
+  expect(intoButtonX).toBeLessThanOrEqual(8);
+  expect(intoButtonY).toBeGreaterThanOrEqual(2);
+  expect(intoButtonY).toBeLessThanOrEqual(8);
+  expect(await pill.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const points: [number, number][] = [
+      [box.x + 1, box.y + 1],
+      [box.x + box.width / 2, box.y + box.height / 2],
+      [box.x + box.width - 1, box.y + box.height - 1],
+    ];
+    return points.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+  })).toBe(true);
   await page.mouse.click(corner.x + 4, corner.y + corner.height - 4);
   await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
   await expect(page.locator('#diff-app')).toBeHidden();

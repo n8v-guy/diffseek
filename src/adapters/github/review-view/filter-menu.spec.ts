@@ -305,6 +305,7 @@ describe('mountFilterMenu', () => {
     const reset = element.querySelector<HTMLButtonElement>(
       '[data-reset-filters]',
     );
+    expect(reset?.textContent).toBe('Reset filters');
     expect(reset?.getAttribute('aria-label')).toBe('Reset filters');
     expect(reset?.disabled).toBe(false);
     expect(
