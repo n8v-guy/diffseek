@@ -10,6 +10,7 @@ type ResetOptions = {
   onChange: () => void;
 };
 
+const resetFiltersLabel = 'Reset filters';
 const buttonResetSelector = '[data-diffseek="filter-button-reset"]';
 /** Set on the trigger Reset was mounted beside. CSS shows the icon only next to it. */
 export const filterTriggerMark = 'data-diffseek-filter-trigger';
@@ -38,9 +39,9 @@ export function resetFiltersButton(): HTMLButtonElement {
   reset.type = 'button';
   reset.className = 'diffseek-reset-filters';
   reset.dataset.resetFilters = 'true';
-  reset.setAttribute('aria-label', 'Reset filters');
+  reset.setAttribute('aria-label', resetFiltersLabel);
   const label = document.createElement('span');
-  label.textContent = 'Reset filters';
+  label.textContent = resetFiltersLabel;
   reset.append(label, resetIcon());
   return reset;
 }
@@ -131,7 +132,7 @@ function cornerButton(): HTMLButtonElement {
   reset.type = 'button';
   reset.dataset.resetFilters = 'true';
   reset.dataset.diffseek = 'filter-button-reset';
-  reset.setAttribute('aria-label', 'Reset filters');
+  reset.setAttribute('aria-label', resetFiltersLabel);
   reset.append(resetIcon());
   reset.addEventListener('click', (event) => {
     event.stopPropagation();

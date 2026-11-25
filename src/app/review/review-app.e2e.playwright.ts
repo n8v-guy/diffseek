@@ -549,13 +549,13 @@ test('clears native filters before taking over the menu', async () => {
   await expect(reset).toHaveText('Reset filters');
   expect(await rowOffset()).toBe(rowOffsetWithoutReset);
   await page.evaluate(() => {
-    const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
-    if (!menu || menu.parentElement?.id === 'menu-clip') return;
+    const owned = document.querySelector('[data-diffseek-menu-owned="true"]');
+    if (!owned || owned.parentElement?.id === 'menu-clip') return;
     const overlay = document.createElement('div');
     overlay.id = 'menu-clip';
     overlay.style.cssText = 'overflow: auto; max-height: 480px;';
-    menu.before(overlay);
-    overlay.append(menu);
+    owned.before(overlay);
+    overlay.append(owned);
   });
   const rowMetrics = await page.evaluate(() => {
     const measure = (el: Element) => {
@@ -583,10 +583,12 @@ test('clears native filters before taking over the menu', async () => {
   expect(intoMenuY).toBeLessThanOrEqual(8);
   expect(await reset.evaluate((el) => {
     const box = el.getBoundingClientRect();
+    const inset = Math.min(box.height / 2, 8);
     const points: [number, number][] = [
-      [box.x + 2, box.y + 2],
-      [box.x + box.width / 2, box.y + box.height / 2],
-      [box.x + box.width - 2, box.y + box.height - 2],
+      [box.x + inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + 3],
+      [box.x + box.width - inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + box.height - 3],
     ];
     return points.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
   })).toBe(true);
@@ -696,10 +698,11 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   expect(intoButtonY).toBeLessThanOrEqual(8);
   expect(await pill.evaluate((el) => {
     const box = el.getBoundingClientRect();
+    const inset = Math.min(box.height / 2, 6);
     const points: [number, number][] = [
-      [box.x + 1, box.y + 1],
-      [box.x + box.width / 2, box.y + box.height / 2],
-      [box.x + box.width - 1, box.y + box.height - 1],
+      [box.x + inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + 2],
+      [box.x + box.width - inset, box.y + box.height / 2],
     ];
     return points.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
   })).toBe(true);
