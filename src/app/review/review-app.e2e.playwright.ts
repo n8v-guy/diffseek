@@ -558,7 +558,10 @@ test('clears native filters before taking over the menu', async () => {
       };
     };
     const items = [...document.querySelectorAll('.diffseek-menu-item')];
-    return { first: measure(items[0]), next: measure(items[1]) };
+    const first = items[0];
+    const next = items[1];
+    if (!first || !next) throw new Error('Missing menu rows');
+    return { first: measure(first), next: measure(next) };
   });
   expect(rowMetrics.first).toEqual(rowMetrics.next);
   const menuBox = presentBox(await page.locator('[data-diffseek="filters"]').boundingBox());
