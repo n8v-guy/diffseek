@@ -272,7 +272,7 @@ function churnMedians({ extension, control }: ChurnSamples) {
   const github = medianCounts(empty, control);
   const difference = { ...empty };
   for (const key of Object.keys(empty) as (keyof GithubChurn)[]) {
-    difference[key] = Number((withDiffseek[key] - github[key]).toFixed(3));
+    difference[key] = withDiffseek[key] - github[key];
   }
   return { withDiffseek, github, difference };
 }

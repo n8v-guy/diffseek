@@ -59,6 +59,7 @@ const unmarkViewedCounter =
 const viewedProgress = '[class*="hide-viewed-progress-on-small"] .sr-only';
 const viewedProgressTotal = ' of [1-9]\\d* files viewed$';
 const snackbar = '[data-diffseek="snackbar"]';
+const filesViewMarks = `[data-diffseek-viewed-action], ${viewedProgress}`;
 const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
 const generatedToggle = '[data-filter-kind="generated"][data-filter-value="true"]';
 const stepTimeout = 20_000;
@@ -127,7 +128,7 @@ test.describe('live DiffSeek performance', () => {
 
   test.afterAll(async () => {
     await activeContext?.close();
-    if (loads.cold.length === 0) return;
+    if (githubChurn.cold.control.length === 0) return;
     const report = {
       prUrl: livePrUrl,
       samples,
@@ -160,15 +161,13 @@ test.describe('live DiffSeek performance', () => {
       const viewedButton = (name: string) =>
         page.locator('[data-diff-header-wrapper="true"]').getByRole('button', { name, exact: true }).first();
       await measureGithub(page, 'mark-viewed', () => viewedButton('Not Viewed').click({ timeout: stepTimeout }), '1');
-      await measureGithub(page, 'warm', () => page.reload({ waitUntil: 'domcontentloaded' }));
-      await showConversation(page);
-      await untilDom(page, { kind: 'absent', selector: viewedProgress }, stepTimeout, 'GitHub viewed count gone');
-      await measureGithub(page, 'hot', () => showFiles(page));
-      await showPullList(page);
-      await untilDom(page, { kind: 'absent', selector: viewedProgress }, stepTimeout, 'GitHub viewed count gone');
-      await measureGithub(page, 'restored', () => openPullFromList(page));
       await viewedButton('Viewed').click({ timeout: stepTimeout });
       await untilNoViewedFiles(page, 'after the GitHub-only unmark');
+      await measureGithub(page, 'warm', () => page.reload({ waitUntil: 'domcontentloaded' }));
+      await showConversation(page);
+      await measureGithub(page, 'hot', () => showFiles(page));
+      await showPullList(page);
+      await measureGithub(page, 'restored', () => openPullFromList(page));
       await page.close();
       // Without auto-view, a cold-mark load is another cold load.
       const marking = await context.newPage();
@@ -505,7 +504,7 @@ async function showConversation(page: Page): Promise<void> {
   await untilDom(page, { kind: 'link-text', pattern: tab.source }, stepTimeout, `Overview link missing at ${page.url()}`);
   await conversation.first().click({ timeout: stepTimeout });
   await page.waitForURL(/\/pull\/\d+(?:[?#].*)?$/, { timeout: stepTimeout });
-  await untilDom(page, { kind: 'absent', selector: '[data-diffseek-viewed-action]' }, stepTimeout, 'DiffSeek controls gone');
+  await untilDom(page, { kind: 'absent', selector: filesViewMarks }, stepTimeout, 'files view gone');
 }
 
 async function showPullList(page: Page): Promise<void> {
@@ -513,7 +512,7 @@ async function showPullList(page: Page): Promise<void> {
   const pulls = new URL(livePrUrl).pathname.replace(/\/pull\/\d+\/changes$/, '/pulls');
   await page.locator(`a[href="${pulls}"]`).first().click({ timeout: stepTimeout });
   await page.waitForURL(/\/pulls(?:[?#].*)?$/, { timeout: stepTimeout });
-  await untilDom(page, { kind: 'absent', selector: '[data-diffseek-viewed-action]' }, stepTimeout, 'DiffSeek controls gone');
+  await untilDom(page, { kind: 'absent', selector: filesViewMarks }, stepTimeout, 'files view gone');
 }
 
 /** A click in the list, so the browser cannot restore the page from history. */
