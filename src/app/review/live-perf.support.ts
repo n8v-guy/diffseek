@@ -1,3 +1,4 @@
+import type { GithubChurn } from './live-wait';
 import type { RedrawCounts } from './redraw-trace';
 
 export type { RedrawCounts };
@@ -28,15 +29,6 @@ export type LivePerfScenario = (typeof livePerfScenarios)[number];
 export const liveSteps = [...livePerfScenarios, 'toggle-filter', 'mark-viewed'] as const;
 
 export type LiveStep = (typeof liveSteps)[number];
-
-/** Page mutations and diff-panel or tree-row removals, counted the same with and without DiffSeek. */
-export type GithubChurn = {
-  mutations: number;
-  panelsRemoved: number;
-  panelsReadded: number;
-  treeRowsRemoved: number;
-  treeRowsReadded: number;
-};
 
 const churnLimited = ['mutations', 'panelsRemoved', 'treeRowsRemoved'] as const;
 

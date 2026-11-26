@@ -1,6 +1,13 @@
 import type { BrowserContext, ElementHandle, Page } from '@playwright/test';
 
-import type { GithubChurn } from './live-perf.support';
+/** Page mutations and diff-panel or tree-row removals, counted the same with and without DiffSeek. */
+export type GithubChurn = {
+  mutations: number;
+  panelsRemoved: number;
+  panelsReadded: number;
+  treeRowsRemoved: number;
+  treeRowsReadded: number;
+};
 
 /**
  * Event-based waits for the live e2e. Each wait is a MutationObserver in the
