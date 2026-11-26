@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   actionFailures,
   defaultLivePerfBudgets,
+  emptyChurnSamples,
   emptyGithubRequestCounts,
   generatedCategorizedPattern,
   generatedIndexedText,
+  githubChurnFailures,
   isExtensionMetadataRequest,
   isGeneratedCategorized,
   isInlineStorageState,
@@ -141,8 +143,19 @@ describe('live-perf helpers', () => {
       'cold reconciles 800 > 9',
       'cold domMutations 20000 > 7',
     ]);
+    const githubChurn = emptyChurnSamples();
+    const churn = { mutations: 40, panelsRemoved: 8, panelsReadded: 8, treeRowsRemoved: 0, treeRowsReadded: 0 };
+    githubChurn['mark-viewed'] = { extension: [churn, { ...churn, mutations: 60 }], control: [{ ...churn, mutations: 30 }] };
+    githubChurn.unmark.extension.push(churn);
+    const budgets = defaultLivePerfBudgets({});
+    budgets.githubChurn['mark-viewed'].mutations = 19;
+    expect(githubChurnFailures('mark-viewed', githubChurn['mark-viewed'], budgets)).toEqual([
+      'mark-viewed mutations over GitHub alone 20 > 19',
+    ]);
+    expect(githubChurnFailures('cold', githubChurn.cold, budgets)).toEqual([]);
     const summary = livePerfSummary({
       prUrl: 'https://example.test',
+      githubChurn,
       cold: [fast],
       warm: [fast],
       hot: [fast],
@@ -153,6 +166,8 @@ describe('live-perf helpers', () => {
     expect(summary).toContain('tree rebuilds');
     expect(summary).toContain('| cold | 3 | 0 | 0 | 3 |');
     expect(summary).toContain('| restored | 3 | 0 | 0 | 3 |');
+    expect(summary).toContain('| mark-viewed | 50 / 30 / 20 | 8 / 8 / 0 | 8 / 8 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |');
+    expect(summary).toContain('| unmark | 40 / 0 / 40 |');
   });
 
   it('limits the newer loads on their own budgets and env overrides', () => {

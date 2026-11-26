@@ -14,27 +14,34 @@ import {
   actionFailures,
   defaultLivePerfBudgets,
   defaultLivePrUrl,
+  emptyChurnSamples,
   emptyGithubRequestCounts,
   expectedGeneratedTotal,
   generatedCategorizedPattern,
   generatedIndexedText,
+  githubChurnFailures,
   hotLossFailures,
   isInlineStorageState,
   livePerfScenarios,
   livePerfSummary,
   liveSampleCount,
+  liveSteps,
   medianBudgetFailures,
   medianSample,
   noteGithubRequest,
   parseInlineStorageState,
   parseStorageCookies,
   rebuildFailures,
+  type ChurnSamples,
   type LivePerfSample,
   type LivePerfScenario,
+  type LiveStep,
   type RedrawCounts,
 } from './live-perf.support';
 import {
   installLiveWaits,
+  readChurn,
+  resetChurn,
   tagFilterButton,
   untilAttribute,
   untilDom,
@@ -59,6 +66,7 @@ const panelsTimeout = 90_000;
 // Fresh-install hiding without auto-view, which would mark the fixture's
 // generated files viewed on GitHub. Unit tests cover the auto-view default.
 const hideDefaults = { hidden: ['viewed', 'generated'], viewed: [] };
+const githubChurn = emptyChurnSamples();
 
 test.describe('live DiffSeek performance', () => {
   if (!liveEnabled) return;
@@ -72,24 +80,28 @@ test.describe('live DiffSeek performance', () => {
   ) as Record<LivePerfScenario, LivePerfSample[]>;
   const phases: Array<{ sample: number; phase: string } & RedrawCounts> = [];
 
-  async function startCleanContext(): Promise<BrowserContext> {
+  /** GitHub alone cannot unmark every file, so its profile must start with none viewed. */
+  async function startCleanContext(withDiffseek = true): Promise<BrowserContext> {
     await activeContext?.close();
     const extension = resolve('.output/chrome-mv3');
     activeContext = await chromium.launchPersistentContext('', {
       channel: 'chromium',
       headless: true,
-      args: [
-        `--disable-extensions-except=${extension}`,
-        `--load-extension=${extension}`,
-      ],
+      args: withDiffseek
+        ? [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]
+        : [],
     });
     await activeContext.addCookies(cookies);
     await installLiveWaits(activeContext);
-    await writeShownDefaults(activeContext);
+    if (withDiffseek) await writeShownDefaults(activeContext);
     const setup = await activeContext.newPage();
     await setup.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
-    await assertAuthenticatedReview(setup);
-    await clearViewedFiles(setup);
+    if (withDiffseek) {
+      await assertAuthenticatedReview(setup);
+      await clearViewedFiles(setup);
+    } else {
+      await untilNoViewedFiles(setup, 'before a GitHub-only sample');
+    }
     await setup.close();
     return activeContext;
   }
@@ -124,6 +136,7 @@ test.describe('live DiffSeek performance', () => {
         livePerfScenarios.map((scenario) => [scenario, medianSample(loads[scenario])]),
       ),
       phases,
+      githubChurn,
     };
     const outDir = resolve('.cache');
     await mkdir(outDir, { recursive: true });
@@ -135,6 +148,34 @@ test.describe('live DiffSeek performance', () => {
     const markdown = livePerfSummary(report);
     if (summary) await appendFile(summary, `${markdown}\n`);
     console.log(markdown);
+  });
+
+  test('measures GitHub alone on the same loads and mark', async () => {
+    // DiffSeek clears viewed files once; GitHub-only samples then keep them clear.
+    await startCleanContext();
+    for (let index = 0; index < samples; index += 1) {
+      const context = await startCleanContext(false);
+      const page = await context.newPage();
+      await measureGithub(page, 'cold', () => page.goto(livePrUrl, { waitUntil: 'domcontentloaded' }));
+      const viewedButton = (name: string) =>
+        page.locator('[data-diff-header-wrapper="true"]').getByRole('button', { name, exact: true }).first();
+      await measureGithub(page, 'mark-viewed', () => viewedButton('Not Viewed').click({ timeout: stepTimeout }), '1');
+      await measureGithub(page, 'warm', () => page.reload({ waitUntil: 'domcontentloaded' }));
+      await showConversation(page);
+      await untilDom(page, { kind: 'absent', selector: viewedProgress }, stepTimeout, 'GitHub viewed count gone');
+      await measureGithub(page, 'hot', () => showFiles(page));
+      await showPullList(page);
+      await untilDom(page, { kind: 'absent', selector: viewedProgress }, stepTimeout, 'GitHub viewed count gone');
+      await measureGithub(page, 'restored', () => openPullFromList(page));
+      await viewedButton('Viewed').click({ timeout: stepTimeout });
+      await untilNoViewedFiles(page, 'after the GitHub-only unmark');
+      await page.close();
+      // Without auto-view, a cold-mark load is another cold load.
+      const marking = await context.newPage();
+      await measureGithub(marking, 'coldMark', () => marking.goto(livePrUrl, { waitUntil: 'domcontentloaded' }));
+      await marking.close();
+    }
+    expect(githubChurn.coldMark.control).toHaveLength(samples);
   });
 
   test('measures cold, warm, hot, restored, cold-mark, and unmark reviews', async () => {
@@ -197,6 +238,9 @@ test.describe('live DiffSeek performance', () => {
     for (const scenario of livePerfScenarios) {
       expect(medianBudgetFailures(loads[scenario], budgets)).toEqual([]);
     }
+    for (const step of liveSteps) {
+      expect(githubChurnFailures(step, githubChurn[step], budgets)).toEqual([]);
+    }
   });
 
   test('hide defaults hide generated and viewed files until shown', async () => {
@@ -250,6 +294,7 @@ async function measureReview(
   try {
     const restored = scenario === 'restored';
     if (restored) await resetReconcileWrites(page);
+    await resetChurn(page);
     const started = Date.now();
     await navigate();
     await untilDom(page, { kind: 'present', selector: '[data-diffseek-viewed-action]' }, panelsTimeout, 'first DiffSeek control');
@@ -285,6 +330,7 @@ async function measureReview(
         document.dispatchEvent(new Event('diffseek-redraw-settle'));
       });
     }
+    await recordChurn(page, scenario, 'extension');
     return recordSample({
       scenario,
       firstRenderSeconds,
@@ -310,12 +356,14 @@ async function measureUnmark(page: Page): Promise<LivePerfSample> {
     await resetRedraws(page);
     const menuOpenSeconds = await openFilterMenu(page);
     const before = await readRedraws(page);
+    await resetChurn(page);
     const started = Date.now();
     await page.locator(generatedCounter).click({ timeout: stepTimeout });
     // The first pass after the click redraws GitHub's first unmarked file.
     await untilDom(page, { kind: 'dataset-above', key: 'diffseekReconciles', value: before.reconciles }, panelsTimeout, 'first unmark reconcile');
     const firstRenderSeconds = secondsBetween(started);
     await untilGenerated(page, 'false');
+    await recordChurn(page, 'unmark', 'extension');
     return recordSample({
       scenario: 'unmark',
       firstRenderSeconds,
@@ -327,6 +375,26 @@ async function measureUnmark(page: Page): Promise<LivePerfSample> {
   } finally {
     browserContext.off('request', onRequest);
   }
+}
+
+/** From `navigate` until GitHub's own viewed count is back on the files view, with `viewed` files. */
+async function measureGithub(
+  page: Page,
+  step: LiveStep,
+  navigate: () => Promise<unknown>,
+  viewed = '\\d+',
+): Promise<void> {
+  await resetChurn(page);
+  await navigate();
+  await page.waitForURL(/\/changes(\?|$)/, { timeout: stepTimeout });
+  await untilDom(page, { kind: 'text', selector: viewedProgress, pattern: `^${viewed}${viewedProgressTotal}` }, panelsTimeout, `GitHub-only ${step}`);
+  await recordChurn(page, step, 'control');
+}
+
+async function recordChurn(page: Page, step: LiveStep, run: keyof ChurnSamples): Promise<void> {
+  const churn = await readChurn(page);
+  githubChurn[step][run].push(churn);
+  console.log(`diffseek live-churn:${step}:${run}`, churn);
 }
 
 function recordSample(sample: LivePerfSample): LivePerfSample {
@@ -391,8 +459,10 @@ async function runToggle(page: Page): Promise<RedrawCounts> {
   await resetRedraws(page);
   await openFilterMenu(page);
   const before = await readRedraws(page);
+  await resetChurn(page);
   await page.locator(viewedToggle).click({ timeout: stepTimeout });
   await untilDom(page, { kind: 'dataset-above', key: 'diffseekReconciles', value: before.reconciles }, stepTimeout, 'toggle reconcile');
+  await recordChurn(page, 'toggle-filter', 'extension');
   return subtractCounts(await readRedraws(page), before);
 }
 
@@ -420,8 +490,10 @@ async function runMark(page: Page): Promise<RedrawCounts> {
   });
   const target = action.asElement();
   if (!target) throw new Error('No unviewed file row to mark');
+  await resetChurn(page);
   await target.click({ timeout: stepTimeout });
   await untilAttribute(target, 'aria-pressed', 'true', stepTimeout, 'file marked viewed');
+  await recordChurn(page, 'mark-viewed', 'extension');
   await action.dispose();
   return subtractCounts(await readRedraws(page), before);
 }

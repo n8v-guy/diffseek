@@ -24,6 +24,32 @@ export const livePerfScenarios = ['cold', 'warm', 'hot', 'coldMark', 'unmark', '
 
 export type LivePerfScenario = (typeof livePerfScenarios)[number];
 
+/** Loads plus the cold sample's actions: each is measured with DiffSeek and, natively where GitHub can, without. */
+export const liveSteps = [...livePerfScenarios, 'toggle-filter', 'mark-viewed'] as const;
+
+export type LiveStep = (typeof liveSteps)[number];
+
+/** Page mutations and diff-panel or tree-row removals, counted the same with and without DiffSeek. */
+export type GithubChurn = {
+  mutations: number;
+  panelsRemoved: number;
+  panelsReadded: number;
+  treeRowsRemoved: number;
+  treeRowsReadded: number;
+};
+
+const churnLimited = ['mutations', 'panelsRemoved', 'treeRowsRemoved'] as const;
+
+type ChurnLimits = Record<(typeof churnLimited)[number], number>;
+
+export type ChurnSamples = { extension: GithubChurn[]; control: GithubChurn[] };
+
+export function emptyChurnSamples(): Record<LiveStep, ChurnSamples> {
+  return Object.fromEntries(
+    liveSteps.map((step): [LiveStep, ChurnSamples] => [step, { extension: [], control: [] }]),
+  ) as Record<LiveStep, ChurnSamples>;
+}
+
 type ScenarioLimits = {
   firstRenderSeconds: number;
   menuOpenSeconds: number;
@@ -70,6 +96,7 @@ export type LivePerfBudgets = {
   warmTreeRebuilds: number;
   warmPanelRebuilds: number;
   scenarios: Record<LimitedScenario, ScenarioLimits>;
+  githubChurn: Record<LiveStep, ChurnLimits>;
 };
 
 export type CookieLike = {
@@ -115,6 +142,9 @@ export function defaultLivePerfBudgets(
       unmark: scenarioLimits(env, 'UNMARK', { firstRenderSeconds: 12, menuOpenSeconds: 0, panelsSeconds: 12.7, reconciles: 1, domMutations: 2, treeRebuilds: 0, panelRebuilds: 0 }),
       restored: scenarioLimits(env, 'RESTORED', { firstRenderSeconds: 7.6, menuOpenSeconds: 12.9, panelsSeconds: 77.9, reconciles: 41, domMutations: 18, treeRebuilds: 1, panelRebuilds: 1 }),
     },
+    githubChurn: Object.fromEntries(
+      liveSteps.map((step) => [step, { mutations: 0, panelsRemoved: 0, treeRowsRemoved: 0 }]),
+    ) as Record<LiveStep, ChurnLimits>,
   };
 }
 
@@ -234,12 +264,45 @@ export function median(values: number[]): number {
   return Number(((lower + upper) / 2).toFixed(3));
 }
 
+function medianCounts<K extends string>(
+  empty: Record<K, number>,
+  rows: readonly Record<K, number>[],
+): Record<K, number> {
+  const result = { ...empty };
+  for (const key of Object.keys(empty) as K[]) result[key] = median(rows.map((row) => row[key]));
+  return result;
+}
+
+/** Extension median minus GitHub-only median. A step GitHub has no native form of has no control. */
+function churnMedians({ extension, control }: ChurnSamples) {
+  const empty = { mutations: 0, panelsRemoved: 0, panelsReadded: 0, treeRowsRemoved: 0, treeRowsReadded: 0 };
+  const withDiffseek = medianCounts(empty, extension);
+  const github = medianCounts(empty, control);
+  const difference = { ...empty };
+  for (const key of Object.keys(empty) as (keyof GithubChurn)[]) {
+    difference[key] = Number((withDiffseek[key] - github[key]).toFixed(3));
+  }
+  return { withDiffseek, github, difference };
+}
+
+export function githubChurnFailures(
+  step: LiveStep,
+  samples: ChurnSamples,
+  budgets: LivePerfBudgets,
+): string[] {
+  const { difference } = churnMedians(samples);
+  const limits = budgets.githubChurn[step];
+  return churnLimited
+    .filter((metric) => difference[metric] > limits[metric])
+    .map((metric) => `${step} ${metric} over GitHub alone ${difference[metric]} > ${limits[metric]}`);
+}
+
 export function medianSample(samples: readonly LivePerfSample[]): LivePerfSample {
   const scenario = samples[0]?.scenario ?? 'cold';
-  const requests = emptyGithubRequestCounts();
-  for (const key of Object.keys(requests) as (keyof GithubRequestCounts)[]) {
-    requests[key] = median(samples.map((sample) => sample.requests[key]));
-  }
+  const requests = medianCounts(
+    emptyGithubRequestCounts(),
+    samples.map((sample) => sample.requests),
+  );
   return {
     scenario,
     firstRenderSeconds: median(samples.map((sample) => sample.firstRenderSeconds)),
@@ -329,8 +392,16 @@ export function medianBudgetFailures(
 }
 
 export function livePerfSummary(
-  report: { prUrl: string } & Record<LivePerfScenario, LivePerfSample[]>,
+  report: { prUrl: string; githubChurn: Record<LiveStep, ChurnSamples> } & Record<LivePerfScenario, LivePerfSample[]>,
 ): string {
+  const churnRows = liveSteps.map((step) => {
+    const { withDiffseek, github, difference } = churnMedians(report.githubChurn[step]);
+    const cells = Object.keys(difference).map((key) => {
+      const metric = key as keyof GithubChurn;
+      return `${withDiffseek[metric]} / ${github[metric]} / ${difference[metric]}`;
+    });
+    return `| ${step} | ${cells.join(' | ')} |`;
+  });
   const rows = livePerfScenarios.map((scenario) => {
     const medianRow = medianSample(report[scenario]);
     const { requests } = medianRow;
@@ -354,6 +425,12 @@ export function livePerfSummary(
     '',
     'Durations and request counts are medians. The total counts github.com plus a raw.githubusercontent.com read of .gitattributes or CODEOWNERS. Metadata is a raw or blob fetch of those files. Other is the rest of the total.',
     'Cold and warm tree rebuilds and diff-panel rebuilds must stay within their caps (a GitHub load redraw may be present or absent). Hot and restored ignore mass removal and fail only when a row removed after the first DiffSeek control is still gone 500 ms later.',
+    '',
+    '| step | page mutations | panels removed | panels re-added | tree rows removed | tree rows re-added |',
+    '| --- | ---: | ---: | ---: | ---: | ---: |',
+    ...churnRows,
+    '',
+    'Each cell is the DiffSeek median / the GitHub-only median / their difference. Page mutations and rows removed are budgeted on the difference. Toggle-filter and unmark have no GitHub-only form, so GitHub alone counts zero.',
     '',
   ].join('\n');
 }
