@@ -11,7 +11,6 @@ type ResetOptions = {
 };
 
 const resetFiltersLabel = 'Reset filters';
-const gitHubSurface = 'var(--bgColor-default)';
 const buttonResetSelector = '[data-diffseek="filter-button-reset"]';
 /** Set on the trigger Reset was mounted beside. CSS shows the icon only next to it. */
 export const filterTriggerMark = 'data-diffseek-filter-trigger';
@@ -42,7 +41,6 @@ export function resetFiltersButton(): HTMLButtonElement {
   reset.dataset.resetFilters = 'true';
   reset.setAttribute('aria-label', resetFiltersLabel);
   reset.title = resetFiltersLabel;
-  reset.style.setProperty('--diffseek-reset-surface', gitHubSurface);
   const label = document.createElement('span');
   label.textContent = resetFiltersLabel;
   reset.append(label, resetIcon());
@@ -137,7 +135,6 @@ function cornerButton(): HTMLButtonElement {
   reset.dataset.diffseek = 'filter-button-reset';
   reset.setAttribute('aria-label', resetFiltersLabel);
   reset.title = resetFiltersLabel;
-  reset.style.setProperty('--diffseek-reset-surface', gitHubSurface);
   reset.append(resetIcon());
   reset.addEventListener('click', (event) => {
     event.stopPropagation();

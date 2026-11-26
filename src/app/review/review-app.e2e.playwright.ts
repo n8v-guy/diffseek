@@ -578,10 +578,14 @@ test('clears native filters before taking over the menu', async () => {
   expect(rowMetrics.first).toEqual(rowMetrics.next);
   const menuBox = presentBox(await page.locator('[data-diffseek="filters"]').boundingBox());
   const badge = presentBox(await reset.boundingBox());
-  const rightDelta = badge.x + badge.width - (menuBox.x + menuBox.width);
-  const intoMenuY = badge.y + badge.height / 2 - menuBox.y;
-  expect(rightDelta).toBeGreaterThan(-1.5);
-  expect(rightDelta).toBeLessThan(1.5);
+  const glyph = presentBox(await reset.locator('svg').boundingBox());
+  const glyphInset = menuBox.x + menuBox.width - (glyph.x + glyph.width);
+  const intoMenuY = glyph.y + glyph.height / 2 - menuBox.y;
+  expect(glyphInset).toBeGreaterThanOrEqual(-1);
+  expect(glyphInset).toBeLessThanOrEqual(2);
+  expect(badge.x + badge.width).toBeGreaterThan(menuBox.x + menuBox.width);
+  expect(badge.width).toBeCloseTo(glyph.width * (1.5 / 0.875), 0);
+  expect(badge.height).toBeCloseTo(badge.width, 0);
   expect(intoMenuY).toBeGreaterThanOrEqual(1);
   expect(intoMenuY).toBeLessThanOrEqual(4);
   expect(await reset.evaluate((el) => {
@@ -605,18 +609,35 @@ test('clears native filters before taking over the menu', async () => {
     x: countBox.x + countBox.width / 2,
     y: countBox.y + countBox.height / 2,
   })).toBe(true);
-  await expect(reset).toHaveCSS('background-image', /radial-gradient/);
-  await page.evaluate(() => {
-    document.documentElement.style.setProperty('--bgColor-default', 'rgb(1, 2, 3)');
-  });
-  await expect(reset).toHaveCSS('background-image', /rgb\(1,\s*2,\s*3\)/);
+  expect(await reset.evaluate((el) => {
+    const icon = el.querySelector('svg')?.getBoundingClientRect();
+    if (!icon) return false;
+    const x = icon.x + icon.width + 2;
+    const y = icon.y + icon.height / 2;
+    return el.contains(document.elementFromPoint(x, y));
+  })).toBe(true);
   await expect(reset).toHaveCSS('border-top-style', 'none');
+  const haloOf = () => reset.evaluate((el) => getComputedStyle(el, '::before').backgroundImage);
+  const beforeHalo = await haloOf();
+  expect(beforeHalo).toMatch(/radial-gradient/);
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--diffseek-accent', 'rgb(9, 8, 7)');
+  });
+  const accentHalo = await haloOf();
+  expect(accentHalo).not.toBe(beforeHalo);
+  expect(accentHalo).toMatch(/0\.5/);
   const collapsed = presentBox(await reset.boundingBox());
+  const iconBefore = presentBox(await reset.locator('svg').boundingBox());
   await reset.hover();
   await expect(resetLabel).toBeVisible();
   await expect(resetLabel).toHaveText('Reset filters');
-  await expect(reset).toHaveCSS('border-top-style', 'solid');
+  await expect(reset).toHaveCSS('box-shadow', /rgb/);
   const expanded = presentBox(await reset.boundingBox());
+  const iconAfter = presentBox(await reset.locator('svg').boundingBox());
+  const labelBox = presentBox(await resetLabel.boundingBox());
+  expect(Math.abs(iconAfter.x - iconBefore.x)).toBeLessThan(0.6);
+  expect(Math.abs(iconAfter.y - iconBefore.y)).toBeLessThan(0.6);
+  expect(labelBox.x + labelBox.width).toBeLessThanOrEqual(iconAfter.x + 1);
   expect(expanded.x).toBeLessThan(collapsed.x);
   expect(expanded.width).toBeGreaterThan(collapsed.width);
   expect(Math.abs(
@@ -708,11 +729,14 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toBeVisible();
   await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
   await expect(pill).toHaveAttribute('title', 'Reset filters');
-  await expect(pill).toHaveCSS('background-image', /radial-gradient/);
+  const beforeHalo = await pill.evaluate((el) => getComputedStyle(el).backgroundImage);
+  expect(beforeHalo).toMatch(/radial-gradient/);
   await page.evaluate(() => {
-    document.documentElement.style.setProperty('--bgColor-default', 'rgb(1, 2, 3)');
+    document.documentElement.style.setProperty('--diffseek-accent', 'rgb(9, 8, 7)');
   });
-  await expect(pill).toHaveCSS('background-image', /rgb\(1,\s*2,\s*3\)/);
+  const accentHalo = await pill.evaluate((el) => getComputedStyle(el).backgroundImage);
+  expect(accentHalo).not.toBe(beforeHalo);
+  expect(accentHalo).toMatch(/0\.5/);
   const placed = await headerBoxes();
   expect({
     fieldX: placed.field?.x,
@@ -732,10 +756,8 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   const iconBox = presentBox(await pill.boundingBox());
   const intoButtonX = corner.x + corner.width - (iconBox.x + iconBox.width / 2);
   const intoButtonY = iconBox.y + iconBox.height / 2 - corner.y;
-  expect(intoButtonX).toBeGreaterThanOrEqual(1);
-  expect(intoButtonX).toBeLessThanOrEqual(3);
-  expect(intoButtonY).toBeGreaterThanOrEqual(1);
-  expect(intoButtonY).toBeLessThanOrEqual(3);
+  expect(Math.abs(intoButtonX)).toBeLessThanOrEqual(1);
+  expect(Math.abs(intoButtonY)).toBeLessThanOrEqual(1);
   expect(await pill.evaluate((el) => {
     const box = el.getBoundingClientRect();
     const inset = Math.min(box.height / 2, 6);

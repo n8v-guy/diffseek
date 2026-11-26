@@ -59,11 +59,10 @@ request reviews. GitHub remains the review system and visual authority.
   changes remembered defaults. With nothing to reset the menu shows nothing
   there, keeps its space so rows do not move, and skips it in keyboard order.
 - While review-scoped exclusions hide files and the menu is closed, a Reset
-  filters icon (the ↺ mark alone: transparent, no border, no text) sits on
-  the filter button's top-right corner, nudged inward so it overlaps the
-  button, and out of the toolbar's flow, so the search field and the button
-  stay put. It is a sibling in GitHub's wrapper. It is inserted when a saved
-  review is restored or the menu closes.
+  filters icon (the ↺ mark alone: transparent, no border, no text) is centered
+  on the filter button's top-right corner, out of the toolbar's flow, so the
+  search field and the button stay put. It is a sibling in GitHub's wrapper.
+  It is inserted when a saved review is restored or the menu closes.
   CSS hides it from `data-diffseek-filtered` on `html` and from the
   trigger's `aria-expanded` state; the node then stays in the wrapper.
 - Menu counts read "…" until the review's first metadata read finishes.
