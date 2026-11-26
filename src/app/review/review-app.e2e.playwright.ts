@@ -900,7 +900,14 @@ test('keeps Reset filters visible when a short viewport constrains the menu', as
       [box.x + box.width / 2, box.y + box.height - 3],
     ];
     const overlay = document.getElementById('short-overlay');
+    const menu = document.querySelector('[data-diffseek="filters"]')?.getBoundingClientRect();
+    const center = box.y + box.height / 2;
+    const glyph = el.querySelector('svg')?.getBoundingClientRect();
     return {
+      centered: menu != null && Math.abs(center - menu.y) <= 1,
+      glyphInView: glyph != null
+        && glyph.y >= -1
+        && glyph.y + glyph.height <= window.innerHeight + 1,
       inView: box.y >= -1
         && box.x >= -1
         && box.y + box.height <= window.innerHeight + 1
@@ -909,21 +916,47 @@ test('keeps Reset filters visible when a short viewport constrains the menu', as
       scrolls: (overlay?.scrollHeight ?? 0) > (overlay?.clientHeight ?? 0),
     };
   });
-  expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
+  expect(await visible()).toEqual({
+    centered: true,
+    glyphInView: true,
+    inView: true,
+    hit: true,
+    scrolls: true,
+  });
   await reset.hover();
   await expect(reset.locator('span')).toBeVisible();
   await expect(reset.locator('span')).toHaveText('Reset filters');
-  expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
+  expect(await visible()).toEqual({
+    centered: true,
+    glyphInView: true,
+    inView: true,
+    hit: true,
+    scrolls: true,
+  });
   await page.evaluate(() => {
     const overlay = document.getElementById('short-overlay');
-    if (overlay) overlay.scrollTop = overlay.scrollHeight;
+    if (!overlay) return;
+    overlay.scrollTop = overlay.scrollHeight;
+    overlay.scrollTop = 0;
   });
   await reset.hover();
-  expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
+  expect(await visible()).toEqual({
+    centered: true,
+    glyphInView: true,
+    inView: true,
+    hit: true,
+    scrolls: true,
+  });
   await page.mouse.move(0, 0);
   await reset.evaluate((el) => el.focus({ focusVisible: true }));
   await expect(reset.locator('span')).toBeVisible();
-  expect(await visible()).toEqual({ inView: true, hit: true, scrolls: true });
+  expect(await visible()).toEqual({
+    centered: true,
+    glyphInView: true,
+    inView: true,
+    hit: true,
+    scrolls: true,
+  });
 });
 
 test('scrolls a tall menu in GitHub\'s overlay only, down to its last row', async () => {

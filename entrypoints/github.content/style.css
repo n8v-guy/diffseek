@@ -54,7 +54,9 @@
   color: var(--diffseek-foreground);
   display: block;
   max-width: calc(100vw - 0.5rem);
-  margin: 0.25rem;
+
+  /* Half the reset control, so a menu flush with the viewport still fits the icon. */
+  margin: 0.75rem 0.25rem 0.25rem;
   position: relative;
   width: max-content;
 }
@@ -214,7 +216,7 @@
   padding: 0;
   position: fixed;
   position-anchor: --diffseek-filters;
-  top: max(0px, calc(anchor(top) - 0.75rem));
+  top: calc(anchor(top) - 0.75rem);
   translate: calc(-100% + (1.5rem - 0.875rem) / 2 + 1px) 0;
   white-space: nowrap;
   width: 1.5rem;
