@@ -549,7 +549,7 @@ test('clears native filters before taking over the menu', async () => {
   const resetLabel = reset.locator('span');
   await expect(resetLabel).toBeHidden();
   await expect(reset).toHaveAttribute('aria-label', 'Reset filters');
-  await expect(reset).toHaveAttribute('title', 'Reset filters');
+  await expect(reset).not.toHaveAttribute('title');
   expect(await rowOffset()).toBe(rowOffsetWithoutReset);
   await page.evaluate(() => {
     const owned = document.querySelector('[data-diffseek-menu-owned="true"]');
@@ -617,15 +617,30 @@ test('clears native filters before taking over the menu', async () => {
     return el.contains(document.elementFromPoint(x, y));
   })).toBe(true);
   await expect(reset).toHaveCSS('border-top-style', 'none');
-  const haloOf = () => reset.evaluate((el) => getComputedStyle(el, '::before').backgroundImage);
-  const beforeHalo = await haloOf();
-  expect(beforeHalo).toMatch(/radial-gradient/);
-  await page.evaluate(() => {
-    document.documentElement.style.setProperty('--diffseek-accent', 'rgb(9, 8, 7)');
+  const disc = () => reset.evaluate((el) => {
+    const panel = el.closest('[data-diffseek="filters"]');
+    return {
+      fill: getComputedStyle(el, '::before').backgroundColor,
+      image: getComputedStyle(el, '::before').backgroundImage,
+      surface: panel ? getComputedStyle(panel).backgroundColor : '',
+    };
   });
-  const accentHalo = await haloOf();
-  expect(accentHalo).not.toBe(beforeHalo);
-  expect(accentHalo).toMatch(/0\.5/);
+  const light = await disc();
+  expect(light.image).toBe('none');
+  expect(light.fill).toBe(light.surface);
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    html.setAttribute('data-color-mode', 'dark');
+    html.setAttribute('data-dark-theme', 'dark');
+  });
+  const dark = await disc();
+  expect(dark.fill).toBe(dark.surface);
+  expect(dark.fill).not.toBe(light.fill);
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    html.removeAttribute('data-color-mode');
+    html.removeAttribute('data-dark-theme');
+  });
   const collapsed = presentBox(await reset.boundingBox());
   const iconBefore = presentBox(await reset.locator('svg').boundingBox());
   await reset.hover();
@@ -729,14 +744,34 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toBeVisible();
   await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
   await expect(pill).toHaveAttribute('title', 'Reset filters');
-  const beforeHalo = await pill.evaluate((el) => getComputedStyle(el).backgroundImage);
-  expect(beforeHalo).toMatch(/radial-gradient/);
-  await page.evaluate(() => {
-    document.documentElement.style.setProperty('--diffseek-accent', 'rgb(9, 8, 7)');
+  const buttonDisc = () => pill.evaluate((el) => {
+    const probe = document.createElement('div');
+    probe.style.background = 'var(--diffseek-background)';
+    document.body.append(probe);
+    const surface = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return {
+      fill: getComputedStyle(el, '::before').backgroundColor,
+      image: getComputedStyle(el, '::before').backgroundImage,
+      surface,
+    };
   });
-  const accentHalo = await pill.evaluate((el) => getComputedStyle(el).backgroundImage);
-  expect(accentHalo).not.toBe(beforeHalo);
-  expect(accentHalo).toMatch(/0\.5/);
+  const lightDisc = await buttonDisc();
+  expect(lightDisc.image).toBe('none');
+  expect(lightDisc.fill).toBe(lightDisc.surface);
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    html.setAttribute('data-color-mode', 'dark');
+    html.setAttribute('data-dark-theme', 'dark');
+  });
+  const darkDisc = await buttonDisc();
+  expect(darkDisc.fill).toBe(darkDisc.surface);
+  expect(darkDisc.fill).not.toBe(lightDisc.fill);
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    html.removeAttribute('data-color-mode');
+    html.removeAttribute('data-dark-theme');
+  });
   const placed = await headerBoxes();
   expect({
     fieldX: placed.field?.x,
@@ -796,7 +831,7 @@ test('keeps Reset filters visible when a short viewport constrains the menu', as
   await expect(reset).toBeVisible();
   await expect(reset.locator('span')).toBeHidden();
   await expect(reset).toHaveAttribute('aria-label', 'Reset filters');
-  await expect(reset).toHaveAttribute('title', 'Reset filters');
+  await expect(reset).not.toHaveAttribute('title');
   await page.evaluate(() => {
     const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
     const section = document.querySelector(

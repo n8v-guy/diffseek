@@ -40,7 +40,6 @@ export function resetFiltersButton(): HTMLButtonElement {
   reset.className = 'diffseek-reset-filters';
   reset.dataset.resetFilters = 'true';
   reset.setAttribute('aria-label', resetFiltersLabel);
-  reset.title = resetFiltersLabel;
   const label = document.createElement('span');
   label.textContent = resetFiltersLabel;
   reset.append(label, resetIcon());

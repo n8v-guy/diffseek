@@ -222,15 +222,21 @@
 }
 
 [data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters]::before {
-  border-radius: 50%;
   content: '';
-  height: 1.5rem;
   pointer-events: none;
   position: absolute;
-  right: 0;
+  right: calc((1.5rem - 0.875rem) / 2);
   top: 50%;
   translate: 0 -50%;
-  width: 1.5rem;
+}
+
+[data-diffseek='filter-button-reset']::before {
+  content: '';
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  translate: -50% -50%;
 }
 
 [data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters] > span {
@@ -271,15 +277,13 @@ html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(bod
   display: flex;
 }
 
-/* Accent halo. It follows the light and dark theme and fades out. */
-[data-diffseek='filter-button-reset'],
+/* Opaque disc in the surface color, so the border does not cross the glyph. */
+[data-diffseek='filter-button-reset']::before,
 [data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters]::before {
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--diffseek-accent) 50%, transparent) 0%,
-    color-mix(in srgb, var(--diffseek-accent) 16%, transparent) 46%,
-    transparent 72%
-  );
+  background: var(--diffseek-background);
+  border-radius: 50%;
+  height: 0.875rem;
+  width: 0.875rem;
 }
 
 [data-diffseek='filter-button-reset']:focus-visible {
