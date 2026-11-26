@@ -647,6 +647,8 @@ test('clears native filters before taking over the menu', async () => {
   await expect(resetLabel).toBeVisible();
   await expect(resetLabel).toHaveText('Reset filters');
   await expect(reset).toHaveCSS('box-shadow', /rgb/);
+  expect(await reset.evaluate((el) => getComputedStyle(el, '::before').content)).toBe('none');
+  await expect(reset).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const expanded = presentBox(await reset.boundingBox());
   const iconAfter = presentBox(await reset.locator('svg').boundingBox());
   const labelBox = presentBox(await resetLabel.boundingBox());
@@ -662,6 +664,7 @@ test('clears native filters before taking over the menu', async () => {
   await expect(resetLabel).toBeHidden();
   await reset.evaluate((el) => el.focus({ focusVisible: true }));
   await expect(resetLabel).toBeVisible();
+  expect(await reset.evaluate((el) => getComputedStyle(el, '::before').content)).toBe('none');
   await reset.click();
   await expect(menu).toBeVisible();
   await expect(page.locator('#docs\\/readme\\.md')).toBeHidden();

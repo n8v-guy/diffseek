@@ -321,6 +321,11 @@ html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(bod
   display: inline;
 }
 
+[data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters]:hover:enabled::before,
+[data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters]:focus-visible::before {
+  content: none;
+}
+
 /* Nothing to reset: show nothing, but keep its space so rows do not move. */
 .diffseek-reset-filters:disabled {
   visibility: hidden;
