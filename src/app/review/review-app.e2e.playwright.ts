@@ -586,8 +586,8 @@ test('clears native filters before taking over the menu', async () => {
   expect(badge.x + badge.width).toBeGreaterThan(menuBox.x + menuBox.width);
   expect(badge.width).toBeCloseTo(glyph.width * (1.5 / 0.875), 0);
   expect(badge.height).toBeCloseTo(badge.width, 0);
-  expect(intoMenuY).toBeGreaterThanOrEqual(1);
-  expect(intoMenuY).toBeLessThanOrEqual(4);
+  expect(intoMenuY).toBeGreaterThanOrEqual(-1);
+  expect(intoMenuY).toBeLessThanOrEqual(1);
   expect(await reset.evaluate((el) => {
     const box = el.getBoundingClientRect();
     const inset = Math.min(box.height / 2, 8);
@@ -769,27 +769,39 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   expect(lightGlyph.stroke).not.toBe(lightGlyph.fill);
   const buttonDisc = () => pill.evaluate((el) => {
     const probe = document.createElement('div');
-    probe.style.background = 'var(--diffseek-background)';
+    probe.style.background = 'var(--bgColor-default, canvas)';
     document.body.append(probe);
     const surface = getComputedStyle(probe).backgroundColor;
     probe.remove();
+    const paint = getComputedStyle(el);
     return {
       fill: getComputedStyle(el, '::before').backgroundColor,
       image: getComputedStyle(el, '::before').backgroundImage,
+      ring: paint.backgroundColor,
+      shadow: paint.boxShadow,
       surface,
     };
+  });
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--bgColor-default', 'rgb(250, 251, 252)');
   });
   const lightDisc = await buttonDisc();
   expect(lightDisc.image).toBe('none');
   expect(lightDisc.fill).toBe(lightDisc.surface);
+  expect(lightDisc.ring).toBe('rgba(0, 0, 0, 0)');
+  expect(lightDisc.shadow).toBe('none');
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--bgColor-default', 'rgb(13, 17, 23)');
+  });
+  const darkDisc = await buttonDisc();
+  expect(darkDisc.fill).toBe(darkDisc.surface);
+  expect(darkDisc.fill).not.toBe(lightDisc.fill);
+  expect(darkDisc.ring).toBe('rgba(0, 0, 0, 0)');
   await page.evaluate(() => {
     const html = document.documentElement;
     html.setAttribute('data-color-mode', 'dark');
     html.setAttribute('data-dark-theme', 'dark');
   });
-  const darkDisc = await buttonDisc();
-  expect(darkDisc.fill).toBe(darkDisc.surface);
-  expect(darkDisc.fill).not.toBe(lightDisc.fill);
   const darkGlyph = await glyph();
   expect(darkGlyph.onGlyph).toBe(true);
   expect(darkGlyph.stroke).toBe(darkGlyph.accent);

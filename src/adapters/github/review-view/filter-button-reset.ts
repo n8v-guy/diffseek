@@ -134,6 +134,7 @@ function cornerButton(): HTMLButtonElement {
   reset.dataset.diffseek = 'filter-button-reset';
   reset.setAttribute('aria-label', resetFiltersLabel);
   reset.title = resetFiltersLabel;
+  reset.style.setProperty('--diffseek-reset-surface', 'var(--bgColor-default)');
   reset.append(resetIcon());
   reset.addEventListener('click', (event) => {
     event.stopPropagation();

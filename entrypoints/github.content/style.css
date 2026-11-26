@@ -214,7 +214,7 @@
   padding: 0;
   position: fixed;
   position-anchor: --diffseek-filters;
-  top: max(0px, calc(anchor(top) - 10px));
+  top: max(0px, calc(anchor(top) - 0.75rem));
   translate: calc(-100% + (1.5rem - 0.875rem) / 2 + 1px) 0;
   white-space: nowrap;
   width: 1.5rem;
@@ -222,21 +222,31 @@
 }
 
 [data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters]::before {
+  background: var(--diffseek-background);
+  border-radius: 50%;
   content: '';
+  height: 0.875rem;
   pointer-events: none;
   position: absolute;
   right: calc((1.5rem - 0.875rem) / 2);
   top: 50%;
   translate: 0 -50%;
+  width: 0.875rem;
+  z-index: -1;
 }
 
 [data-diffseek='filter-button-reset']::before {
+  background: var(--diffseek-reset-surface, canvas);
+  border-radius: 50%;
   content: '';
+  height: 0.875rem;
   left: 50%;
   pointer-events: none;
   position: absolute;
   top: 50%;
   translate: -50% -50%;
+  width: 0.875rem;
+  z-index: -1;
 }
 
 [data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters] > span {
@@ -253,8 +263,11 @@
 /* Centered on the filter button's top-right border corner. Out of flow. */
 [data-diffseek='filter-button-reset'] {
   align-items: center;
+  appearance: none;
+  background: transparent;
   border: 0;
   border-radius: 50%;
+  box-shadow: none;
   color: var(--diffseek-foreground);
   cursor: pointer;
   display: none;
@@ -274,17 +287,10 @@
 /* No file tree means the page is unsupported. Keep the node and hide it. */
 html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(body, html):has(> [data-diffseek-filter-trigger][aria-expanded='false']) > [data-diffseek='filter-button-reset'],
 html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(body, html):has(> [data-diffseek-filter-trigger]:not([aria-expanded])) > [data-diffseek='filter-button-reset'] {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   display: flex;
-}
-
-/* Opaque disc in the surface color, so the border does not cross the glyph. */
-[data-diffseek='filter-button-reset']::before,
-[data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters]::before {
-  background: var(--diffseek-background);
-  border-radius: 50%;
-  height: 0.875rem;
-  width: 0.875rem;
-  z-index: -1;
 }
 
 [data-diffseek='filter-button-reset']:focus-visible {
