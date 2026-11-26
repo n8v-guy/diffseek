@@ -546,27 +546,125 @@ test('clears native filters before taking over the menu', async () => {
     ).first(),
   ).toHaveAttribute('aria-checked', 'false');
   await expect(reset).toBeVisible();
-  await expect(reset).toHaveText('Reset filters');
+  const resetLabel = reset.locator('span');
+  await expect(resetLabel).toBeHidden();
+  await expect(reset).toHaveAttribute('aria-label', 'Reset filters');
+  await expect(reset).not.toHaveAttribute('title');
   expect(await rowOffset()).toBe(rowOffsetWithoutReset);
-  const [buttonRect, iconRect, labelRect, rootRect, rowRect] = await Promise.all([
-    reset.boundingBox(),
-    reset.locator('svg').boundingBox(),
-    reset.locator('span').boundingBox(),
-    page.locator('[data-diffseek="filters"]').boundingBox(),
-    viewed.boundingBox(),
-  ]);
-  const resetButton = presentBox(buttonRect);
-  const filtersRoot = presentBox(rootRect);
-  const icon = presentBox(iconRect);
-  // Where the icon-only control sat: centered 6 px inside the top-right corner.
-  const cornerOffset = (a: number, b: number) => Math.abs(a - b) <= 2;
-  expect({
-    iconAtCorner:
-      cornerOffset(icon.x + icon.width / 2, filtersRoot.x + filtersRoot.width - 6) &&
-      cornerOffset(icon.y + icon.height / 2, filtersRoot.y + 6),
-    labelBeforeIcon: presentBox(labelRect).x < icon.x,
-    aboveRows: resetButton.y + resetButton.height <= presentBox(rowRect).y,
-  }).toEqual({ iconAtCorner: true, labelBeforeIcon: true, aboveRows: true });
+  await page.evaluate(() => {
+    const owned = document.querySelector('[data-diffseek-menu-owned="true"]');
+    if (!owned || owned.parentElement?.id === 'menu-clip') return;
+    const overlay = document.createElement('div');
+    overlay.id = 'menu-clip';
+    overlay.style.cssText = 'overflow: auto; max-height: 480px;';
+    owned.before(overlay);
+    overlay.append(owned);
+  });
+  const rowMetrics = await page.evaluate(() => {
+    const measure = (el: Element) => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return {
+        pad: `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`,
+        height: Math.round(box.height),
+      };
+    };
+    const items = [...document.querySelectorAll('.diffseek-menu-item')];
+    const first = items[0];
+    const next = items[1];
+    if (!first || !next) throw new Error('Missing menu rows');
+    return { first: measure(first), next: measure(next) };
+  });
+  expect(rowMetrics.first).toEqual(rowMetrics.next);
+  const menuBox = presentBox(await page.locator('[data-diffseek="filters"]').boundingBox());
+  const badge = presentBox(await reset.boundingBox());
+  const glyph = presentBox(await reset.locator('svg').boundingBox());
+  const glyphInset = menuBox.x + menuBox.width - (glyph.x + glyph.width);
+  const intoMenuY = glyph.y + glyph.height / 2 - menuBox.y;
+  expect(glyphInset).toBeGreaterThanOrEqual(-1);
+  expect(glyphInset).toBeLessThanOrEqual(2);
+  expect(badge.x + badge.width).toBeGreaterThan(menuBox.x + menuBox.width);
+  expect(badge.width).toBeCloseTo(glyph.width * (1.5 / 0.875), 0);
+  expect(badge.height).toBeCloseTo(badge.width, 0);
+  expect(intoMenuY).toBeGreaterThanOrEqual(-1);
+  expect(intoMenuY).toBeLessThanOrEqual(1);
+  expect(await reset.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const inset = Math.min(box.height / 2, 8);
+    const points: [number, number][] = [
+      [box.x + inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + 3],
+      [box.x + box.width - inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + box.height - 3],
+    ];
+    return points.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+  })).toBe(true);
+  const viewedCount = page.locator(
+    '.diffseek-menu-row:has([data-filter-kind="viewed"][data-filter-value="true"]) .diffseek-menu-count',
+  );
+  const countBox = presentBox(await viewedCount.boundingBox());
+  expect(await page.evaluate(({ x, y }) => (
+    document.elementFromPoint(x, y)?.closest('[data-reset-filters]') == null
+  ), {
+    x: countBox.x + countBox.width / 2,
+    y: countBox.y + countBox.height / 2,
+  })).toBe(true);
+  expect(await reset.evaluate((el) => {
+    const icon = el.querySelector('svg')?.getBoundingClientRect();
+    if (!icon) return false;
+    const x = icon.x + icon.width + 2;
+    const y = icon.y + icon.height / 2;
+    return el.contains(document.elementFromPoint(x, y));
+  })).toBe(true);
+  await expect(reset).toHaveCSS('border-top-style', 'none');
+  const disc = () => reset.evaluate((el) => {
+    const panel = el.closest('[data-diffseek="filters"]');
+    return {
+      fill: getComputedStyle(el, '::before').backgroundColor,
+      image: getComputedStyle(el, '::before').backgroundImage,
+      surface: panel ? getComputedStyle(panel).backgroundColor : '',
+    };
+  });
+  const light = await disc();
+  expect(light.image).toBe('none');
+  expect(light.fill).toBe(light.surface);
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    html.setAttribute('data-color-mode', 'dark');
+    html.setAttribute('data-dark-theme', 'dark');
+  });
+  const dark = await disc();
+  expect(dark.fill).toBe(dark.surface);
+  expect(dark.fill).not.toBe(light.fill);
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    html.removeAttribute('data-color-mode');
+    html.removeAttribute('data-dark-theme');
+  });
+  const collapsed = presentBox(await reset.boundingBox());
+  const iconBefore = presentBox(await reset.locator('svg').boundingBox());
+  await reset.hover();
+  await expect(resetLabel).toBeVisible();
+  await expect(resetLabel).toHaveText('Reset filters');
+  await expect(reset).toHaveCSS('box-shadow', /rgb/);
+  expect(await reset.evaluate((el) => getComputedStyle(el, '::before').content)).toBe('none');
+  await expect(reset).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  const expanded = presentBox(await reset.boundingBox());
+  const iconAfter = presentBox(await reset.locator('svg').boundingBox());
+  const labelBox = presentBox(await resetLabel.boundingBox());
+  expect(Math.abs(iconAfter.x - iconBefore.x)).toBeLessThan(0.6);
+  expect(Math.abs(iconAfter.y - iconBefore.y)).toBeLessThan(0.6);
+  expect(labelBox.x + labelBox.width).toBeLessThanOrEqual(iconAfter.x + 1);
+  expect(expanded.x).toBeLessThan(collapsed.x);
+  expect(expanded.width).toBeGreaterThan(collapsed.width);
+  expect(Math.abs(
+    expanded.x + expanded.width - (collapsed.x + collapsed.width),
+  )).toBeLessThan(1.5);
+  await page.mouse.move(0, 0);
+  await expect(resetLabel).toBeHidden();
+  await reset.evaluate((el) => el.focus({ focusVisible: true }));
+  await expect(resetLabel).toBeVisible();
+  expect(await reset.evaluate((el) => getComputedStyle(el, '::before').content)).toBe('none');
   await reset.click();
   await expect(menu).toBeVisible();
   await expect(page.locator('#docs\\/readme\\.md')).toBeHidden();
@@ -579,14 +677,18 @@ test('clears native filters before taking over the menu', async () => {
 
 test('puts Reset filters on the closed filter button while filters hide files', async () => {
   const page = await openPull(14);
-  // GitHub's captured button: named by aria-labelledby, in a tight wrapper.
+  // GitHub's file-tree header: a tight flex row, search field, then the Filter button.
   await page.evaluate(() => {
     const button = document.querySelector('button[aria-label="Filter options"]');
     if (!button) return;
-    const wrap = document.createElement('span');
+    const wrap = document.createElement('div');
     wrap.id = 'filter-options-wrap';
+    const field = document.createElement('input');
+    field.id = 'filter-files';
+    field.placeholder = 'Filter files...';
+    field.setAttribute('aria-label', 'Filter files');
     button.before(wrap);
-    wrap.append(button);
+    wrap.append(field, button);
     button.insertAdjacentHTML(
       'beforebegin',
       '<span id="filter-options-label" hidden>Filter options</span>',
@@ -598,8 +700,15 @@ test('puts Reset filters on the closed filter button while filters hide files', 
     button.setAttribute('style', 'anchor-name: --anchored-overlay-anchor-r1;');
   });
   await page.addStyleTag({
-    content:
-      '#filter-options-wrap { display: inline-block; margin: 40px; } #filter-options { width: 32px; height: 32px; }',
+    content: `#filter-options-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      width: 240px;
+      margin: 40px;
+    }
+    #filter-files { flex: 1 0 200px; height: 32px; box-sizing: border-box; }
+    #filter-options { width: 32px; height: 32px; flex: none; }`,
   });
   const pill = page.locator('[data-diffseek="filter-button-reset"]');
   const root = page.locator('html');
@@ -614,14 +723,129 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toBeHidden();
   await expect(page.locator('[data-diffseek="filters"] [data-reset-filters]')).toBeVisible();
 
+  const headerBoxes = () => page.evaluate(() => {
+    const rect = (id: string) => {
+      const el = document.getElementById(id);
+      const box = el?.getBoundingClientRect();
+      if (!box) return null;
+      return {
+        x: Math.round(box.x),
+        y: Math.round(box.y),
+        width: Math.round(box.width),
+        height: Math.round(box.height),
+      };
+    };
+    return {
+      field: rect('filter-files'),
+      button: rect('filter-options'),
+    };
+  });
+  const still = await headerBoxes();
   await page.keyboard.press('Escape');
   await expect(page.locator('[role="menu"]')).toHaveCount(0);
   await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'false');
   await expect(pill).toBeVisible();
   await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
+  await expect(pill).toHaveAttribute('title', 'Reset filters');
+  const glyph = () => pill.evaluate((el) => {
+    const icon = el.querySelector('svg');
+    const box = icon?.getBoundingClientRect();
+    const probe = document.createElement('div');
+    probe.style.color = 'var(--diffseek-foreground)';
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const hit = box
+      ? document.elementFromPoint(box.x + box.width * (3.5 / 16), box.y + box.height * (5 / 16))
+      : null;
+    return {
+      accent,
+      fill: getComputedStyle(el, '::before').backgroundColor,
+      onGlyph: Boolean(icon && hit && icon.contains(hit)),
+      stroke: icon ? getComputedStyle(icon).stroke : '',
+    };
+  });
+  await page.locator('#filter-options').scrollIntoViewIfNeeded();
+  const lightGlyph = await glyph();
+  expect(lightGlyph.onGlyph).toBe(true);
+  expect(lightGlyph.stroke).toBe(lightGlyph.accent);
+  expect(lightGlyph.stroke).not.toBe(lightGlyph.fill);
+  const buttonDisc = () => pill.evaluate((el) => {
+    const probe = document.createElement('div');
+    probe.style.background = 'var(--bgColor-default, canvas)';
+    document.body.append(probe);
+    const surface = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const paint = getComputedStyle(el);
+    return {
+      fill: getComputedStyle(el, '::before').backgroundColor,
+      image: getComputedStyle(el, '::before').backgroundImage,
+      ring: paint.backgroundColor,
+      shadow: paint.boxShadow,
+      surface,
+    };
+  });
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--bgColor-default', 'rgb(250, 251, 252)');
+  });
+  const lightDisc = await buttonDisc();
+  expect(lightDisc.image).toBe('none');
+  expect(lightDisc.fill).toBe(lightDisc.surface);
+  expect(lightDisc.ring).toBe('rgba(0, 0, 0, 0)');
+  expect(lightDisc.shadow).toBe('none');
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--bgColor-default', 'rgb(13, 17, 23)');
+  });
+  const darkDisc = await buttonDisc();
+  expect(darkDisc.fill).toBe(darkDisc.surface);
+  expect(darkDisc.fill).not.toBe(lightDisc.fill);
+  expect(darkDisc.ring).toBe('rgba(0, 0, 0, 0)');
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    html.setAttribute('data-color-mode', 'dark');
+    html.setAttribute('data-dark-theme', 'dark');
+  });
+  const darkGlyph = await glyph();
+  expect(darkGlyph.onGlyph).toBe(true);
+  expect(darkGlyph.stroke).toBe(darkGlyph.accent);
+  expect(darkGlyph.stroke).not.toBe(darkGlyph.fill);
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    html.removeAttribute('data-color-mode');
+    html.removeAttribute('data-dark-theme');
+  });
+  const placed = await headerBoxes();
+  expect({
+    fieldX: placed.field?.x,
+    fieldWidth: placed.field?.width,
+    buttonX: placed.button?.x,
+    buttonWidth: placed.button?.width,
+    line: (placed.button?.y ?? 0) - (placed.field?.y ?? 0),
+  }).toEqual({
+    fieldX: still.field?.x,
+    fieldWidth: still.field?.width,
+    buttonX: still.button?.x,
+    buttonWidth: still.button?.width,
+    line: (still.button?.y ?? 0) - (still.field?.y ?? 0),
+  });
   await page.locator('#filter-options').scrollIntoViewIfNeeded();
   const corner = presentBox(await page.locator('#filter-options').boundingBox());
-  await page.mouse.click(corner.x + corner.width - 1, corner.y + 1);
+  const iconBox = presentBox(await pill.boundingBox());
+  const intoButtonX = corner.x + corner.width - (iconBox.x + iconBox.width / 2);
+  const intoButtonY = iconBox.y + iconBox.height / 2 - corner.y;
+  expect(Math.abs(intoButtonX)).toBeLessThanOrEqual(1);
+  expect(Math.abs(intoButtonY)).toBeLessThanOrEqual(1);
+  expect(await pill.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const inset = Math.min(box.height / 2, 6);
+    const points: [number, number][] = [
+      [box.x + inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + 2],
+      [box.x + box.width - inset, box.y + box.height / 2],
+    ];
+    return points.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+  })).toBe(true);
+  await page.mouse.click(corner.x + 4, corner.y + corner.height - 4);
   await expect(page.locator('[data-diffseek="filters"]')).toBeVisible();
   await expect(page.locator('#diff-app')).toBeHidden();
   await expect(pill).toBeHidden();
@@ -636,6 +860,108 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(root).not.toHaveAttribute('data-diffseek-filtered');
 });
 
+test('keeps Reset filters visible when a short viewport constrains the menu', async () => {
+  const page = await openPull(18);
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.getByLabel('Filter options').click();
+  const ownerRow = page.locator(
+    '.diffseek-menu-row:has([data-filter-kind="owners"][data-filter-value="@source"])',
+  );
+  await ownerRow.hover();
+  await ownerRow.locator('[data-filter-only]').click();
+  const reset = page.locator('[data-diffseek="filters"] [data-reset-filters]');
+  await expect(reset).toBeVisible();
+  await expect(reset.locator('span')).toBeHidden();
+  await expect(reset).toHaveAttribute('aria-label', 'Reset filters');
+  await expect(reset).not.toHaveAttribute('title');
+  await page.evaluate(() => {
+    const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
+    const section = document.querySelector(
+      '.diffseek-menu-section:has([data-filter-kind="owners"])',
+    );
+    const row = section?.querySelector('.diffseek-menu-row');
+    if (section && row) {
+      for (let i = 0; i < 30; i += 1) section.append(row.cloneNode(true));
+    }
+    if (!menu) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'short-overlay';
+    overlay.setAttribute(
+      'style',
+      'position: fixed; top: 0; left: 8px; max-height: 100vh; overflow: auto',
+    );
+    menu.before(overlay);
+    overlay.append(menu);
+  });
+  const visible = () => reset.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const inset = Math.min(box.height / 2, 8);
+    const points: [number, number][] = [
+      [box.x + inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + 3],
+      [box.x + box.width - inset, box.y + box.height / 2],
+      [box.x + box.width / 2, box.y + box.height - 3],
+    ];
+    const overlay = document.getElementById('short-overlay');
+    const menu = document.querySelector('[data-diffseek="filters"]')?.getBoundingClientRect();
+    const center = box.y + box.height / 2;
+    const glyph = el.querySelector('svg')?.getBoundingClientRect();
+    return {
+      centered: menu != null && Math.abs(center - menu.y) <= 1,
+      glyphInView: glyph != null
+        && glyph.y >= -1
+        && glyph.y + glyph.height <= window.innerHeight + 1,
+      inView: box.y >= -1
+        && box.x >= -1
+        && box.y + box.height <= window.innerHeight + 1
+        && box.x + box.width <= window.innerWidth + 1,
+      hit: points.every(([x, y]) => el.contains(document.elementFromPoint(x, y))),
+      scrolls: (overlay?.scrollHeight ?? 0) > (overlay?.clientHeight ?? 0),
+    };
+  });
+  expect(await visible()).toEqual({
+    centered: true,
+    glyphInView: true,
+    inView: true,
+    hit: true,
+    scrolls: true,
+  });
+  await reset.hover();
+  await expect(reset.locator('span')).toBeVisible();
+  await expect(reset.locator('span')).toHaveText('Reset filters');
+  expect(await visible()).toEqual({
+    centered: true,
+    glyphInView: true,
+    inView: true,
+    hit: true,
+    scrolls: true,
+  });
+  await page.evaluate(() => {
+    const overlay = document.getElementById('short-overlay');
+    if (!overlay) return;
+    overlay.scrollTop = overlay.scrollHeight;
+    overlay.scrollTop = 0;
+  });
+  await reset.hover();
+  expect(await visible()).toEqual({
+    centered: true,
+    glyphInView: true,
+    inView: true,
+    hit: true,
+    scrolls: true,
+  });
+  await page.mouse.move(0, 0);
+  await reset.evaluate((el) => el.focus({ focusVisible: true }));
+  await expect(reset.locator('span')).toBeVisible();
+  expect(await visible()).toEqual({
+    centered: true,
+    glyphInView: true,
+    inView: true,
+    hit: true,
+    scrolls: true,
+  });
+});
+
 test('scrolls a tall menu in GitHub\'s overlay only, down to its last row', async () => {
   const page = await openPull(15);
   await page.setViewportSize({ width: 1280, height: 240 });
@@ -646,7 +972,7 @@ test('scrolls a tall menu in GitHub\'s overlay only, down to its last row', asyn
     const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
     const overlay = document.createElement('div');
     overlay.id = 'overlay';
-    overlay.setAttribute('style', 'position: fixed; top: 40px; left: 0; max-height: 100vh; overflow: auto');
+    overlay.setAttribute('style', 'position: fixed; top: 40px; left: 0; max-height: calc(100vh - 40px); overflow: auto');
     menu?.before(overlay);
     if (menu) overlay.append(menu);
   });

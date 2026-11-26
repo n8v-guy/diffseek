@@ -37,14 +37,14 @@ export default defineConfig({
           browser_specific_settings: {
             gecko: {
               id: 'diffseek@n8v.me',
-              strict_min_version: '142.0',
+              strict_min_version: '147.0',
               data_collection_permissions: {
                 required: ['none'],
               },
             },
           },
         }
-      : {}),
+      : { minimum_chrome_version: '125' }),
   }),
   hooks: {
     'build:publicAssets': async (wxt, files) => {

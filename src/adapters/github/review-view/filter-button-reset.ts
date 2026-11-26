@@ -2,7 +2,7 @@ import type { FilterDefaults } from '@diffseek/browser';
 import type { FilterState } from '@diffseek/review';
 
 import { hasTransientExclusions, resetTransientExclusions } from './filter-reset';
-import { anchoredFilterTrigger, isFilterOptionsTrigger } from './review-ui';
+import { anchoredFilterTrigger, cssAnchorName, isFilterOptionsTrigger } from './review-ui';
 
 type ResetOptions = {
   filters: FilterState;
@@ -10,10 +10,11 @@ type ResetOptions = {
   onChange: () => void;
 };
 
+const resetFiltersLabel = 'Reset filters';
 const buttonResetSelector = '[data-diffseek="filter-button-reset"]';
 /** Set on the trigger Reset was mounted beside. CSS shows the icon only next to it. */
 export const filterTriggerMark = 'data-diffseek-filter-trigger';
-/** Page-level flag. CSS shows the corner Reset icon while review filters hide files. */
+/** Page-level flag. CSS shows the Reset icon beside the closed filter button. */
 const filteredAttribute = 'data-diffseek-filtered';
 const latestOptions = new WeakMap<HTMLButtonElement, ResetOptions>();
 const retainedTrigger = new WeakMap<Document, HTMLButtonElement>();
@@ -32,21 +33,22 @@ function resetIcon(): SVGSVGElement {
   return icon;
 }
 
-/** Menu row: label, then the reset icon. */
+/** Menu badge: icon until hover or focus, then the label. */
 export function resetFiltersButton(): HTMLButtonElement {
   const reset = document.createElement('button');
   reset.type = 'button';
   reset.className = 'diffseek-reset-filters';
   reset.dataset.resetFilters = 'true';
+  reset.setAttribute('aria-label', resetFiltersLabel);
   const label = document.createElement('span');
-  label.textContent = 'Reset filters';
+  label.textContent = resetFiltersLabel;
   reset.append(label, resetIcon());
   return reset;
 }
 
 /**
  * Writes `data-diffseek-filtered` on `<html>` only when the review-scoped
- * exclusion state changes. Visibility of the corner icon is CSS-only.
+ * exclusion state changes. Visibility of the icon is CSS-only.
  */
 function syncFilteredAttribute(
   root: Document,
@@ -130,7 +132,9 @@ function cornerButton(): HTMLButtonElement {
   reset.type = 'button';
   reset.dataset.resetFilters = 'true';
   reset.dataset.diffseek = 'filter-button-reset';
-  reset.setAttribute('aria-label', 'Reset filters');
+  reset.setAttribute('aria-label', resetFiltersLabel);
+  reset.title = resetFiltersLabel;
+  reset.style.setProperty('--diffseek-reset-surface', 'var(--bgColor-default)');
   reset.append(resetIcon());
   reset.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -142,8 +146,17 @@ function cornerButton(): HTMLButtonElement {
   return reset;
 }
 
+/** Follows the trigger's Primer anchor name, and drops one it no longer has. */
+function anchorTo(icon: HTMLButtonElement, trigger: HTMLButtonElement): boolean {
+  const anchor = cssAnchorName(trigger) ?? '';
+  if (icon.style.getPropertyValue('position-anchor') === anchor) return false;
+  icon.style.setProperty('position-anchor', anchor);
+  return true;
+}
+
 function place(icon: HTMLButtonElement, trigger: HTMLButtonElement): void {
   if (!trigger.hasAttribute(filterTriggerMark)) trigger.setAttribute(filterTriggerMark, '');
+  anchorTo(icon, trigger);
   trigger.after(icon);
 }
 
@@ -185,6 +198,7 @@ function ensureFilterButtonReset(
       trigger.setAttribute(filterTriggerMark, '');
       wrote = true;
     }
+    if (anchorTo(icon, trigger)) wrote = true;
     return { wrote, placed: true };
   }
   if (!due) return { wrote, placed: false };
@@ -200,7 +214,7 @@ function ensureFilterButtonReset(
   return { wrote: true, placed: true };
 }
 
-/** Writes the page attribute. Inserts the corner icon only when `due`. */
+/** Writes the page attribute. Inserts the icon only when `due`. */
 export function syncFilterReset(
   root: Document,
   options: ResetOptions,
