@@ -284,6 +284,7 @@ html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(bod
   border-radius: 50%;
   height: 0.875rem;
   width: 0.875rem;
+  z-index: -1;
 }
 
 [data-diffseek='filter-button-reset']:focus-visible {
@@ -318,7 +319,7 @@ html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(bod
 [data-diffseek='filter-button-reset'] svg {
   fill: none;
   height: 0.875rem;
-  stroke: currentcolor;
+  stroke: var(--diffseek-foreground);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.75;

@@ -744,6 +744,29 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(pill).toBeVisible();
   await expect(pill).toHaveAttribute('aria-label', 'Reset filters');
   await expect(pill).toHaveAttribute('title', 'Reset filters');
+  const glyph = () => pill.evaluate((el) => {
+    const icon = el.querySelector('svg');
+    const box = icon?.getBoundingClientRect();
+    const probe = document.createElement('div');
+    probe.style.color = 'var(--diffseek-foreground)';
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const hit = box
+      ? document.elementFromPoint(box.x + box.width * (3.5 / 16), box.y + box.height * (5 / 16))
+      : null;
+    return {
+      accent,
+      fill: getComputedStyle(el, '::before').backgroundColor,
+      onGlyph: Boolean(icon && hit && icon.contains(hit)),
+      stroke: icon ? getComputedStyle(icon).stroke : '',
+    };
+  });
+  await page.locator('#filter-options').scrollIntoViewIfNeeded();
+  const lightGlyph = await glyph();
+  expect(lightGlyph.onGlyph).toBe(true);
+  expect(lightGlyph.stroke).toBe(lightGlyph.accent);
+  expect(lightGlyph.stroke).not.toBe(lightGlyph.fill);
   const buttonDisc = () => pill.evaluate((el) => {
     const probe = document.createElement('div');
     probe.style.background = 'var(--diffseek-background)';
@@ -767,6 +790,10 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   const darkDisc = await buttonDisc();
   expect(darkDisc.fill).toBe(darkDisc.surface);
   expect(darkDisc.fill).not.toBe(lightDisc.fill);
+  const darkGlyph = await glyph();
+  expect(darkGlyph.onGlyph).toBe(true);
+  expect(darkGlyph.stroke).toBe(darkGlyph.accent);
+  expect(darkGlyph.stroke).not.toBe(darkGlyph.fill);
   await page.evaluate(() => {
     const html = document.documentElement;
     html.removeAttribute('data-color-mode');
