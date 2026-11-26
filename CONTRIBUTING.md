@@ -95,9 +95,9 @@ Each run also takes GitHub-only samples: fresh profiles without DiffSeek
 repeat the loads and mark one file viewed with GitHub's own button. Both
 kinds of sample count page mutations and diff-panel and tree-row removals the
 same way. Those counts are bounded by the DiffSeek median minus the GitHub-only
-median, at most the highest difference observed, so GitHub's own redraws do
-not count against DiffSeek. Filter toggles and unmark have no GitHub-only form
-and compare with zero, as do reconciles and page writes.
+median, at most the highest single-sample difference observed, so GitHub's
+own redraws do not count against DiffSeek. Filter toggles and unmark have no
+GitHub-only form and compare with zero, as do reconciles and page writes.
 
 Live end-to-end waits are event-based; timeouts only fail a stuck run. GitHub
 first renders a static Filter options button and swaps in an interactive one
