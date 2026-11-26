@@ -146,10 +146,17 @@ function cornerButton(): HTMLButtonElement {
   return reset;
 }
 
+/** Follows the trigger's Primer anchor name, and drops one it no longer has. */
+function anchorTo(icon: HTMLButtonElement, trigger: HTMLButtonElement): boolean {
+  const anchor = cssAnchorName(trigger) ?? '';
+  if (icon.style.getPropertyValue('position-anchor') === anchor) return false;
+  icon.style.setProperty('position-anchor', anchor);
+  return true;
+}
+
 function place(icon: HTMLButtonElement, trigger: HTMLButtonElement): void {
   if (!trigger.hasAttribute(filterTriggerMark)) trigger.setAttribute(filterTriggerMark, '');
-  const anchor = cssAnchorName(trigger);
-  if (anchor) icon.style.setProperty('position-anchor', anchor);
+  anchorTo(icon, trigger);
   trigger.after(icon);
 }
 
@@ -191,6 +198,7 @@ function ensureFilterButtonReset(
       trigger.setAttribute(filterTriggerMark, '');
       wrote = true;
     }
+    if (anchorTo(icon, trigger)) wrote = true;
     return { wrote, placed: true };
   }
   if (!due) return { wrote, placed: false };

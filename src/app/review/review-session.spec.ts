@@ -125,6 +125,7 @@ describe('review session stream batching', () => {
     await nextTask();
     expect(live.nextElementSibling).toBe(icon());
     expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+    expect(icon()?.getAttribute('style')).toContain('position-anchor: --filter-anchor');
     expect(since()).toBe(1);
 
     live.setAttribute('aria-label', 'Other options');
@@ -147,6 +148,7 @@ describe('review session stream batching', () => {
     label.textContent = 'Filter options';
     await nextTask();
     expect(live.hasAttribute('data-diffseek-filter-trigger')).toBe(true);
+    expect(icon()?.getAttribute('style')).not.toContain('position-anchor');
 
     const inner = document.createElement('span');
     inner.textContent = 'Other options';
