@@ -91,6 +91,14 @@ median durations must stay under twice the slowest of five local runs, rounded
 up to 0.1 s. Rebuild, reconcile, and page write counts must be less than or
 equal to the highest observed value.
 
+Each run also takes GitHub-only samples: fresh profiles without DiffSeek
+repeat the loads and mark one file viewed with GitHub's own button. Both
+kinds of sample count page mutations and diff-panel and tree-row removals the
+same way. Those counts are bounded by the DiffSeek median minus the GitHub-only
+median, at most the highest difference observed, so GitHub's own redraws do
+not count against DiffSeek. Filter toggles and unmark have no GitHub-only form
+and compare with zero, as do reconciles and page writes.
+
 Live end-to-end waits are event-based; timeouts only fail a stuck run. GitHub
 first renders a static Filter options button and swaps in an interactive one
 shortly after, so tests open the menu only once the interactive one is there.
@@ -101,9 +109,11 @@ CI runs on pushes and pull requests, including forks. After CI passes on a
 push to main, live end-to-end runs and then the release for the same commit.
 The release builds the store packages and publishes a versioned GitHub release
 with a changelog. Its version comes from the commit count. Live end-to-end can
-also be started by hand on any branch whose head passed push CI. Only main
-continues to a release. Live end-to-end needs the signed-in session as a
-repository secret.
+also be started by hand on any branch whose head passed push CI. Pull requests
+from this repository run it too, once their pull request CI passes; fork and
+Dependabot pull requests have no secrets and skip it. Runs share the signed-in
+session, so they queue one at a time. Only main continues to a release. Live
+end-to-end needs the signed-in session as a repository secret.
 
 Publishing to the Chrome Web Store is manual and only from main. It requires
 CI, live end-to-end, and the release to be green for that commit, and it
