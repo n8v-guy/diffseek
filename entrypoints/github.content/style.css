@@ -54,9 +54,7 @@
   color: var(--diffseek-foreground);
   display: block;
   max-width: calc(100vw - 0.5rem);
-
-  /* Half the reset control, so a menu flush with the viewport still fits the icon. */
-  margin: 0.75rem 0.25rem 0.25rem;
+  margin: 0.25rem;
   position: relative;
   width: max-content;
 }
@@ -68,6 +66,11 @@
   min-width: 0 !important;
   padding: 0 !important;
   width: max-content !important;
+}
+
+/* Room for half the reset control when the menu is flush with the viewport. */
+:not(body, html):has(> [data-diffseek-menu-owned='true']) {
+  padding-top: 0.5rem;
 }
 
 [data-diffseek-native-hidden],

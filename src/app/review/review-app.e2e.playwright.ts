@@ -969,7 +969,7 @@ test('scrolls a tall menu in GitHub\'s overlay only, down to its last row', asyn
     const menu = document.querySelector('[data-diffseek-menu-owned="true"]');
     const overlay = document.createElement('div');
     overlay.id = 'overlay';
-    overlay.setAttribute('style', 'position: fixed; top: 40px; left: 0; max-height: 100vh; overflow: auto');
+    overlay.setAttribute('style', 'position: fixed; top: 40px; left: 0; max-height: calc(100vh - 40px); overflow: auto');
     menu?.before(overlay);
     if (menu) overlay.append(menu);
   });
