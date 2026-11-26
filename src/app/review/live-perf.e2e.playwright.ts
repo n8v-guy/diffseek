@@ -1,5 +1,4 @@
-import { appendFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import {
@@ -48,8 +47,11 @@ const budgets = defaultLivePerfBudgets();
 const samples = liveSampleCount();
 const generatedCounter =
   '[data-diffseek-menu-count-action][data-viewed-facet="generated"][data-viewed-value="true"]';
-const viewedFacetAction =
-  '[data-diffseek-menu-viewed-action][data-viewed-facet="viewed"][data-viewed-value="true"]';
+const unmarkViewedCounter =
+  '[data-diffseek-menu-count-action][data-viewed-facet="viewed"][aria-label="Unmark all"]';
+const viewedProgress = '[class*="hide-viewed-progress-on-small"] .sr-only';
+const viewedProgressTotal = ' of [1-9]\\d* files viewed$';
+const snackbar = '[data-diffseek="snackbar"]';
 const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
 const generatedToggle = '[data-filter-kind="generated"][data-filter-value="true"]';
 const stepTimeout = 20_000;
@@ -63,11 +65,34 @@ test.describe('live DiffSeek performance', () => {
   test.describe.configure({ mode: 'serial' });
   test.setTimeout(1_800_000);
 
-  let context: BrowserContext;
+  let activeContext: BrowserContext | undefined;
+  let cookies: ReturnType<typeof parseStorageCookies>;
   const loads = Object.fromEntries(
     livePerfScenarios.map((scenario) => [scenario, [] as LivePerfSample[]]),
   ) as Record<LivePerfScenario, LivePerfSample[]>;
   const phases: Array<{ sample: number; phase: string } & RedrawCounts> = [];
+
+  async function startCleanContext(): Promise<BrowserContext> {
+    await activeContext?.close();
+    const extension = resolve('.output/chrome-mv3');
+    activeContext = await chromium.launchPersistentContext('', {
+      channel: 'chromium',
+      headless: true,
+      args: [
+        `--disable-extensions-except=${extension}`,
+        `--load-extension=${extension}`,
+      ],
+    });
+    await activeContext.addCookies(cookies);
+    await installLiveWaits(activeContext);
+    await writeShownDefaults(activeContext);
+    const setup = await activeContext.newPage();
+    await setup.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
+    await assertAuthenticatedReview(setup);
+    await clearViewedFiles(setup);
+    await setup.close();
+    return activeContext;
+  }
 
   test.beforeAll(async () => {
     test.setTimeout(420_000);
@@ -76,16 +101,6 @@ test.describe('live DiffSeek performance', () => {
         'Set DIFFSEEK_GITHUB_STORAGE_STATE to Playwright storageState JSON (inline secret or file path). Logged-out GitHub stays on classic /files and loops with DiffSeek /changes redirect.',
       );
     }
-    const extension = resolve('.output/chrome-mv3');
-    const userDataDir = await mkdtemp(join(tmpdir(), 'diffseek-live-e2e-'));
-    context = await chromium.launchPersistentContext(userDataDir, {
-      channel: 'chromium',
-      headless: true,
-      args: [
-        `--disable-extensions-except=${extension}`,
-        `--load-extension=${extension}`,
-      ],
-    });
     let raw: unknown;
     try {
       raw = await loadStorageState(storageStateSource);
@@ -95,19 +110,11 @@ test.describe('live DiffSeek performance', () => {
         { cause: error },
       );
     }
-    await context.addCookies(parseStorageCookies(raw));
-    await installLiveWaits(context);
-    // Auto-view would mark the fixture's generated files viewed on GitHub.
-    await writeShownDefaults(context);
-    const setup = await context.newPage();
-    await setup.goto(livePrUrl, { waitUntil: 'domcontentloaded' });
-    await assertAuthenticatedReview(setup);
-    await clearViewedFiles(setup);
-    await setup.close();
+    cookies = parseStorageCookies(raw);
   });
 
   test.afterAll(async () => {
-    await context.close();
+    await activeContext?.close();
     if (loads.cold.length === 0) return;
     const report = {
       prUrl: livePrUrl,
@@ -132,6 +139,7 @@ test.describe('live DiffSeek performance', () => {
 
   test('measures cold, warm, hot, restored, cold-mark, and unmark reviews', async () => {
     for (let index = 0; index < samples; index += 1) {
+      const context = await startCleanContext();
       await clearExtensionStore(context);
       await writeShownDefaults(context);
       const page = await context.newPage();
@@ -140,6 +148,7 @@ test.describe('live DiffSeek performance', () => {
       });
       loads.cold.push(coldSample);
       expect(rebuildFailures(coldSample, budgets)).toEqual([]);
+      await untilNoViewedFiles(page, `before sample ${index + 1} actions`);
       phases.push(
         { sample: index, phase: 'toggle-filter', ...(await runToggle(page)) },
         { sample: index, phase: 'mark-viewed', ...(await runMark(page)) },
@@ -178,6 +187,7 @@ test.describe('live DiffSeek performance', () => {
       const unmarkSample = await measureUnmark(marking);
       loads.unmark.push(unmarkSample);
       expect(rebuildFailures(unmarkSample, budgets)).toEqual([]);
+      await untilNoViewedFiles(marking, 'after generated unmark');
       await marking.close();
     }
 
@@ -190,6 +200,7 @@ test.describe('live DiffSeek performance', () => {
   });
 
   test('hide defaults hide generated and viewed files until shown', async () => {
+    const context = activeContext ?? await startCleanContext();
     await clearExtensionStore(context);
     await writeDefaults(context, hideDefaults);
     const page = await context.newPage();
@@ -258,7 +269,7 @@ async function measureReview(
     );
     if (scenario === 'coldMark') {
       // The counter covers loaded files only; this notice waits for streamed ones too.
-      await untilDom(page, { kind: 'text', selector: '[data-diffseek="snackbar"]', pattern: '^Auto-view: generated files marked viewed$' }, 300_000, 'auto-view done');
+      await untilDom(page, { kind: 'text', selector: snackbar, pattern: '^Auto-view: generated files marked viewed$' }, 300_000, 'auto-view done');
       await untilGenerated(page, 'true');
     }
     if (scenario === 'restored') {
@@ -605,16 +616,43 @@ async function extensionWorker(browserContext: BrowserContext) {
 }
 
 async function clearViewedFiles(page: Page): Promise<void> {
-  await openFilterMenu(page);
-  const action = page.locator(viewedFacetAction);
-  if ((await action.count()) === 0) return;
-  const label = await action.getAttribute('aria-label', { timeout: 5_000 });
-  if (label !== 'Unmark all') return;
-  await action.click();
+  const progress = await untilDom(
+    page,
+    { kind: 'text', selector: viewedProgress, pattern: `^\\d+${viewedProgressTotal}` },
+    panelsTimeout,
+    'Viewed-state reset needs GitHub’s PR-wide viewed count',
+  );
+  const viewed = Number(progress.split(' ', 1)[0]);
+  if (viewed === 0) return;
+
+  await openFilterMenu(page, panelsTimeout);
+  // The denominator includes filtered files. Wait for streamed viewed files too.
   await untilDom(
     page,
-    { kind: 'text', selector: '[data-diffseek="snackbar"]', pattern: "^(All files in category unmarked|Couldn't unmark files\\. Try again\\.)$" },
+    { kind: 'text', selector: unmarkViewedCounter, pattern: `^\\d+/${viewed}$` },
+    panelsTimeout,
+    `Viewed-state reset needs Unmark all for every viewed file (${progress})`,
+  );
+  await page.locator(unmarkViewedCounter).click({ timeout: stepTimeout });
+  const success = 'All files in category unmarked';
+  const outcome = await untilDom(
+    page,
+    { kind: 'text', selector: snackbar, pattern: `^(${success}|Couldn't unmark files\\. Try again\\.)$` },
     300_000,
-    'not-viewed snackbar',
+    'Viewed-state reset needs the unmark result',
+  );
+  if (outcome !== success) throw new Error(`Viewed-state reset failed: ${outcome}`);
+
+  await untilNoViewedFiles(page, 'after Unmark all');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await untilNoViewedFiles(page, 'after reload');
+}
+
+async function untilNoViewedFiles(page: Page, phase: string): Promise<void> {
+  await untilDom(
+    page,
+    { kind: 'text', selector: viewedProgress, pattern: `^0${viewedProgressTotal}` },
+    panelsTimeout,
+    `Viewed-state reset expected zero viewed files ${phase}`,
   );
 }
