@@ -9,13 +9,6 @@ on:
         type: string
   pull_request:
 
-# Samples share one GitHub session, so pull request and main runs wait in one
-# queue; queue: max keeps a pending main run from being replaced.
-concurrency:
-  group: live-e2e
-  cancel-in-progress: false
-  queue: max
-
 permissions: {}
 
 jobs:
@@ -26,7 +19,13 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-      github.actor != 'dependabot[bot]')
+      github.event.pull_request.user.login != 'dependabot[bot]')
+    # Samples share one GitHub session, so pull request and main runs wait in
+    # one queue; queue: max keeps a pending main run from being replaced.
+    concurrency:
+      group: live-e2e
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -37,7 +36,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      # A pull request run tests the merge commit its pull_request CI run tested.
+      # A pull request run requires the pull_request CI run of the same head.
       - name: Require the branch head and a successful CI run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -51,7 +50,7 @@ jobs:
             echo "Live E2E for ${HEAD_SHA} was dispatched from ${RUN_SHA}." >&2
             exit 1
           fi
-          run=$(gh run list --workflow ci.yaml --event "$CI_EVENT" --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+          run=$(gh run list --workflow ci.yaml --event "$CI_EVENT" --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId // error("no CI run for this commit")')
           gh run watch "$run" --exit-status
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
