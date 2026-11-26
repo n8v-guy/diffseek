@@ -326,20 +326,6 @@ html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(bod
   content: none;
 }
 
-/* Firefox before 147 lacks anchor(): hang the menu icon on the top-right border by offsets, inside the menu margin so the overlay gains no scrollbar. The button icon is hidden. */
-@supports not (left: anchor(right)) {
-  [data-diffseek='filters'] > button.diffseek-reset-filters[data-reset-filters] {
-    position: absolute;
-    right: calc(1px - 0.25rem);
-    top: calc(-0.75rem - 1px);
-    translate: none;
-  }
-
-  [data-diffseek='filter-button-reset'] {
-    display: none !important;
-  }
-}
-
 /* Nothing to reset: show nothing, but keep its space so rows do not move. */
 .diffseek-reset-filters:disabled {
   visibility: hidden;
