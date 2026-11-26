@@ -21,7 +21,7 @@ export type DomCondition =
 
 declare global {
   interface Window {
-    __liveWait?: (condition: DomCondition) => Promise<unknown>;
+    __liveWait?: (condition: DomCondition) => Promise<string>;
     __liveWaitElement?: (element: Element, name: string, value: string) => Promise<unknown>;
   }
 }
@@ -89,7 +89,7 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
           return mark(document.querySelector(condition.selector) == null);
         case 'text': {
           const text = document.querySelector(condition.selector)?.textContent.trim();
-          return mark(text != null && new RegExp(condition.pattern).test(text));
+          return text != null && new RegExp(condition.pattern).test(text) ? text : '';
         }
         case 'attr':
           return mark(
@@ -124,7 +124,7 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
     };
     const observed = (value: string): boolean => value !== '';
     const observe = (test: () => string) =>
-      new Promise<unknown>((resolve) => {
+      new Promise<string>((resolve) => {
         const first = test();
         if (observed(first)) {
           resolve(first);
@@ -158,7 +158,7 @@ export async function untilDom(
   condition: DomCondition,
   guardMs: number,
   message: string,
-): Promise<unknown> {
+): Promise<string> {
   return guard(
     page.evaluate((value) => {
       const wait = window.__liveWait;
