@@ -89,6 +89,23 @@ const themeCases = [
   },
 ] as const;
 
+describe('DiffSeek Reset without CSS anchor positioning', () => {
+  const fallback = /@supports not \(left: anchor\(right\)\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
+
+  it('offsets the menu icon from the menu corner and hides the button icon', () => {
+    expect(fallback).toContain("button.diffseek-reset-filters[data-reset-filters] {\n    position: absolute;");
+    expect(fallback).toMatch(/\n {4}right: [^;]+;\n {4}top: [^;]+;/);
+    expect(fallback).toContain("[data-diffseek='filter-button-reset'] {\n    display: none !important;");
+    expect(fallback).not.toContain('anchor(');
+  });
+
+  it('leaves the anchored layout outside the fallback', () => {
+    const anchored = css.replace(fallback, '');
+    expect(anchored).toContain('left: anchor(right);');
+    expect(anchored).toContain('top: calc(anchor(top) - 0.75rem);');
+  });
+});
+
 describe('DiffSeek palette follows GitHub theme attributes', () => {
   it.each(themeCases)('$name', (theme) => {
     const { background, color } = appliedPalette(theme);
