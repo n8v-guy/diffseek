@@ -175,11 +175,15 @@ function countChurn(): void {
     { kind: 'panels', selector: '[role="region"][id^="diff-"]', gone: new Set<string>() },
     { kind: 'treeRows', selector: '[role="treeitem"]', gone: new Set<string>() },
   ] as const;
-  const rowIds = (nodes: NodeList, selector: string) =>
-    [...nodes].flatMap((node) =>
-      node instanceof Element
-        ? [...(node.matches(selector) ? [node] : []), ...node.querySelectorAll(selector)].map((row) => row.id)
-        : [],
+  const rowIds = (records: MutationRecord[], nodes: 'addedNodes' | 'removedNodes', selector: string) =>
+    new Set(
+      records.flatMap((record) =>
+        [...record[nodes]].flatMap((node) =>
+          node instanceof Element
+            ? [...(node.matches(selector) ? [node] : []), ...node.querySelectorAll(selector)].map((row) => row.id)
+            : [],
+        ),
+      ),
     );
   window.__liveChurn = churn;
   window.__liveChurnReset = () => {
@@ -189,14 +193,13 @@ function countChurn(): void {
   new MutationObserver((records) => {
     for (const record of records) {
       churn.mutations += record.type === 'childList' ? record.addedNodes.length + record.removedNodes.length : 1;
-      for (const { kind, selector, gone } of rows) {
-        for (const id of rowIds(record.removedNodes, selector)) {
-          gone.add(id);
-          churn[`${kind}Removed`] += 1;
-        }
-        for (const id of rowIds(record.addedNodes, selector)) {
-          if (gone.delete(id)) churn[`${kind}Readded`] += 1;
-        }
+    }
+    for (const { kind, selector, gone } of rows) {
+      const removed = rowIds(records, 'removedNodes', selector);
+      churn[`${kind}Removed`] += removed.size;
+      for (const id of removed) gone.add(id);
+      for (const id of rowIds(records, 'addedNodes', selector)) {
+        if (gone.delete(id)) churn[`${kind}Readded`] += 1;
       }
     }
   }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
