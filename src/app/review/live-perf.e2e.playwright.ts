@@ -10,7 +10,7 @@ import {
   type Request,
 } from '@playwright/test';
 
-import { diffRegionSelector } from '../../adapters/github/review-page/page-adapter';
+import { diffRegionSelector } from '../../adapters/github';
 
 import {
   actionFailures,

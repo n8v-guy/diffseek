@@ -12,6 +12,7 @@ export type { RawFileRequest, RawFileResult } from './repository-content/raw-fil
 export {
   bindSnapshot,
   diffRegionElements,
+  diffRegionSelector,
   fileTreeElement,
   refreshObservedFiles,
   regionStructureKey,
