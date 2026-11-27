@@ -147,7 +147,7 @@ menu click can change files the reviewer is not currently looking at.
 
 ## D010 — Fallback labels remain data but not menu noise
 
-**Decision:** Ungrouped files get No type, matching No owner and No extension.
+**Decision:** Ungrouped files get No groups, matching No owner and No extension.
 Owners, Groups, or Formats is left out when its only value is its fallback.
 
 **Why:** Every file stays classifiable when mixed values make a facet useful,
