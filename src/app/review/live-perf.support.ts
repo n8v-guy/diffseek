@@ -135,18 +135,18 @@ export function defaultLivePerfBudgets(
       restored: scenarioLimits(env, 'RESTORED', { firstRenderSeconds: 7.6, menuOpenSeconds: 12.9, panelsSeconds: 77.9, reconciles: 41, domMutations: 18, treeRebuilds: 1, panelRebuilds: 1 }),
     },
     // The highest single-sample difference from the GitHub-only median in
-    // five runs on 2026-11-26 and 27. Mark-viewed stops at DiffSeek's icon,
-    // before GitHub's server-confirmed count, so its negative difference is
-    // capped at zero.
+    // PR runs on 2026-11-27. Both samples end on GitHub's own viewed count;
+    // GitHub-only marks from the file header and mutates more than DiffSeek's
+    // tree-row mark, so mark-viewed's negative difference is capped at zero.
     githubChurn: {
-      cold: { mutations: 2157, panelsRemoved: 0, treeRowsRemoved: 0 },
-      warm: { mutations: 2209, panelsRemoved: 4, treeRowsRemoved: 0 },
-      hot: { mutations: 962, panelsRemoved: 20, treeRowsRemoved: 0 },
-      coldMark: { mutations: 11415, panelsRemoved: 142, treeRowsRemoved: 0 },
+      cold: { mutations: 2262, panelsRemoved: 4, treeRowsRemoved: 0 },
+      warm: { mutations: 2240, panelsRemoved: 4, treeRowsRemoved: 0 },
+      hot: { mutations: 754, panelsRemoved: 12, treeRowsRemoved: 0 },
+      coldMark: { mutations: 11269, panelsRemoved: 142, treeRowsRemoved: 0 },
       unmark: { mutations: 1740, panelsRemoved: 0, treeRowsRemoved: 0 },
-      restored: { mutations: 7332, panelsRemoved: 322, treeRowsRemoved: 288 },
-      'toggle-filter': { mutations: 225, panelsRemoved: 4, treeRowsRemoved: 0 },
-      'mark-viewed': { mutations: 0, panelsRemoved: 4, treeRowsRemoved: 0 },
+      restored: { mutations: 7317, panelsRemoved: 322, treeRowsRemoved: 288 },
+      'toggle-filter': { mutations: 154, panelsRemoved: 4, treeRowsRemoved: 0 },
+      'mark-viewed': { mutations: 0, panelsRemoved: 8, treeRowsRemoved: 0 },
     },
   };
 }
