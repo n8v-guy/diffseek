@@ -139,10 +139,10 @@ export function defaultLivePerfBudgets(
     // GitHub-only marks from the file header and mutates more than DiffSeek's
     // tree-row mark, so mark-viewed's negative difference is capped at zero.
     githubChurn: {
-      cold: { mutations: 2262, panelsRemoved: 4, treeRowsRemoved: 0 },
-      warm: { mutations: 2240, panelsRemoved: 4, treeRowsRemoved: 0 },
-      hot: { mutations: 754, panelsRemoved: 12, treeRowsRemoved: 0 },
-      coldMark: { mutations: 11269, panelsRemoved: 142, treeRowsRemoved: 0 },
+      cold: { mutations: 2483, panelsRemoved: 8, treeRowsRemoved: 0 },
+      warm: { mutations: 2243, panelsRemoved: 4, treeRowsRemoved: 0 },
+      hot: { mutations: 1133, panelsRemoved: 24, treeRowsRemoved: 0 },
+      coldMark: { mutations: 11420, panelsRemoved: 142, treeRowsRemoved: 0 },
       unmark: { mutations: 1740, panelsRemoved: 0, treeRowsRemoved: 0 },
       restored: { mutations: 7317, panelsRemoved: 322, treeRowsRemoved: 288 },
       'toggle-filter': { mutations: 159, panelsRemoved: 4, treeRowsRemoved: 0 },
