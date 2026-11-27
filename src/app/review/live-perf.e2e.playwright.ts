@@ -720,15 +720,37 @@ async function clearViewedFiles(page: Page, retries = 1): Promise<void> {
     panelsTimeout,
     `Viewed-state reset needs Unmark all for every viewed file (${progress})`,
   );
-  await page.locator(unmarkViewedCounter).click({ timeout: stepTimeout });
+  const { origin, pathname } = new URL(page.url());
+  const fileReviewUrl = `${origin}${pathname.replace(/\/changes\/?$/, '/file_review')}`;
+  const unmarkTimeout = 300_000;
   const success = 'All files in category unmarked';
-  const outcome = await untilDom(
-    page,
-    { kind: 'text', selector: snackbar, pattern: `^(${success}|Couldn't unmark files\\. Try again\\.)$` },
-    300_000,
-    'Viewed-state reset needs the unmark result',
-  );
-  if (outcome !== success) throw new Error(`Viewed-state reset failed: ${outcome}`);
+  let remaining = viewed;
+  // GitHub updates the viewed count before the per-file deletes finish.
+  await Promise.all([
+    page.waitForEvent('requestfinished', {
+      timeout: unmarkTimeout,
+      predicate: (request) => {
+        if (request.method() !== 'DELETE' || request.url() !== fileReviewUrl) return false;
+        const response = request.existingResponse();
+        if (!response?.ok()) {
+          throw new Error(
+            `DELETE ${fileReviewUrl} failed: ${response?.status() ?? 'no response'}`,
+          );
+        }
+        remaining -= 1;
+        return remaining === 0;
+      },
+    }),
+    untilDom(
+      page,
+      { kind: 'text', selector: snackbar, pattern: `^(${success}|Couldn't unmark files\\. Try again\\.)$` },
+      unmarkTimeout,
+      'Viewed-state reset needs the unmark result',
+    ).then((outcome) => {
+      if (outcome !== success) throw new Error(`Viewed-state reset failed: ${outcome}`);
+    }),
+    page.locator(unmarkViewedCounter).click({ timeout: stepTimeout }),
+  ]);
 
   await untilNoViewedFiles(page, 'after Unmark all');
   await page.reload({ waitUntil: 'domcontentloaded' });
