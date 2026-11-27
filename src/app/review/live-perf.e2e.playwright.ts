@@ -10,6 +10,8 @@ import {
   type Request,
 } from '@playwright/test';
 
+import { diffRegionSelector } from '../../adapters/github/review-page/page-adapter';
+
 import {
   actionFailures,
   defaultLivePerfBudgets,
@@ -329,6 +331,7 @@ async function measureReview(
         document.dispatchEvent(new Event('diffseek-redraw-settle'));
       });
     }
+    await untilGithubFiles(page, scenario);
     await recordChurn(page, scenario, 'extension');
     return recordSample({
       scenario,
@@ -376,7 +379,7 @@ async function measureUnmark(page: Page): Promise<LivePerfSample> {
   }
 }
 
-/** From `navigate` until GitHub's own viewed count is back on the files view, with `viewed` files. */
+/** From `navigate` until GitHub alone has loaded the files view, with `viewed` files. */
 async function measureGithub(
   page: Page,
   step: LiveStep,
@@ -386,8 +389,15 @@ async function measureGithub(
   await resetChurn(page);
   await navigate();
   await page.waitForURL(/\/changes(\?|$)/, { timeout: stepTimeout });
-  await untilDom(page, { kind: 'text', selector: viewedProgress, pattern: `^${viewed}${viewedProgressTotal}` }, panelsTimeout, `GitHub-only ${step}`);
+  await untilGithubFiles(page, `GitHub-only ${step}`, viewed);
   await recordChurn(page, step, 'control');
+}
+
+/** The end of every churn sample: GitHub's viewed count, then a diff panel for each file it counts. */
+async function untilGithubFiles(page: Page, step: string, viewed = '\\d+'): Promise<void> {
+  const progress = await untilDom(page, { kind: 'text', selector: viewedProgress, pattern: `^${viewed}${viewedProgressTotal}` }, panelsTimeout, `${step} viewed count`);
+  const files = Number(/ of (\d+) files/.exec(progress)?.[1]);
+  await untilDom(page, { kind: 'count', selector: diffRegionSelector, count: files }, panelsTimeout, `${step} file panels`);
 }
 
 async function recordChurn(page: Page, step: LiveStep, run: keyof ChurnSamples): Promise<void> {
@@ -492,6 +502,7 @@ async function runMark(page: Page): Promise<RedrawCounts> {
   await resetChurn(page);
   await target.click({ timeout: stepTimeout });
   await untilAttribute(target, 'aria-pressed', 'true', stepTimeout, 'file marked viewed');
+  await untilGithubFiles(page, 'mark-viewed', '1');
   await recordChurn(page, 'mark-viewed', 'extension');
   await action.dispose();
   return subtractCounts(await readRedraws(page), before);

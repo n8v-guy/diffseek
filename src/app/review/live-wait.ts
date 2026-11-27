@@ -18,6 +18,7 @@ export type GithubChurn = {
 export type DomCondition =
   | { kind: 'present'; selector: string }
   | { kind: 'absent'; selector: string }
+  | { kind: 'count'; selector: string; count: number }
   | { kind: 'text'; selector: string; pattern: string }
   | { kind: 'attr'; selector: string; name: string; value: string }
   | { kind: 'dataset-above'; key: string; value: number }
@@ -98,6 +99,8 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
           return mark(visible(document.querySelector(condition.selector)));
         case 'absent':
           return mark(document.querySelector(condition.selector) == null);
+        case 'count':
+          return mark(document.querySelectorAll(condition.selector).length >= condition.count);
         case 'text': {
           const text = document.querySelector(condition.selector)?.textContent.trim();
           return text != null && new RegExp(condition.pattern).test(text) ? text : '';
@@ -133,17 +136,16 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
         }
       }
     };
-    const observed = (value: string): boolean => value !== '';
     const observe = (test: () => string) =>
       new Promise<string>((resolve) => {
         const first = test();
-        if (observed(first)) {
+        if (first !== '') {
           resolve(first);
           return;
         }
         const observer = new MutationObserver(() => {
           const result = test();
-          if (!observed(result)) return;
+          if (result === '') return;
           observer.disconnect();
           resolve(result);
         });
