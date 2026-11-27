@@ -1,5 +1,14 @@
 import type { BrowserContext, ElementHandle, Page } from '@playwright/test';
 
+/** Page mutations and diff-panel or tree-row removals, counted the same with and without DiffSeek. */
+export type GithubChurn = {
+  mutations: number;
+  panelsRemoved: number;
+  panelsReadded: number;
+  treeRowsRemoved: number;
+  treeRowsReadded: number;
+};
+
 /**
  * Event-based waits for the live e2e. Each wait is a MutationObserver in the
  * page that resolves the moment its condition holds, so measurements are not
@@ -9,6 +18,7 @@ import type { BrowserContext, ElementHandle, Page } from '@playwright/test';
 export type DomCondition =
   | { kind: 'present'; selector: string }
   | { kind: 'absent'; selector: string }
+  | { kind: 'count'; selector: string; count: number }
   | { kind: 'text'; selector: string; pattern: string }
   | { kind: 'attr'; selector: string; name: string; value: string }
   | { kind: 'dataset-above'; key: string; value: number }
@@ -23,6 +33,8 @@ declare global {
   interface Window {
     __liveWait?: (condition: DomCondition) => Promise<string>;
     __liveWaitElement?: (element: Element, name: string, value: string) => Promise<unknown>;
+    __liveChurn?: GithubChurn;
+    __liveChurnReset?: () => void;
   }
 }
 
@@ -87,6 +99,8 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
           return mark(visible(document.querySelector(condition.selector)));
         case 'absent':
           return mark(document.querySelector(condition.selector) == null);
+        case 'count':
+          return mark(document.querySelectorAll(condition.selector).length >= condition.count);
         case 'text': {
           const text = document.querySelector(condition.selector)?.textContent.trim();
           return text != null && new RegExp(condition.pattern).test(text) ? text : '';
@@ -122,17 +136,16 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
         }
       }
     };
-    const observed = (value: string): boolean => value !== '';
     const observe = (test: () => string) =>
       new Promise<string>((resolve) => {
         const first = test();
-        if (observed(first)) {
+        if (first !== '') {
           resolve(first);
           return;
         }
         const observer = new MutationObserver(() => {
           const result = test();
-          if (!observed(result)) return;
+          if (result === '') return;
           observer.disconnect();
           resolve(result);
         });
@@ -150,6 +163,59 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
     (window as unknown as { __liveTagFilterButton: () => void }).__liveTagFilterButton = () => {
       filterButton()?.setAttribute('data-live-clicked', '');
     };
+  });
+  await context.addInitScript(countChurn);
+}
+
+/**
+ * In-page init script, so it must be self-contained. Counts page churn the
+ * same with and without DiffSeek, off the DOM so reading it adds no mutation.
+ */
+function countChurn(): void {
+  const churn = { mutations: 0, panelsRemoved: 0, panelsReadded: 0, treeRowsRemoved: 0, treeRowsReadded: 0 };
+  const rows = [
+    { kind: 'panels', selector: '[role="region"][id^="diff-"]', gone: new Set<string>() },
+    { kind: 'treeRows', selector: '[role="treeitem"]', gone: new Set<string>() },
+  ] as const;
+  const rowIds = (records: MutationRecord[], nodes: 'addedNodes' | 'removedNodes', selector: string) =>
+    new Set(
+      records.flatMap((record) =>
+        [...record[nodes]].flatMap((node) =>
+          node instanceof Element
+            ? [...(node.matches(selector) ? [node] : []), ...node.querySelectorAll(selector)].map((row) => row.id)
+            : [],
+        ),
+      ),
+    );
+  window.__liveChurn = churn;
+  window.__liveChurnReset = () => {
+    for (const key of Object.keys(churn) as (keyof GithubChurn)[]) churn[key] = 0;
+    for (const { gone } of rows) gone.clear();
+  };
+  new MutationObserver((records) => {
+    for (const record of records) {
+      churn.mutations += record.type === 'childList' ? record.addedNodes.length + record.removedNodes.length : 1;
+    }
+    for (const { kind, selector, gone } of rows) {
+      const removed = rowIds(records, 'removedNodes', selector);
+      churn[`${kind}Removed`] += removed.size;
+      for (const id of removed) gone.add(id);
+      for (const id of rowIds(records, 'addedNodes', selector)) {
+        if (gone.delete(id)) churn[`${kind}Readded`] += 1;
+      }
+    }
+  }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+}
+
+/** Restarts the page churn count; a new document starts at zero. */
+export async function resetChurn(page: Page): Promise<void> {
+  await page.evaluate(() => window.__liveChurnReset?.());
+}
+
+export async function readChurn(page: Page): Promise<GithubChurn> {
+  return page.evaluate(() => {
+    if (window.__liveChurn === undefined) throw new Error('live churn is not installed');
+    return { ...window.__liveChurn };
   });
 }
 
