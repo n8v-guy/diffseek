@@ -686,7 +686,7 @@ async function extensionWorker(browserContext: BrowserContext) {
   );
 }
 
-async function clearViewedFiles(page: Page): Promise<void> {
+async function clearViewedFiles(page: Page, retries = 1): Promise<void> {
   const progress = await untilDom(
     page,
     { kind: 'text', selector: viewedProgress, pattern: `^\\d+${viewedProgressTotal}` },
@@ -716,6 +716,8 @@ async function clearViewedFiles(page: Page): Promise<void> {
 
   await untilNoViewedFiles(page, 'after Unmark all');
   await page.reload({ waitUntil: 'domcontentloaded' });
+  // GitHub has shown viewed files again after a reload; unmark them once more.
+  if (retries > 0) return clearViewedFiles(page, retries - 1);
   await untilNoViewedFiles(page, 'after reload');
 }
 
