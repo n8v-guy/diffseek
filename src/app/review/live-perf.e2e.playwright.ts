@@ -448,19 +448,20 @@ type ReviewState = { menu: string[]; tree: string[]; hidden: string[] };
 /** Every menu row's choice, every tree row's visibility and expansion, and the hidden files. */
 async function reviewState(page: Page): Promise<ReviewState> {
   await openFilterMenu(page);
-  return page.evaluate(() => ({
-    menu: [...document.querySelectorAll('[data-diffseek="filters"] [data-filter-kind]')].map((item) =>
-      ['data-filter-kind', 'data-filter-value', 'aria-checked'].map((name) => item.getAttribute(name)).join(':'),
-    ),
-    tree: [...document.querySelectorAll<HTMLElement>('[role="tree"][aria-label="File Tree"] [role="treeitem"]')].map(
-      (item) => [item.id, item.dataset.diffseekFilteredOut === 'true' ? 'hidden' : 'shown', item.getAttribute('aria-expanded')].join(':'),
-    ),
-    hidden: [
-      ...document.querySelectorAll<HTMLElement>('[role="tree"][aria-label="File Tree"] [role="treeitem"]:not([aria-expanded])'),
-    ]
-      .filter((item) => item.dataset.diffseekFilteredOut === 'true')
-      .map((item) => item.id),
-  }));
+  return page.evaluate(() => {
+    const rows = [...document.querySelectorAll('[role="tree"][aria-label="File Tree"] [role="treeitem"]')].map((item) => ({
+      id: item.id,
+      hidden: getComputedStyle(item).display === 'none',
+      expanded: item.getAttribute('aria-expanded'),
+    }));
+    return {
+      menu: [...document.querySelectorAll('[data-diffseek="filters"] [data-filter-kind]')].map((item) =>
+        ['data-filter-kind', 'data-filter-value', 'aria-checked'].map((name) => item.getAttribute(name)).join(':'),
+      ),
+      tree: rows.map(({ id, hidden, expanded }) => [id, hidden ? 'hidden' : 'shown', expanded].join(':')),
+      hidden: rows.filter((row) => row.hidden && row.expanded == null).map((row) => row.id),
+    };
+  });
 }
 
 async function runToggle(page: Page): Promise<RedrawCounts> {

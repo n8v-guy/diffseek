@@ -24,6 +24,7 @@ export type PageSnapshot =
       supported: true;
       files: FileRecord[];
       unavailable: Map<string, string>;
+      uniqueRegion: (anchor: string) => boolean;
       tree: () => HTMLElement | null;
       treeItems: () => HTMLElement[];
       treeItem: (path: string) => HTMLElement | null;
@@ -212,6 +213,7 @@ export function bindSnapshot(
     supported: true,
     files,
     unavailable,
+    uniqueRegion: (anchor) => regions.byId.get(anchor)?.length === 1,
     tree: () => fileTreeElement(root),
     treeItems: () => [
       ...root.querySelectorAll<HTMLElement>(

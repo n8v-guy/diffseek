@@ -35,6 +35,7 @@ const attributesBody = [
 ].join('\n');
 const searchRoute = (url: URL) =>
   url.hostname === 'github.com' && url.pathname === '/search';
+const filterStyle = 'style#diffseek-filter-style';
 const filterDefaultsKey = 'diffseek:filter-defaults';
 
 function searchResponse(paths: string[]) {
@@ -253,10 +254,9 @@ test('filters, updates folder viewed state, and recovers after a rerender', asyn
   await expect(
     page.locator('[role="treeitem"][id="src/app.ts"]'),
   ).toBeVisible();
-  await expect(page.locator('#diff-viewed')).toHaveAttribute(
-    'data-diffseek-filtered-out',
-    'true',
-  );
+  await expect(page.locator(filterStyle)).toHaveCount(1);
+  expect(await page.locator(filterStyle).evaluate((style) => style.textContent)).toContain('diff-viewed');
+  await expect(page.locator('#diff-viewed')).toHaveCSS('display', 'none');
 
   await page
     .locator('[data-filter-kind="groups"][data-filter-value="Docs"]')
@@ -1056,7 +1056,7 @@ test('stays idempotent through a deterministic native-extension action storm', a
   });
   await markAllViewed(page);
   await expect(page.locator('[data-diffseek="filters"]')).toHaveCount(1);
-  await expect(page.locator('[data-diffseek-filtered-out]')).toHaveCount(0);
+  await expect(page.locator(filterStyle)).toHaveCount(0);
 });
 
 test('retains collapsed folders and marks only visible facet files', async () => {
@@ -1295,12 +1295,6 @@ test('restores review filters on return and starts fresh in a new tab', async ()
   const page = await openPull(pull);
   const changesUrl = page.url();
   const listUrl = new URL('/octo/repo/pulls', changesUrl).href;
-  await page.route(listUrl, (route) =>
-    route.fulfill({
-      contentType: 'text/html',
-      body: `<a href="${changesUrl}">Open pull request</a>`,
-    }),
-  );
   const docsFilter = '[data-filter-kind="groups"][data-filter-value="Docs"]';
   const docsFile = '[role="treeitem"][id="docs/readme.md"]';
   const filter = page.locator(docsFilter);
@@ -1310,7 +1304,28 @@ test('restores review filters on return and starts fresh in a new tab', async ()
   await filter.click();
   await expect(page.locator(docsFile)).toBeHidden();
 
-  await page.goto(listUrl);
+  const remounted = await page.evaluate(({ source, row }) => {
+    const native = new DOMParser().parseFromString(source, 'text/html');
+    return [row, '#diff-viewed'].map((selector) => {
+      const replacement = native.querySelector(selector);
+      const current = document.querySelector(selector);
+      if (!replacement || !current) throw new Error(`Missing fixture element: ${selector}`);
+      current.replaceWith(replacement);
+      return getComputedStyle(replacement).display;
+    });
+  }, { source: fixtureSource, row: docsFile });
+  expect(remounted).toEqual(['none', 'none']);
+
+  await page.evaluate(({ list, changes }) => {
+    history.pushState({}, '', list);
+    const link = document.createElement('a');
+    link.textContent = 'Open pull request';
+    link.href = changes;
+    document.body.prepend(link);
+  }, { list: listUrl, changes: changesUrl });
+  await expect(page.locator(filterStyle)).toHaveCount(0);
+  await expect(page.locator(docsFile)).toBeVisible();
+  await expect(page.locator('#diff-viewed')).toBeVisible();
   await page.getByRole('link', { name: 'Open pull request' }).click();
   await expect(page).toHaveURL(changesUrl);
   await page.getByLabel('Filter options').click();
@@ -1419,9 +1434,9 @@ test('hides nested generated files across streamed paths and cached revisits', a
     );
     await expect(generatedCount).toHaveText('0/2');
     await expect(page.locator(`[role="treeitem"][id="${generatedPath}"]`))
-      .toHaveAttribute('data-diffseek-filtered-out', 'true');
+      .toHaveCSS('display', 'none');
     await expect(page.locator(`[role="treeitem"][id="${descendantPath}"]`))
-      .toHaveAttribute('data-diffseek-filtered-out', 'true');
+      .toHaveCSS('display', 'none');
     await expect(page.locator(`[role="treeitem"][id="${manualPath}"]`))
       .toBeVisible();
     await expect(page.locator(`[role="treeitem"][id="${siblingPath}"]`))
@@ -1446,9 +1461,9 @@ test('hides nested generated files across streamed paths and cached revisits', a
     }, streamedPath);
     await expect(generatedCount).toHaveText('0/3');
     await expect(page.locator(`[role="treeitem"][id="${streamedPath}"]`))
-      .toHaveAttribute('data-diffseek-filtered-out', 'true');
+      .toHaveCSS('display', 'none');
     await expect(page.locator('#diff-streamed'))
-      .toHaveAttribute('data-diffseek-filtered-out', 'true');
+      .toHaveCSS('display', 'none');
 
     const fetched = requests;
     expect(searches).toBe(1);
@@ -1456,7 +1471,7 @@ test('hides nested generated files across streamed paths and cached revisits', a
     await page.getByLabel('Filter options').click();
     await expect(generatedCount).toHaveText('0/2');
     await expect(page.locator(`[role="treeitem"][id="${generatedPath}"]`))
-      .toHaveAttribute('data-diffseek-filtered-out', 'true');
+      .toHaveCSS('display', 'none');
     await expect(page.locator(`[role="treeitem"][id="${manualPath}"]`))
       .toBeVisible();
     expect(requests).toBe(fetched);

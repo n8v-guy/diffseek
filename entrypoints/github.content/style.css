@@ -73,8 +73,7 @@
   padding-top: 0.5rem;
 }
 
-[data-diffseek-native-hidden],
-[data-diffseek-filtered-out='true'] {
+[data-diffseek-native-hidden] {
   display: none !important;
 }
 

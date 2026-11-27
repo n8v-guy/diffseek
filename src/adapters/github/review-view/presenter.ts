@@ -4,83 +4,70 @@ import {
   ReviewIndex,
 } from '@diffseek/review';
 
-import type { PageSnapshot } from '../review-page/page-adapter';
+import {
+  diffRegionSelector,
+  fileTreeItemSelector,
+  fileTreeSelector,
+  type PageSnapshot,
+} from '../review-page/page-adapter';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
+const styleId = 'diffseek-filter-style';
+
+function filterStyles(
+  snapshot: SupportedSnapshot,
+  filters: FilterState,
+  index: ReviewIndex,
+): string {
+  const shown = [...snapshot.unavailable.keys()];
+  const hidden: string[] = [];
+  const selectors: string[] = [];
+  for (const file of snapshot.files) {
+    if (snapshot.unavailable.has(file.path) || !snapshot.uniqueRegion(file.anchor) ||
+      matchesFacets(file.labels, filters)) {
+      shown.push(file.path);
+    } else {
+      hidden.push(file.path);
+      selectors.push(`${diffRegionSelector}#${CSS.escape(file.anchor)}`);
+    }
+  }
+  if (hidden.length === 0) return '';
+  const visible = index.visibleItems(shown);
+  for (const path of index.visibleItems(hidden)) {
+    if (!visible.has(path)) {
+      selectors.push(`${fileTreeSelector} ${fileTreeItemSelector}#${CSS.escape(path)}`);
+    }
+  }
+  return `${selectors.join(',\n')} { display: none !important; }`;
+}
 
 export class ReviewPresenter {
-  /** Elements this session marked, including any later detached from the document. */
-  private readonly marked = new Set<HTMLElement>();
+  private readonly root: Document;
+
+  constructor(root: Document) {
+    this.root = root;
+  }
 
   apply(
     snapshot: SupportedSnapshot,
     filters: FilterState,
     index = new ReviewIndex(snapshot.files),
   ): void {
-    const matching = new Set(
-      snapshot.files
-        .filter((file) => matchesFacets(file.labels, filters))
-        .map((file) => file.path),
-    );
-
-    for (const file of snapshot.files) {
-      const hide = !matching.has(file.path);
-      const treeItem = snapshot.treeItem(file.path);
-      const region = snapshot.region(file.path);
-      if (!hide) {
-        if (treeItem) this.setFilteredOut(treeItem, false);
-        if (region) this.setFilteredOut(region, false);
-        continue;
-      }
-      if (!treeItem || !region) continue;
-      this.setFilteredOut(treeItem, true);
-      this.setFilteredOut(region, true);
-    }
-
-    this.updateFolders(snapshot, matching, index);
-  }
-
-  reset(root?: ParentNode | null): void {
-    for (const element of this.marked) {
-      delete element.dataset.diffseekFilteredOut;
-    }
-    this.marked.clear();
-    for (const element of root?.querySelectorAll<HTMLElement>(
-      '[data-diffseek-filtered-out]',
-    ) ?? []) {
-      delete element.dataset.diffseekFilteredOut;
+    const css = filterStyles(snapshot, filters, index);
+    const current = this.root.querySelector<HTMLStyleElement>(`style#${styleId}`);
+    if (!css) {
+      current?.remove();
+    } else if (current) {
+      if (current.textContent !== css) current.textContent = css;
+    } else {
+      const style = this.root.createElement('style');
+      style.id = styleId;
+      style.textContent = css;
+      this.root.head.append(style);
     }
   }
 
-  private updateFolders(
-    snapshot: SupportedSnapshot,
-    matching: Set<string>,
-    index: ReviewIndex,
-  ): void {
-    const visible = index.visibleItems([
-      ...matching,
-      ...snapshot.unavailable.keys(),
-    ]);
-    const tree = snapshot.tree();
-    const filePaths = new Set(snapshot.files.map((file) => file.path));
-    for (const item of tree?.querySelectorAll<HTMLElement>(
-      '[role="treeitem"][id]',
-    ) ?? []) {
-      if (!filePaths.has(item.id)) this.setFilteredOut(item, !visible.has(item.id));
-    }
-  }
-
-  private setFilteredOut(element: HTMLElement, hide: boolean): void {
-    if (!hide) {
-      if (element.dataset.diffseekFilteredOut != null) {
-        delete element.dataset.diffseekFilteredOut;
-      }
-      this.marked.delete(element);
-      return;
-    }
-    if (element.dataset.diffseekFilteredOut !== 'true') {
-      element.dataset.diffseekFilteredOut = 'true';
-    }
-    this.marked.add(element);
+  reset(): void {
+    this.root.querySelector(`style#${styleId}`)?.remove();
   }
 }

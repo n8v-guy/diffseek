@@ -19,6 +19,7 @@ import {
 
 import type { QuietClock } from './quiet-revalidate';
 import { startReviewApp } from './review-app';
+import { ReviewSession } from './review-session';
 
 type SupportedSnapshot = Extract<PageSnapshot, { supported: true }>;
 
@@ -92,7 +93,11 @@ function installNativeBehavior(): void {
 function filteredOut(id: string): boolean {
   const row = document.getElementById(id);
   if (row == null) throw new Error(`Missing tree row ${id}`);
-  return row.dataset.diffseekFilteredOut === 'true';
+  const css = document.querySelector('#diffseek-filter-style')?.textContent ?? '';
+  const suffix = ' { display: none !important; }';
+  if (!css.endsWith(suffix)) return false;
+  const needle = `#${CSS.escape(id)}`;
+  return css.slice(0, -suffix.length).split(',\n').some((selector) => selector.endsWith(needle));
 }
 
 function openMenu(): void {
@@ -717,7 +722,7 @@ describe('metadata refresh', () => {
       readFilterDefaults: async () => shown,
     });
     await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
-    const entries = reconcileEntries();
+    const passes = vi.spyOn(ReviewSession.prototype, 'reconcile');
 
     resolveDefault(
       loadedDefault({ codeowners: '', attributes: 'src/** group=Later' }, true),
@@ -729,7 +734,8 @@ describe('metadata refresh', () => {
     await until(() =>
       expect(document.querySelector('[data-filter-value="Later"]')).not.toBeNull(),
     );
-    expect(reconcileEntries()).toBe(entries + 1);
+    expect(passes).toHaveBeenCalledOnce();
+    passes.mockRestore();
     app.stop();
   });
 
@@ -747,9 +753,15 @@ describe('metadata refresh', () => {
       readImmediate: async () => emptyMetadata,
     });
     await until(() => expect(refreshDefault).toHaveBeenCalledOnce());
-    const entries = reconcileEntries();
+    const observed = new Promise<undefined>((resolve) => {
+      const pass = vi.spyOn(ReviewSession.prototype, 'reconcile').mockImplementationOnce(function (this: ReviewSession) {
+        pass.mockRestore();
+        this.reconcile();
+        resolve(undefined);
+      });
+    });
     resolveDefault(loadedDefault(emptyMetadata));
-    await until(() => expect(reconcileEntries()).toBeGreaterThan(entries));
+    await observed;
     app.stop();
   });
 
@@ -1585,17 +1597,13 @@ describe('review app interactions', () => {
         .querySelector<HTMLButtonElement>('[data-filter-value="Code"]')
         ?.click(),
     );
-    expect(
-      document.getElementById('diff-app')?.dataset.diffseekFilteredOut,
-    ).toBe('true');
+    expect(filteredOut('diff-app')).toBe(true);
 
     await nextReconcile(() => {
       document.querySelector('[role="tree"]')?.remove();
     });
 
-    expect(
-      document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
-    ).toBeUndefined();
+    expect(filteredOut('diff-config')).toBe(false);
     expect(
       document.querySelector('#diff-config button')?.getAttribute('aria-label'),
     ).toBe('Collapse file');
@@ -1709,10 +1717,6 @@ describe('review app interactions', () => {
   });
 });
 
-function reconcileEntries(): number {
-  return Number(document.documentElement.dataset.diffseekReconcileEntries ?? 0);
-}
-
 function manualClock(): { clock: QuietClock; fire: () => void; armed: () => boolean } {
   let run: (() => void) | undefined;
   return {
@@ -1777,7 +1781,7 @@ describe('page position', () => {
       viewed?.setAttribute('aria-pressed', 'true');
     });
     await until(() => expect(filteredOut('src/app.ts')).toBe(true));
-    expect(document.getElementById('diff-app')?.dataset.diffseekFilteredOut).toBe('true');
+    expect(filteredOut('diff-app')).toBe(true);
 
     expect(clicks).toEqual([]);
     app.stop();

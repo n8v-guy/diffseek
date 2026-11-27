@@ -19,14 +19,18 @@ function excludingConfig() {
     ?.labels.push({ facet: 'groups', value: 'Config' });
   const state = filters();
   state.get('groups')?.add('Config');
-  return { snapshot, state, presenter: new ReviewPresenter() };
+  return { snapshot, state, presenter: new ReviewPresenter(document) };
 }
 
 
 function filteredOut(id: string): boolean {
   const row = document.getElementById(id);
   if (row == null) throw new Error(`Missing tree row ${id}`);
-  return row.dataset.diffseekFilteredOut === 'true';
+  const css = document.querySelector('#diffseek-filter-style')?.textContent ?? '';
+  const suffix = ' { display: none !important; }';
+  if (!css.endsWith(suffix)) return false;
+  const needle = `#${CSS.escape(id)}`;
+  return css.slice(0, -suffix.length).split(',\n').some((selector) => selector.endsWith(needle));
 }
 
 describe('ReviewPresenter', () => {
@@ -47,7 +51,7 @@ describe('ReviewPresenter', () => {
     const state = filters();
     state.get('viewed')?.add('true');
 
-    new ReviewPresenter().apply(snapshot, state);
+    new ReviewPresenter(document).apply(snapshot, state);
 
     expect(filteredOut('docs/readme.md')).toBe(true);
     expect(filteredOut('docs')).toBe(true);
@@ -63,7 +67,7 @@ describe('ReviewPresenter', () => {
 
     const state = filters();
     state.get('groups')?.add('Docs');
-    new ReviewPresenter().apply(snapshot, state);
+    new ReviewPresenter(document).apply(snapshot, state);
 
     expect(filteredOut('src/app.ts')).toBe(false);
     expect(filteredOut('docs/readme.md')).toBe(true);
@@ -79,25 +83,21 @@ describe('ReviewPresenter', () => {
     const { snapshot, state, presenter } = excludingConfig();
 
     presenter.apply(snapshot, state);
-    expect(
-      document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
-    ).toBe('true');
+    expect(filteredOut('diff-config')).toBe(true);
 
-    presenter.reset(document);
-    expect(
-      document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
-    ).toBeUndefined();
+    presenter.reset();
+    expect(filteredOut('diff-config')).toBe(false);
     expect(click).not.toHaveBeenCalled();
   });
 
-  it('removes its attribute on teardown and leaves GitHub hidden rows alone', () => {
+  it('removes its stylesheet on teardown and leaves GitHub hidden rows alone', () => {
     const { snapshot, state, presenter } = excludingConfig();
     presenter.apply(snapshot, state);
     // GitHub hides a row on its own after the pass.
     const native = document.getElementById('src/app.ts');
     if (native) native.hidden = true;
     expect(filteredOut('config/app.json')).toBe(true);
-    presenter.reset(document);
+    presenter.reset();
 
     expect(filteredOut('config/app.json')).toBe(false);
     expect(native?.hidden).toBe(true);
@@ -112,9 +112,7 @@ describe('ReviewPresenter', () => {
     presenter.apply(snapshot, state);
 
     expect(filteredOut('config/app.json')).toBe(true);
-    expect(
-      document.getElementById('diff-config')?.dataset.diffseekFilteredOut,
-    ).toBe('true');
+    expect(filteredOut('diff-config')).toBe(true);
   });
 
   it('keeps a folder visible when it contains an unavailable descendant', () => {
@@ -131,14 +129,14 @@ describe('ReviewPresenter', () => {
     expect(filteredOut('docs')).toBe(false);
   });
 
-  it('clears the marker on a tree that was detached before teardown', () => {
+  it('restores a tree that was detached before teardown', () => {
     const { snapshot, state, presenter } = excludingConfig();
     presenter.apply(snapshot, state);
     const tree = snapshot.tree();
     const host = tree?.parentElement;
     expect(filteredOut('config/app.json')).toBe(true);
     tree?.remove();
-    presenter.reset(document);
+    presenter.reset();
     if (tree) host?.append(tree);
     expect(filteredOut('config/app.json')).toBe(false);
   });
@@ -151,7 +149,25 @@ describe('ReviewPresenter', () => {
     region?.after(region.cloneNode(true));
     const next = scanPage(document);
     if (!next.supported) throw new Error(next.reason);
-    presenter.apply(next, filters());
+    next.files.find((file) => file.path === 'config/app.json')
+      ?.labels.push({ facet: 'groups', value: 'Config' });
+    presenter.apply(next, state);
     expect(filteredOut('config/app.json')).toBe(false);
+    expect(filteredOut('diff-config')).toBe(false);
+  });
+
+  it('rewrites the stylesheet only when the generated CSS changes', () => {
+    const { snapshot, state, presenter } = excludingConfig();
+    presenter.apply(snapshot, state);
+    const style = document.querySelector('#diffseek-filter-style');
+    const css = style?.textContent;
+    expect(css).toBeTruthy();
+    presenter.apply(snapshot, state);
+    expect(document.querySelector('#diffseek-filter-style')).toBe(style);
+    expect(style?.textContent).toBe(css);
+    presenter.reset();
+    expect(document.querySelector('#diffseek-filter-style')).toBeNull();
+    presenter.reset();
+    expect(document.querySelector('#diffseek-filter-style')).toBeNull();
   });
 });

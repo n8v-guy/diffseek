@@ -70,8 +70,6 @@ import {
 import {
   installRedrawTrace,
   noteReconcile,
-  noteReconcileEntry,
-  noteReconcileNoop,
   trackDiffseekWrites,
 } from './redraw-trace';
 import {
@@ -114,7 +112,7 @@ export type ReviewSessionOptions = {
 export class ReviewSession {
   private readonly lifecycle = new AbortController();
   private readonly catalog = new FileCatalog();
-  private readonly presenter = new ReviewPresenter();
+  private readonly presenter: ReviewPresenter;
   private readonly filters = emptyFacetExclusions();
   private readonly observedOwners = new Map<string, string[]>();
   private readonly defaultViewedAttempts = new Set<string>();
@@ -152,6 +150,7 @@ export class ReviewSession {
 
   constructor(options: ReviewSessionOptions) {
     this.options = options;
+    this.presenter = new ReviewPresenter(options.root);
     this.badgeDue = hasSavedFilterSelection(options.root, options.review.key);
     restoreFilterSelection(options.root, options.review.key, this.filters, options.filterDefaults.hidden);
     this.metadata = options.metadata;
@@ -237,7 +236,6 @@ export class ReviewSession {
   }
 
   private reconcileOnce(): void {
-    noteReconcileEntry(this.options.root);
     const firstObservation = !this.metadataWatch.ready;
     const metadataOpportunity = consumeMetadataOpportunity(this.metadataWatch, this.options.root) || firstObservation;
     // Disconnect while writing so our own dataset toggles do not
@@ -324,7 +322,6 @@ export class ReviewSession {
     const staleMenus = change.menu ? menus : menus.filter(menuNeedsRemount);
     if (!resetMoved && !pageStale && staleMenus.length === 0 && defaultViewedPaths.length === 0) {
       this.reattachObservers();
-      noteReconcileNoop(root);
       return;
     }
     trackDiffseekWrites(root, () => {
@@ -527,7 +524,7 @@ export class ReviewSession {
   }
 
   private clearInjected(keepBadge = false): void {
-    this.presenter.reset(this.options.root);
+    this.presenter.reset();
     this.snapshot = null;
     removeInjected(this.options.root, keepBadge);
   }

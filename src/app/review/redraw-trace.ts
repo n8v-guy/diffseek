@@ -27,8 +27,6 @@ type SettleLedger = {
 
 type Trace = RedrawCounts & {
   depth: number;
-  reconcileEntries: number;
-  reconcileNoops: number;
   pendingTree: Map<string, number>;
   pendingPanels: Map<string, number>;
   treeSettle: SettleLedger;
@@ -76,8 +74,6 @@ export function installRedrawTrace(root: Document): void {
   const trace: Trace = {
     ...countsFrom(),
     depth: 0,
-    reconcileEntries: 0,
-    reconcileNoops: 0,
     pendingTree: new Map(),
     pendingPanels: new Map(),
     treeSettle: emptyLedger(),
@@ -108,8 +104,6 @@ export function resetRedrawTrace(root: Document): void {
   const trace = traces.get(root);
   if (!trace) return;
   Object.assign(trace, countsFrom());
-  trace.reconcileEntries = 0;
-  trace.reconcileNoops = 0;
   clearRedrawRows(trace);
   publish(root, trace);
 }
@@ -135,25 +129,6 @@ function clearRedrawRows(trace: Trace): void {
   trace.pendingPanels.clear();
   trace.treeSettle = emptyLedger();
   trace.panelSettle = emptyLedger();
-}
-
-/**
- * Counts entries into a reconcile pass, including passes that write nothing.
- * These are synchronous pass boundaries, not browser paints.
- */
-export function noteReconcileEntry(root: Document): void {
-  const trace = traces.get(root);
-  if (!trace) return;
-  trace.reconcileEntries += 1;
-  publish(root, trace);
-}
-
-/** A pass returned without writing. Paired with `noteReconcileEntry`. */
-export function noteReconcileNoop(root: Document): void {
-  const trace = traces.get(root);
-  if (!trace) return;
-  trace.reconcileNoops += 1;
-  publish(root, trace);
 }
 
 export function noteReconcile(root: Document): void {
@@ -332,8 +307,6 @@ function observeStructure(trace: Trace, root: Document): void {
 function publish(root: Document, trace: Trace): void {
   const data = root.documentElement.dataset;
   writeCount(data, 'diffseekReconciles', trace.reconciles);
-  writeCount(data, 'diffseekReconcileEntries', trace.reconcileEntries);
-  writeCount(data, 'diffseekReconcileNoops', trace.reconcileNoops);
   writeCount(data, 'diffseekDomMutations', trace.domMutations);
   writeCount(data, 'diffseekTreeRebuilds', trace.treeRebuilds);
   writeCount(data, 'diffseekPanelRebuilds', trace.panelRebuilds);

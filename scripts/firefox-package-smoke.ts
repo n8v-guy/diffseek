@@ -66,7 +66,7 @@ type BlockedRequest = {
 };
 
 async function runReview(): Promise<void> {
-  function waitFor(selector: string): Promise<HTMLElement> {
+  function waitFor(selector: string, visible?: boolean): Promise<HTMLElement> {
     return new Promise((resolve, reject) => {
       const observer = new MutationObserver(check);
       const timeout = setTimeout(() => {
@@ -76,6 +76,7 @@ async function runReview(): Promise<void> {
       function check() {
         const element = document.querySelector<HTMLElement>(selector);
         if (element == null) return;
+        if (visible != null && (getComputedStyle(element).display !== 'none') !== visible) return;
         observer.disconnect();
         clearTimeout(timeout);
         resolve(element);
@@ -85,30 +86,20 @@ async function runReview(): Promise<void> {
     });
   }
 
-  function assertVisibility(selectors: string[], visible: boolean): void {
-    for (const selector of selectors) {
-      const element = document.querySelector(selector);
-      if (element == null || (getComputedStyle(element).display !== 'none') !== visible) {
-        throw new Error(`Expected ${selector} to be ${visible ? 'visible' : 'hidden'}`);
-      }
-    }
-  }
-
   const docs = '[id="docs/readme.md"]';
-  const docsElements = [docs, '#diff-viewed'];
-  const filteredOut = 'data-diffseek-filtered-out';
-  const filteredDocs = `${docs}[${filteredOut}="true"]`;
+  const docsVisible = (visible: boolean) =>
+    Promise.all([waitFor(docs, visible), waitFor('#diff-viewed', visible)]);
   const menu = '[data-diffseek="filters"]';
-  await waitFor(`${filteredDocs} [data-diffseek-viewed-action]`);
-  assertVisibility(docsElements, false);
+  await waitFor('style#diffseek-filter-style');
+  await waitFor(`${docs} [data-diffseek-viewed-action]`);
+  await docsVisible(false);
   (await waitFor('button[aria-label="Filter options"]')).click();
   (await waitFor(`${menu} [data-filter-kind="viewed"][data-filter-value="true"]`)).click();
-  await waitFor(`${docs}:not([${filteredOut}])`);
-  assertVisibility(docsElements, true);
+  await docsVisible(true);
   (await waitFor(`${menu} [data-filter-kind="groups"][data-filter-value="Docs"]`)).click();
-  await waitFor(filteredDocs);
-  assertVisibility(docsElements, false);
-  assertVisibility([`[id="src/app.ts"]:not([${filteredOut}])`, '#diff-app'], true);
+  await docsVisible(false);
+  await waitFor('[id="src/app.ts"]', true);
+  await waitFor('#diff-app', true);
 }
 
 async function smoke(socket: WebSocket, archive: string, html: string, signal: AbortSignal): Promise<void> {
