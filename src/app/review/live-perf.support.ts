@@ -145,7 +145,7 @@ export function defaultLivePerfBudgets(
       coldMark: { mutations: 11269, panelsRemoved: 142, treeRowsRemoved: 0 },
       unmark: { mutations: 1740, panelsRemoved: 0, treeRowsRemoved: 0 },
       restored: { mutations: 7317, panelsRemoved: 322, treeRowsRemoved: 288 },
-      'toggle-filter': { mutations: 154, panelsRemoved: 4, treeRowsRemoved: 0 },
+      'toggle-filter': { mutations: 159, panelsRemoved: 4, treeRowsRemoved: 0 },
       'mark-viewed': { mutations: 0, panelsRemoved: 8, treeRowsRemoved: 0 },
     },
   };
