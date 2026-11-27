@@ -504,8 +504,12 @@ async function runMark(page: Page): Promise<RedrawCounts> {
   await untilAttribute(target, 'aria-pressed', 'true', stepTimeout, 'file marked viewed');
   await untilGithubFiles(page, 'mark-viewed', '1');
   await recordChurn(page, 'mark-viewed', 'extension');
+  const counts = subtractCounts(await readRedraws(page), before);
+  // The GitHub-only samples unmark here too, so later loads start with none viewed.
+  await target.click({ timeout: stepTimeout });
+  await untilNoViewedFiles(page, 'after the DiffSeek unmark');
   await action.dispose();
-  return subtractCounts(await readRedraws(page), before);
+  return counts;
 }
 
 async function showConversation(page: Page): Promise<void> {
