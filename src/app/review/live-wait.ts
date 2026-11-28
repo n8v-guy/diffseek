@@ -33,6 +33,13 @@ declare global {
   interface Window {
     __liveWait?: (condition: DomCondition) => Promise<string>;
     __liveWaitElement?: (element: Element, name: string, value: string) => Promise<unknown>;
+    __liveFilterEvents?: {
+      filterButton: () => HTMLButtonElement | null;
+      interactive: (button: HTMLButtonElement) => boolean;
+      observe: (check: () => string) => Promise<string>;
+    };
+    __liveFilterClick?: () => Promise<string>;
+    __liveMeasureFilterClick?: () => void;
     __liveChurn?: GithubChurn;
     __liveChurnReset?: () => void;
   }
@@ -87,13 +94,7 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
       return counts.length > 0 && hidden.length === filtered;
     };
     const mark = (passed: boolean): '' | 'ready' => (passed ? 'ready' : '');
-    const filterMenuState = (): 'open' | 'replaced' | '' => {
-      if (document.querySelector('[data-diffseek="filters"]')) return 'open';
-      const button = filterButton();
-      if (button != null && !button.hasAttribute('data-live-clicked')) return 'replaced';
-      return '';
-    };
-    const check = (condition: DomCondition): string => {
+    const check = (condition: Exclude<DomCondition, { kind: 'filter-menu-or-replaced' }>): string => {
       switch (condition.kind) {
         case 'present':
           return mark(visible(document.querySelector(condition.selector)));
@@ -126,8 +127,6 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
           const button = filterButton();
           return mark(button != null && interactive(button));
         }
-        case 'filter-menu-or-replaced':
-          return filterMenuState();
         case 'tree-hidden':
           return mark(treeHidden(condition.ids));
         case 'trace-settled': {
@@ -156,15 +155,58 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
           characterData: true,
         });
       });
-    window.__liveWait = (condition) => observe(() => check(condition));
+    window.__liveFilterEvents = { filterButton, interactive, observe };
+    window.__liveWait = (condition) =>
+      condition.kind === 'filter-menu-or-replaced'
+        ? (window.__liveFilterClick?.() ?? Promise.reject(new Error('filter measurement is not installed')))
+        : observe(() => check(condition));
     window.__liveWaitElement = (element, name, value) =>
       observe(() => (element.getAttribute(name) === value ? 'ready' : ''));
-    // Tag the current filter button so a client re-render (a new node) is observable.
-    (window as unknown as { __liveTagFilterButton: () => void }).__liveTagFilterButton = () => {
-      filterButton()?.setAttribute('data-live-clicked', '');
-    };
   });
+  await context.addInitScript(installFilterMeasurement);
   await context.addInitScript(countChurn);
+}
+
+/** Capture the browser click before GitHub handles it, after Playwright's actionability wait. */
+function installFilterMeasurement(): void {
+  let armedButton: HTMLButtonElement | null | undefined;
+  let click: Promise<string> | undefined;
+  window.__liveFilterClick = () => {
+    if (click) return click;
+    if (armedButton && window.__liveFilterEvents?.filterButton() !== armedButton) {
+      return Promise.resolve('replaced');
+    }
+    return Promise.reject(new Error('Filter options click not captured'));
+  };
+  window.__liveMeasureFilterClick = () => {
+    const events = window.__liveFilterEvents;
+    if (!events) throw new Error('filter wait is not installed');
+    click = undefined;
+    armedButton = events.filterButton();
+  };
+  document.addEventListener('click', (event) => {
+    if (armedButton === undefined || !event.isTrusted) return;
+    const events = window.__liveFilterEvents;
+    if (!events) return;
+    const { filterButton, interactive, observe } = events;
+    const target = event.target;
+    const button = filterButton();
+    if (!button || !(target instanceof Node) || !button.contains(target)) return;
+    const previous = armedButton;
+    armedButton = undefined;
+    if (!interactive(button) && button !== previous) {
+      click = Promise.resolve('replaced');
+      return;
+    }
+    const started = performance.now();
+    click = observe(() => {
+      if (document.querySelector('[data-diffseek="filters"]')) {
+        return String(performance.now() - started);
+      }
+      const current = filterButton();
+      return current && current !== button ? 'replaced' : '';
+    });
+  }, true);
 }
 
 /**
@@ -257,10 +299,8 @@ export async function untilAttribute(
   );
 }
 
-export async function tagFilterButton(page: Page): Promise<void> {
-  await page.evaluate(() =>
-    (window as unknown as { __liveTagFilterButton: () => void }).__liveTagFilterButton(),
-  );
+export async function measureFilterClick(page: Page): Promise<void> {
+  await page.evaluate(() => window.__liveMeasureFilterClick?.());
 }
 
 /** Failure guard only: rejects if the event never comes. */
