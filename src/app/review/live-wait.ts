@@ -38,7 +38,7 @@ declare global {
       interactive: (button: HTMLButtonElement) => boolean;
       observe: (check: () => string) => Promise<string>;
     };
-    __liveFilterClick?: Promise<string>;
+    __liveFilterClick?: () => Promise<string>;
     __liveMeasureFilterClick?: () => void;
     __liveChurn?: GithubChurn;
     __liveChurnReset?: () => void;
@@ -158,7 +158,7 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
     window.__liveFilterEvents = { filterButton, interactive, observe };
     window.__liveWait = (condition) =>
       condition.kind === 'filter-menu-or-replaced'
-        ? (window.__liveFilterClick ?? Promise.reject(new Error('Filter options click not captured')))
+        ? (window.__liveFilterClick?.() ?? Promise.reject(new Error('filter measurement is not installed')))
         : observe(() => check(condition));
     window.__liveWaitElement = (element, name, value) =>
       observe(() => (element.getAttribute(name) === value ? 'ready' : ''));
@@ -170,10 +170,18 @@ export async function installLiveWaits(context: BrowserContext): Promise<void> {
 /** Capture the browser click before GitHub handles it, after Playwright's actionability wait. */
 function installFilterMeasurement(): void {
   let armedButton: HTMLButtonElement | null | undefined;
+  let click: Promise<string> | undefined;
+  window.__liveFilterClick = () => {
+    if (click) return click;
+    if (armedButton && window.__liveFilterEvents?.filterButton() !== armedButton) {
+      return Promise.resolve('replaced');
+    }
+    return Promise.reject(new Error('Filter options click not captured'));
+  };
   window.__liveMeasureFilterClick = () => {
     const events = window.__liveFilterEvents;
     if (!events) throw new Error('filter wait is not installed');
-    delete window.__liveFilterClick;
+    click = undefined;
     armedButton = events.filterButton();
   };
   document.addEventListener('click', (event) => {
@@ -187,11 +195,11 @@ function installFilterMeasurement(): void {
     const previous = armedButton;
     armedButton = undefined;
     if (!interactive(button) && button !== previous) {
-      window.__liveFilterClick = Promise.resolve('replaced');
+      click = Promise.resolve('replaced');
       return;
     }
     const started = performance.now();
-    window.__liveFilterClick = observe(() => {
+    click = observe(() => {
       if (document.querySelector('[data-diffseek="filters"]')) {
         return String(performance.now() - started);
       }
