@@ -5,6 +5,7 @@ export const diffHeaderSelector = '[data-diff-header-wrapper="true"]';
 export const diffRegionSelector = '[role="region"][id^="diff-"]';
 export const fileTreeSelector = '[role="tree"][aria-label="File Tree"]';
 export const fileTreeItemSelector = '[role="treeitem"]';
+const ariaLabelAttribute = 'aria-label';
 const headerButtonSelector = `${diffHeaderSelector} button`;
 const generatedNotice = 'Some generated files are not rendered by default';
 /** The docs link in GitHub's "Load Diff" placeholder for a generated file. */
@@ -24,7 +25,7 @@ export type PageSnapshot =
       supported: true;
       files: FileRecord[];
       unavailable: Map<string, string>;
-      uniqueRegion: (anchor: string) => boolean;
+      filterableRegion: (file: FileRecord) => boolean;
       tree: () => HTMLElement | null;
       treeItems: () => HTMLElement[];
       treeItem: (path: string) => HTMLElement | null;
@@ -213,7 +214,16 @@ export function bindSnapshot(
     supported: true,
     files,
     unavailable,
-    uniqueRegion: (anchor) => regions.byId.get(anchor)?.length === 1,
+    filterableRegion: ({ anchor, path }) => {
+      const matches = regions.byId.get(anchor);
+      if (!matches) return false;
+      if (matches.length === 1) return true;
+      // GitHub streams a "Loading <path>" region beside the file with the same id.
+      const [panel, ...others] = matches.filter(
+        (node) => node.getAttribute(ariaLabelAttribute) !== `Loading ${path}`,
+      );
+      return panel != null && others.length === 0 && displayedPathOf(panel) === path;
+    },
     tree: () => fileTreeElement(root),
     treeItems: () => [
       ...root.querySelectorAll<HTMLElement>(
@@ -266,7 +276,7 @@ function changeStatusOf(treeItem: HTMLElement): ChangeStatus | null {
 
 function ownersOf(region: HTMLElement): string[] {
   const tooltip = [...region.querySelectorAll<HTMLElement>('[role="tooltip"]')]
-    .map((element) => element.getAttribute('aria-label') ?? element.textContent)
+    .map((element) => element.getAttribute(ariaLabelAttribute) ?? element.textContent)
     .find((text) => text.trim().startsWith('Owned by'));
 
   return [...new Set(tooltip?.match(/@[\w-]+(?:\/[\w-]+)?/g) ?? [])];
@@ -294,7 +304,7 @@ export function viewedControlState(
 
 function controlName(button: HTMLButtonElement): string | null {
   return (
-    button.getAttribute('aria-label') ||
+    button.getAttribute(ariaLabelAttribute) ||
     button
       .getAttribute('aria-labelledby')
       ?.split(/\s+/)

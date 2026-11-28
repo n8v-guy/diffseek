@@ -156,6 +156,22 @@ describe('ReviewPresenter', () => {
     expect(filteredOut('diff-config')).toBe(false);
   });
 
+  it('keeps the same stylesheet as a matching loading region is removed', () => {
+    const panel = document.getElementById('diff-config');
+    const loading = document.createElement('div');
+    loading.id = 'diff-config';
+    loading.setAttribute('role', 'region');
+    loading.setAttribute('aria-label', 'Loading config/app.json');
+    panel?.before(loading);
+    const { snapshot, state, presenter } = excludingConfig();
+    presenter.apply(snapshot, state);
+    expect(filteredOut('config/app.json')).toBe(true);
+    const text = document.querySelector('#diffseek-filter-style')?.firstChild;
+    loading.remove();
+    presenter.apply(excludingConfig().snapshot, state);
+    expect(document.querySelector('#diffseek-filter-style')?.firstChild).toBe(text);
+  });
+
   it('rewrites the stylesheet only when the generated CSS changes', () => {
     const { snapshot, state, presenter } = excludingConfig();
     presenter.apply(snapshot, state);

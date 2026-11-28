@@ -389,12 +389,17 @@ async function measureGithub(
   await resetChurn(page);
   await navigate();
   await page.waitForURL(/\/changes(\?|$)/, { timeout: stepTimeout });
-  await untilGithubFiles(page, `GitHub-only ${step}`, viewed);
+  await untilGithubFiles(page, step, viewed);
   await recordChurn(page, step, 'control');
 }
 
 /** The end of every churn sample: GitHub's viewed count, then a diff panel for each file it counts. */
 async function untilGithubFiles(page: Page, step: string, viewed = '\\d+'): Promise<void> {
+  if (step === 'restored') {
+    // The cached tree already has the full count, including duplicate loading regions.
+    await untilDom(page, { kind: 'filter-button-ready' }, panelsTimeout, 'restored filter interactive');
+    await untilDom(page, { kind: 'absent', selector: `${diffRegionSelector}[aria-label^="Loading "]` }, panelsTimeout, 'restored loading regions gone');
+  }
   const progress = await untilDom(page, { kind: 'text', selector: viewedProgress, pattern: `^${viewed}${viewedProgressTotal}` }, panelsTimeout, `${step} viewed count`);
   const files = Number(/ of (\d+) files/.exec(progress)?.[1]);
   await untilDom(page, { kind: 'count', selector: diffRegionSelector, count: files }, panelsTimeout, `${step} file panels`);

@@ -305,11 +305,10 @@ hides native items with `hidden`.
 seconds on large pull requests and fought GitHub re-expanding files. The diff
 stream now matches the tree. GitHub's nodes are not mutated to apply the
 filter, so the page stays authoritative (D001). **Cost:** A hidden file stays in the page, and GitHub's layout must tolerate
-rows and regions it did not hide itself. Returning to a filtered review,
-GitHub has been observed to redraw the tree and panels once, as its files
-are not natively collapsed; the restored live budgets allow that one redraw
-and its pass. Cold, warm, and hot loads keep theirs. That redraw was taken
-for the wins: about 500 fewer lines, a filter click on 400 files settling in
+rows and regions it did not hide itself. On a restored review GitHub replaces the tree and diff panels during
+hydration even without DiffSeek. A loading region can temporarily share its
+file panel's id. Both match the same filter rule while native actions still
+require a unique panel. The gains were about 500 fewer lines, a filter click on 400 files settling in
 22 ms instead of 2110 ms (local fixture, 10 ms per native click), and no
 click storms.
 

@@ -23,7 +23,7 @@ function filterStyles(
   const hidden: string[] = [];
   const selectors: string[] = [];
   for (const file of snapshot.files) {
-    if (snapshot.unavailable.has(file.path) || !snapshot.uniqueRegion(file.anchor) ||
+    if (snapshot.unavailable.has(file.path) || !snapshot.filterableRegion(file) ||
       matchesFacets(file.labels, filters)) {
       shown.push(file.path);
     } else {
