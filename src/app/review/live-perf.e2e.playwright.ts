@@ -66,6 +66,7 @@ const viewedToggle = '[data-filter-kind="viewed"][data-filter-value="true"]';
 const generatedToggle = '[data-filter-kind="generated"][data-filter-value="true"]';
 const stepTimeout = 20_000;
 const panelsTimeout = 90_000;
+const viewedBatchTimeout = 300_000;
 // Fresh-install hiding without auto-view, which would mark the fixture's
 // generated files viewed on GitHub. Unit tests cover the auto-view default.
 const hideDefaults = { hidden: ['viewed', 'generated'], viewed: [] };
@@ -162,8 +163,11 @@ test.describe('live DiffSeek performance', () => {
       await measureGithub(page, 'cold', () => page.goto(livePrUrl, { waitUntil: 'domcontentloaded' }));
       const viewedButton = (name: string) =>
         page.locator('[data-diff-header-wrapper="true"]').getByRole('button', { name, exact: true }).first();
-      await measureGithub(page, 'mark-viewed', () => viewedButton('Not Viewed').click({ timeout: stepTimeout }), '1');
-      await viewedButton('Viewed').click({ timeout: stepTimeout });
+      await measureGithub(page, 'mark-viewed', () => viewedButton('Not Viewed').click({ timeout: stepTimeout }), 1);
+      await Promise.all([
+        waitForUnmarks(page, 1, stepTimeout),
+        viewedButton('Viewed').click({ timeout: stepTimeout }),
+      ]);
       await untilNoViewedFiles(page, 'after the GitHub-only unmark');
       await measureGithub(page, 'warm', () => page.reload({ waitUntil: 'domcontentloaded' }));
       await showConversation(page);
@@ -226,7 +230,10 @@ test.describe('live DiffSeek performance', () => {
       });
       loads.coldMark.push(coldMarkSample);
       expect(rebuildFailures(coldMarkSample, budgets)).toEqual([]);
-      const unmarkSample = await measureUnmark(marking);
+      const [, unmarkSample] = await Promise.all([
+        waitForUnmarks(marking, expectedGeneratedTotal, viewedBatchTimeout),
+        measureUnmark(marking),
+      ]);
       loads.unmark.push(unmarkSample);
       expect(rebuildFailures(unmarkSample, budgets)).toEqual([]);
       await untilNoViewedFiles(marking, 'after generated unmark');
@@ -315,7 +322,7 @@ async function measureReview(
     );
     if (scenario === 'coldMark') {
       // The counter covers loaded files only; this notice waits for streamed ones too.
-      await untilDom(page, { kind: 'text', selector: snackbar, pattern: '^Auto-view: generated files marked viewed$' }, 300_000, 'auto-view done');
+      await untilDom(page, { kind: 'text', selector: snackbar, pattern: '^Auto-view: generated files marked viewed$' }, viewedBatchTimeout, 'auto-view done');
       await untilGenerated(page, 'true');
     }
     if (scenario === 'restored') {
@@ -331,7 +338,7 @@ async function measureReview(
         document.dispatchEvent(new Event('diffseek-redraw-settle'));
       });
     }
-    await untilGithubFiles(page, scenario);
+    await untilGithubFiles(page, scenario, scenario === 'coldMark' ? expectedGeneratedTotal : 0);
     await recordChurn(page, scenario, 'extension');
     return recordSample({
       scenario,
@@ -384,17 +391,22 @@ async function measureGithub(
   page: Page,
   step: LiveStep,
   navigate: () => Promise<unknown>,
-  viewed = '\\d+',
+  viewed = 0,
 ): Promise<void> {
   await resetChurn(page);
   await navigate();
   await page.waitForURL(/\/changes(\?|$)/, { timeout: stepTimeout });
-  await untilGithubFiles(page, `GitHub-only ${step}`, viewed);
+  await untilGithubFiles(page, step, viewed);
   await recordChurn(page, step, 'control');
 }
 
 /** The end of every churn sample: GitHub's viewed count, then a diff panel for each file it counts. */
-async function untilGithubFiles(page: Page, step: string, viewed = '\\d+'): Promise<void> {
+async function untilGithubFiles(page: Page, step: LiveStep, viewed: number): Promise<void> {
+  if (step === 'restored') {
+    // The cached view can meet the file count before GitHub replaces its panels.
+    await untilDom(page, { kind: 'filter-button-ready' }, panelsTimeout, 'restored filter interactive');
+    await untilDom(page, { kind: 'absent', selector: `${diffRegionSelector}[aria-label^="Loading "]` }, panelsTimeout, 'restored loading regions gone');
+  }
   const progress = await untilDom(page, { kind: 'text', selector: viewedProgress, pattern: `^${viewed}${viewedProgressTotal}` }, panelsTimeout, `${step} viewed count`);
   const files = Number(/ of (\d+) files/.exec(progress)?.[1]);
   await untilDom(page, { kind: 'count', selector: diffRegionSelector, count: files }, panelsTimeout, `${step} file panels`);
@@ -417,8 +429,8 @@ function recordSample(sample: LivePerfSample): LivePerfSample {
 
 /** Every generated file has its viewed state, and no auto-view batch is running. */
 async function untilGenerated(page: Page, viewed: 'true' | 'false'): Promise<void> {
-  await untilDom(page, { kind: 'attr', selector: generatedCounter, name: 'aria-pressed', value: viewed }, 300_000, `generated files viewed=${viewed}`);
-  await untilDom(page, { kind: 'absent', selector: `${generatedToggle}:disabled` }, 300_000, 'generated row enabled');
+  await untilDom(page, { kind: 'attr', selector: generatedCounter, name: 'aria-pressed', value: viewed }, viewedBatchTimeout, `generated files viewed=${viewed}`);
+  await untilDom(page, { kind: 'absent', selector: `${generatedToggle}:disabled` }, viewedBatchTimeout, 'generated row enabled');
 }
 
 /**
@@ -470,7 +482,7 @@ async function runToggle(page: Page): Promise<RedrawCounts> {
   const before = await readRedraws(page);
   await resetChurn(page);
   await page.locator(viewedToggle).click({ timeout: stepTimeout });
-  await untilDom(page, { kind: 'dataset-above', key: 'diffseekReconciles', value: before.reconciles }, stepTimeout, 'toggle reconcile');
+  await untilDom(page, { kind: 'attr', selector: 'html', name: 'data-diffseek-filtered', value: 'true' }, stepTimeout, 'viewed filter applied');
   await recordChurn(page, 'toggle-filter', 'extension');
   return subtractCounts(await readRedraws(page), before);
 }
@@ -502,12 +514,15 @@ async function runMark(page: Page): Promise<RedrawCounts> {
   await resetChurn(page);
   await target.click({ timeout: stepTimeout });
   await untilAttribute(target, 'aria-pressed', 'true', stepTimeout, 'file marked viewed');
-  await untilGithubFiles(page, 'mark-viewed', '1');
+  await untilGithubFiles(page, 'mark-viewed', 1);
   await recordChurn(page, 'mark-viewed', 'extension');
   const counts = subtractCounts(await readRedraws(page), before);
   // The GitHub-only samples unmark here too, so later loads start with none
   // viewed. The toggle phase hides viewed files, so the row is hidden now.
-  await target.dispatchEvent('click');
+  await Promise.all([
+    waitForUnmarks(page, 1, stepTimeout),
+    target.dispatchEvent('click'),
+  ]);
   await untilNoViewedFiles(page, 'after the DiffSeek unmark');
   await action.dispose();
   return counts;
@@ -720,31 +735,13 @@ async function clearViewedFiles(page: Page, retries = 1): Promise<void> {
     panelsTimeout,
     `Viewed-state reset needs Unmark all for every viewed file (${progress})`,
   );
-  const { origin, pathname } = new URL(page.url());
-  const fileReviewUrl = `${origin}${pathname.replace(/\/changes\/?$/, '/file_review')}`;
-  const unmarkTimeout = 300_000;
   const success = 'All files in category unmarked';
-  let remaining = viewed;
-  // GitHub updates the viewed count before the per-file deletes finish.
   await Promise.all([
-    page.waitForEvent('requestfinished', {
-      timeout: unmarkTimeout,
-      predicate: (request) => {
-        if (request.method() !== 'DELETE' || request.url() !== fileReviewUrl) return false;
-        const response = request.existingResponse();
-        if (!response?.ok()) {
-          throw new Error(
-            `DELETE ${fileReviewUrl} failed: ${response?.status() ?? 'no response'}`,
-          );
-        }
-        remaining -= 1;
-        return remaining === 0;
-      },
-    }),
+    waitForUnmarks(page, viewed, viewedBatchTimeout),
     untilDom(
       page,
       { kind: 'text', selector: snackbar, pattern: `^(${success}|Couldn't unmark files\\. Try again\\.)$` },
-      unmarkTimeout,
+      viewedBatchTimeout,
       'Viewed-state reset needs the unmark result',
     ).then((outcome) => {
       if (outcome !== success) throw new Error(`Viewed-state reset failed: ${outcome}`);
@@ -757,6 +754,27 @@ async function clearViewedFiles(page: Page, retries = 1): Promise<void> {
   // GitHub has shown viewed files again after a reload; unmark them once more.
   if (retries > 0) return clearViewedFiles(page, retries - 1);
   await untilNoViewedFiles(page, 'after reload');
+}
+
+/** GitHub updates the viewed count before the per-file deletes finish. */
+function waitForUnmarks(page: Page, count: number, timeout: number): Promise<Request> {
+  const { origin, pathname } = new URL(page.url());
+  const fileReviewUrl = `${origin}${pathname.replace(/\/changes\/?$/, '/file_review')}`;
+  let remaining = count;
+  return page.waitForEvent('requestfinished', {
+    timeout,
+    predicate: (request) => {
+      if (request.method() !== 'DELETE' || request.url() !== fileReviewUrl) return false;
+      const response = request.existingResponse();
+      if (!response?.ok()) {
+        throw new Error(
+          `DELETE ${fileReviewUrl} failed: ${response?.status() ?? 'no response'}`,
+        );
+      }
+      remaining -= 1;
+      return remaining === 0;
+    },
+  });
 }
 
 async function untilNoViewedFiles(page: Page, phase: string): Promise<void> {
