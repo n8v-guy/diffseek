@@ -402,14 +402,17 @@ async function measureGithub(
 
 /** The end of every churn sample: GitHub's viewed count, then a diff panel for each file it counts. */
 async function untilGithubFiles(page: Page, step: LiveStep, viewed: number): Promise<void> {
-  if (step === 'restored') {
-    // The cached view can meet the file count before GitHub replaces its panels.
+  const restored = step === 'restored';
+  if (restored) {
     await untilDom(page, { kind: 'filter-button-ready' }, panelsTimeout, 'restored filter interactive');
-    await untilDom(page, { kind: 'absent', selector: `${diffRegionSelector}[aria-label^="Loading "]` }, panelsTimeout, 'restored loading regions gone');
   }
   const progress = await untilDom(page, { kind: 'text', selector: viewedProgress, pattern: `^${viewed}${viewedProgressTotal}` }, panelsTimeout, `${step} viewed count`);
   const files = Number(/ of (\d+) files/.exec(progress)?.[1]);
-  await untilDom(page, { kind: 'count', selector: diffRegionSelector, count: files }, panelsTimeout, `${step} file panels`);
+  // Loading regions can appear after the filter becomes interactive.
+  const selector = restored
+    ? `html:not(:has(${diffRegionSelector}[aria-label^="Loading "])) ${diffRegionSelector}`
+    : diffRegionSelector;
+  await untilDom(page, { kind: 'count', selector, count: files }, panelsTimeout, `${step} file panels`);
 }
 
 async function recordChurn(page: Page, step: LiveStep, run: keyof ChurnSamples): Promise<void> {
@@ -488,13 +491,11 @@ async function runToggle(page: Page): Promise<RedrawCounts> {
 }
 
 async function runMark(page: Page): Promise<RedrawCounts> {
-  await resetRedraws(page);
-  const before = await readRedraws(page);
   // Folders are treeitems too and contain their files' links. aria-expanded
   // is the folder control; the action must be this row's own icon, not a
   // descendant file, or the id selector matches every row in the folder.
-  const row = page
-    .locator('[role="treeitem"]:not([aria-expanded])')
+  const fileRows = page.locator('[role="treeitem"]:not([aria-expanded])');
+  const row = fileRows
     .filter({
       has: page.locator('[data-diffseek-viewed-action][aria-pressed="false"]'),
     })
@@ -511,6 +512,8 @@ async function runMark(page: Page): Promise<RedrawCounts> {
   });
   const target = action.asElement();
   if (!target) throw new Error('No unviewed file row to mark');
+  await resetRedraws(page);
+  const before = await readRedraws(page);
   await resetChurn(page);
   await target.click({ timeout: stepTimeout });
   await untilAttribute(target, 'aria-pressed', 'true', stepTimeout, 'file marked viewed');
@@ -519,9 +522,10 @@ async function runMark(page: Page): Promise<RedrawCounts> {
   const counts = subtractCounts(await readRedraws(page), before);
   // The GitHub-only samples unmark here too, so later loads start with none
   // viewed. The toggle phase hides viewed files, so the row is hidden now.
+  const marked = fileRows.locator('[data-diffseek-viewed-action][aria-pressed="true"]');
   await Promise.all([
     waitForUnmarks(page, 1, stepTimeout),
-    target.dispatchEvent('click'),
+    marked.dispatchEvent('click', undefined, { timeout: stepTimeout }),
   ]);
   await untilNoViewedFiles(page, 'after the DiffSeek unmark');
   await action.dispose();
