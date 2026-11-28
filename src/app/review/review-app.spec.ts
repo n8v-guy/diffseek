@@ -93,11 +93,7 @@ function installNativeBehavior(): void {
 function filteredOut(id: string): boolean {
   const row = document.getElementById(id);
   if (row == null) throw new Error(`Missing tree row ${id}`);
-  const css = document.querySelector('#diffseek-filter-style')?.textContent ?? '';
-  const suffix = ' { display: none !important; }';
-  if (!css.endsWith(suffix)) return false;
-  const needle = `#${CSS.escape(id)}`;
-  return css.slice(0, -suffix.length).split(',\n').some((selector) => selector.endsWith(needle));
+  return getComputedStyle(row).display === 'none';
 }
 
 function openMenu(): void {

@@ -14,7 +14,6 @@ const resetFiltersLabel = 'Reset filters';
 const buttonResetSelector = '[data-diffseek="filter-button-reset"]';
 /** Set on the trigger Reset was mounted beside. CSS shows the icon only next to it. */
 export const filterTriggerMark = 'data-diffseek-filter-trigger';
-/** Page-level flag. CSS shows the Reset icon beside the closed filter button. */
 const filteredAttribute = 'data-diffseek-filtered';
 const latestOptions = new WeakMap<HTMLButtonElement, ResetOptions>();
 const retainedTrigger = new WeakMap<Document, HTMLButtonElement>();
@@ -44,27 +43,6 @@ export function resetFiltersButton(): HTMLButtonElement {
   label.textContent = resetFiltersLabel;
   reset.append(label, resetIcon());
   return reset;
-}
-
-/**
- * Writes `data-diffseek-filtered` on `<html>` only when the review-scoped
- * exclusion state changes. Visibility of the icon is CSS-only.
- */
-function syncFilteredAttribute(
-  root: Document,
-  filters: FilterState,
-  filterDefaults?: FilterDefaults,
-): boolean {
-  const on = hasTransientExclusions(filters, filterDefaults);
-  const el = root.documentElement;
-  if (on) {
-    if (el.getAttribute(filteredAttribute) === 'true') return false;
-    el.setAttribute(filteredAttribute, 'true');
-    return true;
-  }
-  if (!el.hasAttribute(filteredAttribute)) return false;
-  el.removeAttribute(filteredAttribute);
-  return true;
 }
 
 /**
@@ -167,16 +145,24 @@ function clearTriggerMark(button: HTMLButtonElement | undefined): boolean {
   return true;
 }
 
+function updateBadge(icon: HTMLButtonElement, options: ResetOptions): boolean {
+  latestOptions.set(icon, options);
+  const filtered = hasTransientExclusions(options.filters, options.filterDefaults);
+  if (icon.hasAttribute(filteredAttribute) === filtered) return false;
+  icon.toggleAttribute(filteredAttribute, filtered);
+  return true;
+}
+
 type BadgeWrite = { wrote: boolean; placed: boolean };
 
 /**
  * `due` is a session restore or a menu close. Only then is a missing icon
- * inserted. An icon already in the wrapper only has its mark kept current.
+ * inserted. Set its visibility before attaching it to the page.
  */
-function ensureFilterButtonReset(
+export function syncFilterReset(
   root: Document,
   options: ResetOptions,
-  due: boolean,
+  due = false,
 ): BadgeWrite {
   const previous = retainedTrigger.get(root);
   const trigger = readTrigger(root);
@@ -188,12 +174,9 @@ function ensureFilterButtonReset(
     trigger?.parentElement && icon?.parentElement?.isSameNode(trigger.parentElement),
   );
   remember(root, trigger, placed);
-  if (!trigger?.parentElement) {
-    if (icon) latestOptions.set(icon, options);
-    return { wrote, placed: false };
-  }
+  if (icon && updateBadge(icon, options)) wrote = true;
+  if (!trigger?.parentElement) return { wrote, placed: false };
   if (placed && icon) {
-    latestOptions.set(icon, options);
     if (!trigger.hasAttribute(filterTriggerMark)) {
       trigger.setAttribute(filterTriggerMark, '');
       wrote = true;
@@ -202,25 +185,12 @@ function ensureFilterButtonReset(
     return { wrote, placed: true };
   }
   if (!due) return { wrote, placed: false };
-  if (icon) latestOptions.set(icon, options);
-  else {
-    const created = cornerButton();
-    latestOptions.set(created, options);
-    ownedIcon.set(root, created);
-    icon = created;
+  if (!icon) {
+    icon = cornerButton();
+    updateBadge(icon, options);
+    ownedIcon.set(root, icon);
   }
   place(icon, trigger);
   remember(root, trigger, true);
   return { wrote: true, placed: true };
-}
-
-/** Writes the page attribute. Inserts the icon only when `due`. */
-export function syncFilterReset(
-  root: Document,
-  options: ResetOptions,
-  due = false,
-): BadgeWrite {
-  const attribute = syncFilteredAttribute(root, options.filters, options.filterDefaults);
-  const badge = ensureFilterButtonReset(root, options, due);
-  return { wrote: attribute || badge.wrote, placed: badge.placed };
 }

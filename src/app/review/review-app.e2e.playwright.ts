@@ -711,14 +711,11 @@ test('puts Reset filters on the closed filter button while filters hide files', 
     #filter-options { width: 32px; height: 32px; flex: none; }`,
   });
   const pill = page.locator('[data-diffseek="filter-button-reset"]');
-  const root = page.locator('html');
   await expect(pill).toHaveCount(0);
-  await expect(root).not.toHaveAttribute('data-diffseek-filtered');
 
   await page.getByLabel('Filter options').click();
   await page.locator('[data-filter-kind="groups"][data-filter-value="Code"]').click();
   await expect(page.locator('#diff-app')).toBeHidden();
-  await expect(root).toHaveAttribute('data-diffseek-filtered', 'true');
   await expect(page.locator('#filter-options')).toHaveAttribute('aria-expanded', 'true');
   await expect(pill).toBeHidden();
   await expect(page.locator('[data-diffseek="filters"] [data-reset-filters]')).toBeVisible();
@@ -857,7 +854,7 @@ test('puts Reset filters on the closed filter button while filters hide files', 
   await expect(page.locator('[role="menu"]')).toHaveCount(0);
   await expect(pill).toBeHidden();
   await expect(pill).toHaveCount(1);
-  await expect(root).not.toHaveAttribute('data-diffseek-filtered');
+  await expect(pill).not.toHaveAttribute('data-diffseek-filtered');
 });
 
 test('keeps Reset filters visible when a short viewport constrains the menu', async () => {

@@ -219,10 +219,9 @@ export function bindSnapshot(
       if (!matches) return false;
       if (matches.length === 1) return true;
       // GitHub streams a "Loading <path>" region beside the file with the same id.
-      const [panel, ...others] = matches.filter(
-        (node) => node.getAttribute(ariaLabelAttribute) !== `Loading ${path}`,
-      );
-      return panel != null && others.length === 0 && displayedPathOf(panel) === path;
+      const loading = `Loading ${path}`;
+      return matches.filter((node) => node.getAttribute(ariaLabelAttribute) !== loading)
+        .length === 1;
     },
     tree: () => fileTreeElement(root),
     treeItems: () => [

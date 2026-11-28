@@ -37,7 +37,6 @@ export function filterMenus(root: Document): HTMLElement[] {
 }
 
 export function removeInjected(root: Document, keepBadge = false): void {
-  if (!keepBadge) root.documentElement.removeAttribute('data-diffseek-filtered');
   for (const element of root.querySelectorAll<HTMLElement>(
     '[data-diffseek="filters"], [data-diffseek="unavailable"], [data-diffseek="snackbars"], [data-diffseek="filter-button-reset"]',
   )) {

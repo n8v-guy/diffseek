@@ -170,6 +170,27 @@ describe('scanPage', () => {
     expect(ready.viewedControl('src/app.ts')).not.toBeNull();
   });
 
+  it.each(['src/renamed.ts', 'assets/logo.bin'])(
+    'keeps %s filterable beside its loading region',
+    (path) => {
+      document.documentElement.innerHTML = edgeCases;
+      const snapshot = scanPage(document);
+      if (!snapshot.supported) throw new Error(snapshot.reason);
+      const file = snapshot.files.find((entry) => entry.path === path);
+      if (!file) throw new Error(`Missing file ${path}`);
+      const loading = document.createElement('div');
+      loading.id = file.anchor;
+      loading.setAttribute('role', 'region');
+      loading.setAttribute('aria-label', `Loading ${path}`);
+      document.getElementById(file.anchor)?.before(loading);
+
+      const streaming = scanPage(document);
+      if (!streaming.supported) throw new Error(streaming.reason);
+      expect(streaming.filterableRegion(file)).toBe(true);
+      expect(streaming.region(path)).toBeNull();
+    },
+  );
+
   it('does not catalog folder rows when a descendant file has duplicate regions', () => {
     const tree = document.querySelector('[role="tree"]');
     const file = document.getElementById('src/app.ts');

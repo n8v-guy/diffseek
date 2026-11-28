@@ -289,8 +289,8 @@
 }
 
 /* No file tree means the page is unsupported. Keep the node and hide it. */
-html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(body, html):has(> [data-diffseek-filter-trigger][aria-expanded='false']) > [data-diffseek='filter-button-reset'],
-html[data-diffseek-filtered]:has([role='tree'][aria-label='File Tree']) :not(body, html):has(> [data-diffseek-filter-trigger]:not([aria-expanded])) > [data-diffseek='filter-button-reset'] {
+html:has([role='tree'][aria-label='File Tree']) :not(body, html):has(> [data-diffseek-filter-trigger][aria-expanded='false']) > [data-diffseek='filter-button-reset'][data-diffseek-filtered],
+html:has([role='tree'][aria-label='File Tree']) :not(body, html):has(> [data-diffseek-filter-trigger]:not([aria-expanded])) > [data-diffseek='filter-button-reset'][data-diffseek-filtered] {
   background: transparent;
   border: 0;
   box-shadow: none;

@@ -178,12 +178,12 @@ describe('review session stream batching', () => {
     await nextTask();
     const mounted = icon();
     expect(mounted).not.toBeNull();
-    expect(document.documentElement.getAttribute('data-diffseek-filtered')).toBe('true');
+    expect(mounted?.hasAttribute('data-diffseek-filtered')).toBe(true);
 
     document.querySelector('[role="tree"]')?.remove();
     await nextTask();
     expect(icon()).toBe(mounted);
-    expect(document.documentElement.getAttribute('data-diffseek-filtered')).toBe('true');
+    expect(mounted?.hasAttribute('data-diffseek-filtered')).toBe(true);
 
     document.body.insertAdjacentHTML('beforeend', '<ul role="tree" aria-label="File Tree"></ul>');
     await nextTask();
