@@ -42,9 +42,9 @@ import {
 } from './live-perf.support';
 import {
   installLiveWaits,
+  measureFilterClick,
   readChurn,
   resetChurn,
-  tagFilterButton,
   untilAttribute,
   untilDom,
 } from './live-wait';
@@ -650,16 +650,15 @@ async function openFilterMenu(page: Page, guardMs = stepTimeout): Promise<number
   if ((await filters.count()) > 0) return 0;
   // GitHub server-renders this button and later swaps in a client-rendered
   // copy; clicks on the server copy do nothing. Wait for the interactive copy.
-  await untilDom(page, { kind: 'filter-button-ready' }, guardMs, 'Filter options button interactive');
   const button = page.getByRole('button', { name: 'Filter options' });
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await dismissCompactLinePopover(page);
-    await tagFilterButton(page);
-    const started = Date.now();
+    await untilDom(page, { kind: 'filter-button-ready' }, guardMs, 'Filter options button interactive');
+    await measureFilterClick(page);
     await button.click({ timeout: stepTimeout });
     // Re-click only on an event: GitHub replaced the button under the click.
     const outcome = await untilDom(page, { kind: 'filter-menu-or-replaced' }, stepTimeout, 'Filter menu did not open');
-    if (outcome === 'open') return secondsBetween(started);
+    if (outcome !== 'replaced') return Number((Number(outcome) / 1000).toFixed(3));
   }
   throw new Error('Filter options button kept being replaced');
 }
